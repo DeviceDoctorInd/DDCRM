@@ -1,0 +1,6 @@
+{
+  "name": "Device Doctor India CRM",
+  "description": "Production-grade enterprise CRM for Device Doctor India managing clients, custom software development, digital marketing, projects, payments, and agency workforce operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
