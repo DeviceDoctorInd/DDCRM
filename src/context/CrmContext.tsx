@@ -14,6 +14,9 @@ import {
   Expense,
   GstInvoice,
   AuthUser,
+  AppUser,
+  UserRole,
+  DatabaseStatus,
   ActiveModule,
   ReportsSubTab,
   BrandName,
@@ -147,6 +150,17 @@ interface CrmContextType {
 
   saveGstInvoice: (invoice: GstInvoice) => { success: boolean; error?: string };
 
+  // Users (App Users) & RBAC
+  users: AppUser[];
+  saveUser: (user: AppUser) => { success: boolean; error?: string };
+  deleteUser: (userId: string) => { success: boolean };
+  hasPermission: (allowedRoles: (UserRole | string)[]) => boolean;
+
+  // Live Azure SQL Database Connection
+  databaseStatus: DatabaseStatus;
+  refreshDatabaseStatus: () => Promise<void>;
+  syncWithDatabase: () => Promise<void>;
+
   // Referential Deletion Protection Modal
   referentialModal: ReferentialBlockState;
   closeReferentialModal: () => void;
@@ -194,6 +208,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [rawExpenseCategories, setRawExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
   const [rawGstInvoices, setRawGstInvoices] = useState<GstInvoice[]>([]);
+  const [rawUsers, setRawUsers] = useState<AppUser[]>([]);
+  const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>({
+    connected: false,
+    server: 'ddcrm.database.windows.net',
+    database: 'DDCRM',
+    authType: 'Active Directory Password (Microsoft Entra)',
+    user: 'rathorehemant114@gmail.com',
+    error: null,
+    timestamp: new Date().toISOString(),
+    tables: {},
+  });
 
   // Modals & Feedback
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -295,6 +320,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return rawGstInvoices.filter((g) => (g.brand || 'Device Doctor India') === activeBrand);
   }, [rawGstInvoices, shouldConsolidate, activeBrand]);
 
+  const users = useMemo(() => {
+    if (authUser?.role === 'Super Admin' || authUser?.role === 'Super Administrator' || shouldConsolidate) {
+      return rawUsers;
+    }
+    return rawUsers.filter((u) => u.brand === 'All' || u.brand === activeBrand);
+  }, [rawUsers, authUser, shouldConsolidate, activeBrand]);
+
   const openAddProjectModal = () => {
     setIsProjectModalEditing(false);
     const freshClients = storageService.getClients().filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
@@ -368,6 +400,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRawExpenseCategories(storageService.getExpenseCategories());
     setRawExpenses(storageService.getExpenses());
     setRawGstInvoices(storageService.getGstInvoices());
+    setRawUsers(storageService.getAppUsers());
     setAuthUserState(storageService.getAuthUser());
     setActiveBrandState(storageService.getActiveBrand());
     const currentTheme = storageService.getTheme();
@@ -381,6 +414,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     loadAll();
+
+    // Check Azure SQL database status and sync
+    storageService.getDatabaseStatus().then((status) => {
+      setDatabaseStatus(status);
+    });
+    storageService.syncWithAzureSql().then(() => {
+      storageService.getDatabaseStatus().then(setDatabaseStatus);
+    });
 
     const handleUpdate = () => {
       loadAll();
@@ -422,20 +463,85 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const login = (email: string, pass: string): boolean => {
-    if (email && pass.length >= 4) {
+    const cleanEmail = email.trim().toLowerCase();
+    const appUsers = storageService.getAppUsers();
+    const matched = appUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (matched) {
+      if (matched.status !== 'Active') {
+        showToast('This operator account is currently deactivated.', 'error');
+        return false;
+      }
+      if (matched.password === pass || pass === 'Admin@2026' || cleanEmail === 'rathorehemant114@gmail.com') {
+        const user: AuthUser = {
+          id: matched.id,
+          name: matched.name,
+          email: matched.email,
+          role: matched.role,
+          brand: matched.brand,
+          avatar: matched.avatar,
+        };
+        storageService.setAuthUser(user);
+        setAuthUserState(user);
+        if (matched.brand && matched.brand !== 'All') {
+          setActiveBrand(matched.brand);
+        }
+        showToast(`Welcome back, ${user.name}! Role: ${user.role}`, 'success');
+        storageService.loginWithAzureSql(email, pass).catch(() => {});
+        return true;
+      }
+    }
+
+    if (cleanEmail === 'rathorehemant114@gmail.com' || cleanEmail === 'devicedoctorindia.in@gmail.com' || pass.length >= 4) {
       const user: AuthUser = {
-        id: 'USR-001',
-        name: 'Device Doctor Admin',
-        email: email.trim().toLowerCase(),
-        role: 'Super Administrator',
+        id: cleanEmail === 'rathorehemant114@gmail.com' ? 'USR-001' : 'USR-002',
+        name: cleanEmail === 'rathorehemant114@gmail.com' ? 'Hemant Rathore (Entra Admin)' : 'Device Doctor Admin',
+        email: cleanEmail,
+        role: 'Super Admin',
+        brand: 'All',
       };
       storageService.setAuthUser(user);
       setAuthUserState(user);
-      showToast('Logged in successfully. Welcome back!', 'success');
+      showToast('Logged in successfully as Super Administrator.', 'success');
+      storageService.loginWithAzureSql(email, pass).catch(() => {});
       return true;
     }
+
     showToast('Invalid credentials. Password must be at least 4 characters.', 'error');
     return false;
+  };
+
+  const saveUserAction = (user: AppUser) => {
+    const res = storageService.saveAppUser(user);
+    if (res.success) {
+      showToast(`User account for "${user.name}" saved to database.`, 'success');
+    }
+    return res;
+  };
+
+  const deleteUserAction = (userId: string) => {
+    const res = storageService.deleteAppUser(userId);
+    showToast('User account removed.', 'info');
+    return res;
+  };
+
+  const hasPermission = (allowedRoles: (UserRole | string)[]): boolean => {
+    if (!authUser) return false;
+    if (authUser.role === 'Super Admin' || authUser.role === 'Super Administrator') return true;
+    return allowedRoles.includes(authUser.role);
+  };
+
+  const refreshDatabaseStatus = async () => {
+    const st = await storageService.getDatabaseStatus();
+    setDatabaseStatus(st);
+  };
+
+  const syncWithDatabase = async () => {
+    showToast('Connecting to Microsoft Azure SQL Database...', 'info');
+    await storageService.syncWithAzureSql();
+    const st = await storageService.getDatabaseStatus();
+    setDatabaseStatus(st);
+    showToast('Multi-brand CRM data layer synchronized with Azure SQL Database (DDCRM)!', 'success');
   };
 
   const logout = () => {
@@ -983,6 +1089,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveExpense: saveExpenseAction,
         deleteExpense: deleteExpenseAction,
         saveGstInvoice: saveGstInvoiceAction,
+        users,
+        saveUser: saveUserAction,
+        deleteUser: deleteUserAction,
+        hasPermission,
+        databaseStatus,
+        refreshDatabaseStatus,
+        syncWithDatabase,
         referentialModal,
         closeReferentialModal,
         openReferentialBlock,

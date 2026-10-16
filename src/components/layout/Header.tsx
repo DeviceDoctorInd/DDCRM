@@ -14,10 +14,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     toggleTheme,
     resetData,
     authUser,
+    authUser,
     openAddProjectModal,
     activeBrand,
     brandMeta,
     isConsolidatedView,
+    databaseStatus,
+    syncWithDatabase,
   } = useCrm();
 
   const moduleNames: Record<string, string> = {
@@ -35,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     'expense-categories': 'Expense Categories',
     expenses: 'Operational & Cloud Expenses',
     reports: 'Audited Reports & Analytics',
+    users: 'Admin & User Management',
   };
 
   return (

@@ -1,0 +1,406 @@
+import sql from 'mssql';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+export interface AzureDbStatus {
+  connected: boolean;
+  server: string;
+  database: string;
+  authType: string;
+  user: string;
+  error: string | null;
+  lastChecked: string;
+  tableCounts: Record<string, number>;
+}
+
+const SERVER = process.env.AZURE_SQL_SERVER || 'ddcrm.database.windows.net';
+const DATABASE = process.env.AZURE_SQL_DATABASE || 'DDCRM';
+const USER = process.env.AZURE_SQL_USER || 'rathorehemant114@gmail.com';
+const PASSWORD = process.env.AZURE_SQL_PASSWORD || '';
+const PORT = parseInt(process.env.AZURE_SQL_PORT || '1433', 10);
+
+let pool: sql.ConnectionPool | null = null;
+let isConnecting = false;
+let lastError: string | null = null;
+let isConnected = false;
+let tableCountsCache: Record<string, number> = {};
+
+export const getSqlConfig = (): sql.config => {
+  // Microsoft Entra (Azure AD) Password Authentication configuration
+  const config: sql.config = {
+    server: SERVER,
+    database: DATABASE,
+    port: PORT,
+    authentication: {
+      type: 'azure-active-directory-password',
+      options: {
+        userName: USER,
+        password: PASSWORD,
+      },
+    },
+    options: {
+      encrypt: true,
+      trustServerCertificate: false,
+      connectTimeout: 15000,
+      requestTimeout: 30000,
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000,
+    },
+  };
+
+  return config;
+};
+
+// Azure SQL DDL to initialize all 14 core tables
+const DDL_STATEMENTS = [
+  // 1. clients
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='clients' AND xtype='U')
+   CREATE TABLE clients (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     name NVARCHAR(255) NOT NULL,
+     contact_person NVARCHAR(255),
+     phone NVARCHAR(50),
+     email NVARCHAR(255),
+     city NVARCHAR(100),
+     country NVARCHAR(100),
+     gst_number NVARCHAR(50),
+     preferred_currency NVARCHAR(10) DEFAULT 'INR',
+     client_since NVARCHAR(50),
+     status NVARCHAR(50) DEFAULT 'Active',
+     notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 2. service_categories
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='service_categories' AND xtype='U')
+   CREATE TABLE service_categories (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     name NVARCHAR(255) NOT NULL,
+     description NVARCHAR(MAX),
+     status NVARCHAR(50) DEFAULT 'Active',
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 3. services
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='services' AND xtype='U')
+   CREATE TABLE services (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     name NVARCHAR(255) NOT NULL,
+     category_id NVARCHAR(50),
+     description NVARCHAR(MAX),
+     status NVARCHAR(50) DEFAULT 'Active',
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 4. projects
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='projects' AND xtype='U')
+   CREATE TABLE projects (
+     id NVARCHAR(150) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     client_id NVARCHAR(50),
+     client_name NVARCHAR(255),
+     service_id NVARCHAR(50),
+     proposal_date NVARCHAR(50),
+     contract_date NVARCHAR(50),
+     start_date NVARCHAR(50),
+     committed_days INT DEFAULT 30,
+     committed_end_date NVARCHAR(50),
+     actual_end_date NVARCHAR(50),
+     status NVARCHAR(50) DEFAULT 'In Progress',
+     payment_mode NVARCHAR(50) DEFAULT 'GST Invoice',
+     currency NVARCHAR(10) DEFAULT 'INR',
+     contract FLOAT DEFAULT 0,
+     exchange_rate FLOAT DEFAULT 1,
+     contract_value FLOAT DEFAULT 0,
+     total_received FLOAT DEFAULT 0,
+     balance FLOAT DEFAULT 0,
+     project_manager NVARCHAR(255),
+     notes NVARCHAR(MAX),
+     proposal_document NVARCHAR(MAX),
+     contract_document NVARCHAR(MAX),
+     payment_phases NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 5. payments
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='payments' AND xtype='U')
+   CREATE TABLE payments (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     project_id NVARCHAR(150),
+     client_id NVARCHAR(50),
+     client_name NVARCHAR(255),
+     payment_mode NVARCHAR(50) DEFAULT 'GST Invoice',
+     payment_date NVARCHAR(50),
+     due_date NVARCHAR(50),
+     amount_received FLOAT DEFAULT 0,
+     currency NVARCHAR(10) DEFAULT 'INR',
+     exchange_rate FLOAT DEFAULT 1,
+     amount_inr FLOAT DEFAULT 0,
+     reference_utr NVARCHAR(100),
+     payment_status NVARCHAR(50) DEFAULT 'Received',
+     days_overdue INT DEFAULT 0,
+     notes NVARCHAR(MAX),
+     payment_proof NVARCHAR(MAX),
+     payment_proof_notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 6. gst_invoices
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='gst_invoices' AND xtype='U')
+   CREATE TABLE gst_invoices (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     payment_id NVARCHAR(50),
+     project_id NVARCHAR(150),
+     client_id NVARCHAR(50),
+     client_name NVARCHAR(255),
+     payment_date NVARCHAR(50),
+     amount_received FLOAT DEFAULT 0,
+     currency NVARCHAR(10) DEFAULT 'INR',
+     amount_inr FLOAT DEFAULT 0,
+     gst_amount_inr FLOAT DEFAULT 0,
+     invoice_number NVARCHAR(100),
+     uploaded_to_gst_portal NVARCHAR(10) DEFAULT 'No',
+     gst_portal_upload_date NVARCHAR(50),
+     notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 7. employee_roles
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='employee_roles' AND xtype='U')
+   CREATE TABLE employee_roles (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     role_name NVARCHAR(255) NOT NULL,
+     department NVARCHAR(255),
+     status NVARCHAR(50) DEFAULT 'Active',
+     description NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 8. employees
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='employees' AND xtype='U')
+   CREATE TABLE employees (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     name NVARCHAR(255) NOT NULL,
+     role_id NVARCHAR(50),
+     email NVARCHAR(255) NOT NULL,
+     status NVARCHAR(50) DEFAULT 'Active',
+     joining_date NVARCHAR(50),
+     cost_of_employee FLOAT DEFAULT 0,
+     employee_type NVARCHAR(50) DEFAULT 'Salary Basis',
+     comes_under_tds NVARCHAR(10) DEFAULT 'No',
+     notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 9. assignments
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='assignments' AND xtype='U')
+   CREATE TABLE assignments (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     project_id NVARCHAR(150),
+     client_id NVARCHAR(50),
+     client_name NVARCHAR(255),
+     employee_id NVARCHAR(50),
+     employee_name NVARCHAR(255),
+     role_name NVARCHAR(255),
+     assigned_date NVARCHAR(50),
+     work_assigned NVARCHAR(MAX),
+     amount FLOAT DEFAULT 0,
+     amount_paid FLOAT DEFAULT 0,
+     payment_status NVARCHAR(50) DEFAULT 'Pending',
+     employee_notes NVARCHAR(MAX),
+     last_note_update NVARCHAR(50),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 10. employee_payments
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='employee_payments' AND xtype='U')
+   CREATE TABLE employee_payments (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     assignment_id NVARCHAR(50),
+     project_id NVARCHAR(150),
+     employee_id NVARCHAR(50),
+     employee_name NVARCHAR(255),
+     payment_date NVARCHAR(50),
+     amount_paid FLOAT DEFAULT 0,
+     payment_mode NVARCHAR(50) DEFAULT 'GST Invoice',
+     reference_utr NVARCHAR(100),
+     notes NVARCHAR(MAX),
+     payment_proof NVARCHAR(MAX),
+     payment_proof_notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 11. expense_categories
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='expense_categories' AND xtype='U')
+   CREATE TABLE expense_categories (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     name NVARCHAR(255) NOT NULL,
+     description NVARCHAR(MAX),
+     status NVARCHAR(50) DEFAULT 'Active',
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 12. other_expenses
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='other_expenses' AND xtype='U')
+   CREATE TABLE other_expenses (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     project_id NVARCHAR(150),
+     client_id NVARCHAR(50),
+     client_name NVARCHAR(255),
+     expense_category_id NVARCHAR(50),
+     expense_category_name NVARCHAR(255),
+     vendor NVARCHAR(255),
+     description NVARCHAR(MAX),
+     amount FLOAT DEFAULT 0,
+     currency NVARCHAR(10) DEFAULT 'INR',
+     exchange_rate FLOAT DEFAULT 1,
+     amount_inr FLOAT DEFAULT 0,
+     expense_date NVARCHAR(50),
+     payment_status NVARCHAR(50) DEFAULT 'Paid',
+     notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 13. app_users (Authentication & RBAC: Super Admin, Brand Admin, Project Manager, Accountant, Viewer)
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='app_users' AND xtype='U')
+   CREATE TABLE app_users (
+     id NVARCHAR(50) PRIMARY KEY,
+     name NVARCHAR(255) NOT NULL,
+     email NVARCHAR(255) NOT NULL UNIQUE,
+     password_hash NVARCHAR(255) NOT NULL,
+     role NVARCHAR(50) NOT NULL,
+     brand NVARCHAR(100) DEFAULT 'All',
+     status NVARCHAR(50) DEFAULT 'Active',
+     avatar NVARCHAR(500),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
+
+  // 14. crm_audit_log
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='crm_audit_log' AND xtype='U')
+   CREATE TABLE crm_audit_log (
+     id INT IDENTITY(1,1) PRIMARY KEY,
+     brand NVARCHAR(100),
+     module NVARCHAR(100),
+     action NVARCHAR(50),
+     entity_id NVARCHAR(100),
+     details NVARCHAR(MAX),
+     performed_by NVARCHAR(255),
+     timestamp NVARCHAR(50)
+   )`,
+];
+
+export async function initAzureSql(): Promise<boolean> {
+  if (pool && isConnected) {
+    return true;
+  }
+  if (isConnecting) {
+    return false;
+  }
+
+  isConnecting = true;
+  const config = getSqlConfig();
+
+  try {
+    console.log(`[Azure SQL] Attempting Microsoft Entra Password auth to ${SERVER} [DB: ${DATABASE}] as ${USER}...`);
+    pool = await new sql.ConnectionPool(config).connect();
+    isConnected = true;
+    lastError = null;
+    console.log(`[Azure SQL] Successfully connected to live database ${DATABASE} on ${SERVER}!`);
+
+    // Run table initialization
+    for (const ddl of DDL_STATEMENTS) {
+      await pool.request().query(ddl);
+    }
+    console.log(`[Azure SQL] Verified / initialized all 14 database tables schema.`);
+
+    // Refresh table counts
+    await refreshTableCounts();
+    return true;
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    lastError = errorMsg;
+    isConnected = false;
+    console.warn(`[Azure SQL] Notice: Live Azure connection pending credentials / firewall access (${errorMsg}).`);
+    return false;
+  } finally {
+    isConnecting = false;
+  }
+}
+
+export async function refreshTableCounts(): Promise<Record<string, number>> {
+  if (!pool || !isConnected) return tableCountsCache;
+
+  const tables = [
+    'clients',
+    'service_categories',
+    'services',
+    'projects',
+    'payments',
+    'gst_invoices',
+    'employee_roles',
+    'employees',
+    'assignments',
+    'employee_payments',
+    'expense_categories',
+    'other_expenses',
+    'app_users',
+    'crm_audit_log',
+  ];
+
+  const counts: Record<string, number> = {};
+  for (const table of tables) {
+    try {
+      const res = await pool.request().query(`SELECT COUNT(*) as count FROM ${table}`);
+      counts[table] = res.recordset[0]?.count || 0;
+    } catch {
+      counts[table] = 0;
+    }
+  }
+  tableCountsCache = counts;
+  return counts;
+}
+
+export function getAzureDbStatus(): AzureDbStatus {
+  return {
+    connected: isConnected,
+    server: SERVER,
+    database: DATABASE,
+    authType: 'Active Directory Password (Microsoft Entra)',
+    user: USER,
+    error: lastError,
+    lastChecked: new Date().toISOString(),
+    tableCounts: tableCountsCache,
+  };
+}
+
+export function getPool(): sql.ConnectionPool | null {
+  return pool;
+}

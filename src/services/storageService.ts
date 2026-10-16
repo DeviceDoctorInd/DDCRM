@@ -13,7 +13,9 @@ import {
   Expense,
   GstInvoice,
   AuthUser,
+  AppUser,
   BrandName,
+  DatabaseStatus,
   getBrandPrefix,
 } from '../types/crm';
 import { calculateDaysOverdue } from '../utils/formatters';
@@ -31,6 +33,7 @@ const STORAGE_KEYS = {
   EMPLOYEE_PAYMENTS: 'ddi_crm_employee_payments_v1',
   EXPENSE_CATEGORIES: 'ddi_crm_expense_categories_v1',
   EXPENSES: 'ddi_crm_expenses_v2',
+  USERS: 'ddi_crm_app_users_v1',
   AUTH: 'ddi_crm_auth_v2',
   THEME: 'ddi_crm_theme_v2',
   BRAND: 'ddi_crm_active_brand_v1',
@@ -2262,11 +2265,92 @@ const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [...DDI_EXPENSE_CATEGORIES
 const INITIAL_EXPENSES: Expense[] = [...DDI_EXPENSES, ...CDS_EXPENSES, ...FXL_EXPENSES];
 const INITIAL_GST_INVOICES: GstInvoice[] = [...DDI_GST_INVOICES, ...CDS_GST_INVOICES, ...FXL_GST_INVOICES];
 
+const INITIAL_APP_USERS: AppUser[] = [
+  {
+    id: 'USR-001',
+    name: 'Hemant Rathore (Entra Admin)',
+    email: 'rathorehemant114@gmail.com',
+    role: 'Super Admin',
+    brand: 'All',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'USR-002',
+    name: 'Device Doctor Desk',
+    email: 'devicedoctorindia.in@gmail.com',
+    role: 'Super Admin',
+    brand: 'All',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'USR-003',
+    name: 'Codestro Brand Admin',
+    email: 'admin@codestro.com',
+    role: 'Brand Admin',
+    brand: 'Codestro',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-02-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z',
+  },
+  {
+    id: 'USR-004',
+    name: 'FX Launch Pad Admin',
+    email: 'admin@fxlaunchpad.io',
+    role: 'Brand Admin',
+    brand: 'FX Launch Pad',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-02-15T00:00:00Z',
+    updatedAt: '2026-02-15T00:00:00Z',
+  },
+  {
+    id: 'USR-005',
+    name: 'Karthik Ramanathan (Lead PM)',
+    email: 'karthik.pm@devicedoctor.in',
+    role: 'Project Manager',
+    brand: 'Device Doctor India',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: 'USR-006',
+    name: 'Sunita Mehra (Finance & Tax)',
+    email: 'finance@devicedoctor.in',
+    role: 'Accountant',
+    brand: 'All',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-03-10T00:00:00Z',
+    updatedAt: '2026-03-10T00:00:00Z',
+  },
+  {
+    id: 'USR-007',
+    name: 'Auditor & Client Reviewer',
+    email: 'viewer@devicedoctor.in',
+    role: 'Viewer',
+    brand: 'All',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=160&h=160&q=80',
+    createdAt: '2025-04-01T00:00:00Z',
+    updatedAt: '2026-04-01T00:00:00Z',
+  },
+];
+
 const DEFAULT_AUTH_USER: AuthUser = {
   id: 'USR-001',
-  name: 'Admin Desk',
-  email: 'admin@devicedoctor.in',
-  role: 'Super Administrator',
+  name: 'Hemant Rathore (Entra Admin)',
+  email: 'rathorehemant114@gmail.com',
+  role: 'Super Admin',
+  brand: 'All',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
 };
 
@@ -2333,6 +2417,9 @@ class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.GST_INVOICES)) {
       localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_APP_USERS));
+    }
 
     // Multi-Brand Migration: Ensure every stored entity has a brand, and seed Codestro & FX Launch Pad
     const MULTI_BRAND_SEED_KEY = 'ddi_multi_brand_seed_v4';
@@ -2392,7 +2479,189 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(INITIAL_EXPENSE_CATEGORIES));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(INITIAL_EXPENSES));
     localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_APP_USERS));
     this.notifyListeners();
+    this.apiCall('/api/db/sync-seed', 'POST', {});
+  }
+
+  // --- Azure SQL Database Sync & Status Helpers ---
+  public async apiCall(url: string, method: string = 'GET', body?: unknown) {
+    if (typeof window === 'undefined') return null;
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  public async getDatabaseStatus(): Promise<DatabaseStatus> {
+    try {
+      const res = await fetch('/api/db/status');
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          connected: data.connected ?? false,
+          server: data.server || 'ddcrm.database.windows.net',
+          database: data.database || 'DDCRM',
+          authType: data.authType || 'Active Directory Password (Microsoft Entra)',
+          user: data.user || 'rathorehemant114@gmail.com',
+          error: data.error,
+          timestamp: data.lastChecked || new Date().toISOString(),
+          tables: data.tableCounts || {},
+        };
+      }
+    } catch {
+      // fallback
+    }
+    return {
+      connected: false,
+      server: 'ddcrm.database.windows.net',
+      database: 'DDCRM',
+      authType: 'Active Directory Password (Microsoft Entra)',
+      user: 'rathorehemant114@gmail.com',
+      error: 'Connecting to Azure SQL Database...',
+      timestamp: new Date().toISOString(),
+      tables: {},
+    };
+  }
+
+  public async syncWithAzureSql(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const [
+        clients,
+        categories,
+        services,
+        projects,
+        payments,
+        gstInvoices,
+        roles,
+        employees,
+        assignments,
+        employeePayments,
+        expenseCategories,
+        expenses,
+        users,
+      ] = await Promise.all([
+        this.apiCall('/api/clients'),
+        this.apiCall('/api/categories'),
+        this.apiCall('/api/services'),
+        this.apiCall('/api/projects'),
+        this.apiCall('/api/payments'),
+        this.apiCall('/api/gst-invoices'),
+        this.apiCall('/api/roles'),
+        this.apiCall('/api/employees'),
+        this.apiCall('/api/assignments'),
+        this.apiCall('/api/employee-payments'),
+        this.apiCall('/api/expense-categories'),
+        this.apiCall('/api/expenses'),
+        this.apiCall('/api/users'),
+      ]);
+
+      if (Array.isArray(clients) && clients.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+      }
+      if (Array.isArray(categories) && categories.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+      }
+      if (Array.isArray(services) && services.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+      }
+      if (Array.isArray(projects) && projects.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+      }
+      if (Array.isArray(payments) && payments.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+      }
+      if (Array.isArray(gstInvoices) && gstInvoices.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(gstInvoices));
+      }
+      if (Array.isArray(roles) && roles.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.ROLES, JSON.stringify(roles));
+      }
+      if (Array.isArray(employees) && employees.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+      }
+      if (Array.isArray(assignments) && assignments.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+      }
+      if (Array.isArray(employeePayments) && employeePayments.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(employeePayments));
+      }
+      if (Array.isArray(expenseCategories) && expenseCategories.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(expenseCategories));
+      }
+      if (Array.isArray(expenses) && expenses.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+      }
+      if (Array.isArray(users) && users.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      }
+
+      this.notifyListeners();
+    } catch (e) {
+      console.warn('[Sync] Azure SQL background sync:', e);
+    }
+  }
+
+  // --- APP USERS (Admin & User Management) ---
+  public getAppUsers(): AppUser[] {
+    this.init();
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+      return raw ? JSON.parse(raw) : INITIAL_APP_USERS;
+    } catch {
+      return INITIAL_APP_USERS;
+    }
+  }
+
+  public saveAppUser(user: AppUser): { success: boolean; error?: string } {
+    const users = this.getAppUsers();
+    const existingIndex = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    const now = new Date().toISOString();
+
+    if (existingIndex >= 0) {
+      users[existingIndex] = {
+        ...users[existingIndex],
+        ...user,
+        updatedAt: now,
+      };
+    } else {
+      if (!user.id) {
+        user.id = `USR-${String(users.length + 1).padStart(3, '0')}`;
+      }
+      user.createdAt = now;
+      user.updatedAt = now;
+      users.push(user);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.apiCall('/api/users', 'POST', user);
+    this.notifyListeners();
+    return { success: true };
+  }
+
+  public deleteAppUser(userId: string): { success: boolean; error?: string } {
+    const users = this.getAppUsers().filter((u) => u.id !== userId);
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    this.apiCall(`/api/users/${userId}`, 'DELETE');
+    this.notifyListeners();
+    return { success: true };
+  }
+
+  public async loginWithAzureSql(email: string, password: string): Promise<AuthUser | null> {
+    const result = await this.apiCall('/api/auth/login', 'POST', { email, password });
+    if (result && result.success && result.user) {
+      this.setAuthUser(result.user);
+      return result.user;
+    }
+    return null;
   }
 
   // --- Active Brand Workspace ---
@@ -2586,6 +2855,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    this.apiCall('/api/clients', 'POST', client);
     this.notifyListeners();
     return { success: true };
   }
@@ -2610,6 +2880,7 @@ class StorageService {
     }
     const clients = this.getClients().filter((c) => c.id !== clientId);
     localStorage.setItem(STORAGE_KEYS.CLIENTS, JSON.stringify(clients));
+    this.apiCall(`/api/clients/${clientId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -2669,6 +2940,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    this.apiCall('/api/categories', 'POST', category);
     this.notifyListeners();
     return { success: true };
   }
@@ -2693,6 +2965,7 @@ class StorageService {
     }
     const categories = this.getCategories().filter((c) => c.id !== categoryId);
     localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    this.apiCall(`/api/categories/${categoryId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -2756,6 +3029,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+    this.apiCall('/api/services', 'POST', cleanService);
     this.notifyListeners();
     return { success: true };
   }
@@ -2780,6 +3054,7 @@ class StorageService {
     }
     const services = this.getServices().filter((s) => s.id !== serviceId);
     localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+    this.apiCall(`/api/services/${serviceId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -2853,6 +3128,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    this.apiCall('/api/projects', 'POST', project);
     this.notifyListeners();
     return { success: true };
   }
@@ -2895,6 +3171,7 @@ class StorageService {
     }
     const projects = this.getProjects().filter((p) => p.id !== projectId);
     localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    this.apiCall(`/api/projects/${projectId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -2957,6 +3234,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+    this.apiCall('/api/payments', 'POST', payment);
 
     // Update Project received & balance
     if (payment.projectId) {
@@ -2972,6 +3250,7 @@ class StorageService {
     const target = payments.find((p) => p.id === paymentId);
     const updated = payments.filter((p) => p.id !== paymentId);
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+    this.apiCall(`/api/payments/${paymentId}`, 'DELETE');
 
     if (target?.projectId) {
       this.recalculateProjectFinancials(target.projectId);
@@ -3047,6 +3326,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.ROLES, JSON.stringify(roles));
+    this.apiCall('/api/roles', 'POST', role);
     this.notifyListeners();
     return { success: true };
   }
@@ -3071,6 +3351,7 @@ class StorageService {
     }
     const roles = this.getRoles().filter((r) => r.id !== roleId);
     localStorage.setItem(STORAGE_KEYS.ROLES, JSON.stringify(roles));
+    this.apiCall(`/api/roles/${roleId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -3118,6 +3399,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+    this.apiCall('/api/employees', 'POST', employee);
     this.notifyListeners();
     return { success: true };
   }
@@ -3142,8 +3424,19 @@ class StorageService {
     }
     const employees = this.getEmployees().filter((e) => e.id !== employeeId);
     localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+    this.apiCall(`/api/employees/${employeeId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
+  }
+
+  public setEmployeeStatus(employeeId: string, status: Employee['status']) {
+    const employees = this.getEmployees().map((e) =>
+      e.id === employeeId ? { ...e, status, updatedAt: new Date().toISOString() } : e
+    );
+    localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+    const target = employees.find((e) => e.id === employeeId);
+    if (target) this.apiCall('/api/employees', 'POST', target);
+    this.notifyListeners();
   }
 
   // --- ASSIGNMENTS ---
@@ -3181,6 +3474,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+    this.apiCall('/api/assignments', 'POST', assignment);
     this.notifyListeners();
     return { success: true };
   }
@@ -3205,6 +3499,7 @@ class StorageService {
     }
     const assignments = this.getAssignments().filter((a) => a.id !== assignmentId);
     localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+    this.apiCall(`/api/assignments/${assignmentId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -3244,6 +3539,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(epays));
+    this.apiCall('/api/employee-payments', 'POST', payment);
 
     // Update Assignment amountPaid
     if (payment.assignmentId) {
@@ -3272,6 +3568,7 @@ class StorageService {
     const target = epays.find((p) => p.id === paymentId);
     const updated = epays.filter((p) => p.id !== paymentId);
     localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(updated));
+    this.apiCall(`/api/employee-payments/${paymentId}`, 'DELETE');
 
     if (target?.assignmentId) {
       const assignments = this.getAssignments();
@@ -3334,6 +3631,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
+    this.apiCall('/api/expense-categories', 'POST', cat);
     this.notifyListeners();
     return { success: true };
   }
@@ -3358,6 +3656,7 @@ class StorageService {
     }
     const cats = this.getExpenseCategories().filter((c) => c.id !== catId);
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
+    this.apiCall(`/api/expense-categories/${catId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -3367,6 +3666,8 @@ class StorageService {
       c.id === catId ? { ...c, status, updatedAt: new Date().toISOString() } : c
     );
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
+    const target = cats.find((c) => c.id === catId);
+    if (target) this.apiCall('/api/expense-categories', 'POST', target);
     this.notifyListeners();
   }
 
@@ -3405,6 +3706,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    this.apiCall('/api/expenses', 'POST', expense);
     this.notifyListeners();
     return { success: true };
   }
@@ -3412,6 +3714,7 @@ class StorageService {
   public deleteExpense(expenseId: string): { success: boolean; error?: string } {
     const expenses = this.getExpenses().filter((e) => e.id !== expenseId);
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(expenses));
+    this.apiCall(`/api/expenses/${expenseId}`, 'DELETE');
     this.notifyListeners();
     return { success: true };
   }
@@ -3451,6 +3754,7 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(invoices));
+    this.apiCall('/api/gst-invoices', 'POST', invoice);
     this.notifyListeners();
     return { success: true };
   }

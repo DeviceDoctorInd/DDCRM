@@ -27,6 +27,7 @@ import { ExpenseCategoriesModule } from './components/modules/ExpenseCategoriesM
 import { ExpensesModule } from './components/modules/ExpensesModule';
 import { GstInvoicesModule } from './components/modules/GstInvoicesModule';
 import { ReportsModule } from './components/modules/ReportsModule';
+import { UsersModule } from './components/modules/UsersModule';
 
 const MainLayout: React.FC = () => {
   const { authUser, activeModule } = useCrm();
@@ -68,6 +69,8 @@ const MainLayout: React.FC = () => {
         return <ExpensesModule />;
       case 'reports':
         return <ReportsModule />;
+      case 'users':
+        return <UsersModule />;
       default:
         return <DashboardModule />;
     }

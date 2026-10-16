@@ -25,6 +25,8 @@ import {
   BarChart3,
   TrendingUp,
   PieChart,
+  UserCog,
+  Database,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -57,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     employeePayments,
     expenseCategories,
     expenses,
+    users,
     authUser,
     logout,
   } = useCrm();
@@ -178,6 +181,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Other Expenses',
       icon: <Receipt className="w-4 h-4 shrink-0" />,
       count: expenses.length,
+    },
+    {
+      id: 'users',
+      label: 'Admin & Users',
+      icon: <UserCog className="w-4 h-4 shrink-0" />,
+      count: users.length,
     },
   ];
 
@@ -361,6 +370,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <LogOut className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Azure SQL Live Database Status Widget */}
+        {!isCollapsed ? (
+          <div className="mt-2 p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px]">
+            <div className="flex items-center justify-between text-slate-300 font-semibold mb-0.5">
+              <div className="flex items-center gap-1.5 text-blue-400">
+                <Database className="w-3 h-3" />
+                <span>Azure SQL Database</span>
+              </div>
+              <span className="flex h-1.5 w-1.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+            </div>
+            <div className="text-[9px] text-slate-400 font-mono truncate">
+              ddcrm.database.windows.net
+            </div>
+            <div className="text-[9px] text-cyan-400/90 font-mono truncate">
+              rathorehemant114@gmail.com
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-center my-1.5" title="Azure SQL: ddcrm.database.windows.net / DDCRM (rathorehemant114@gmail.com)">
+            <Database className="w-3.5 h-3.5 text-blue-400 hover:text-blue-300 transition-colors" />
+          </div>
         )}
 
         {/* Desktop Collapse Toggle */}

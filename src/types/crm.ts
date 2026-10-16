@@ -355,12 +355,39 @@ export interface GstInvoice {
   updatedAt: string;
 }
 
+export type UserRole = 'Super Admin' | 'Brand Admin' | 'Project Manager' | 'Accountant' | 'Viewer';
+
+export interface AppUser {
+  id: string; // e.g. USR-001
+  name: string;
+  email: string;
+  password?: string;
+  role: UserRole;
+  brand?: BrandName | 'All';
+  status: 'Active' | 'Inactive';
+  avatar?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole | string;
+  brand?: BrandName | 'All';
   avatar?: string;
+}
+
+export interface DatabaseStatus {
+  connected: boolean;
+  server: string;
+  database: string;
+  authType: string;
+  user: string;
+  error?: string | null;
+  timestamp: string;
+  tables?: { [tableName: string]: number };
 }
 
 export type ReportsSubTab = 'business' | 'client' | 'employee' | 'overview';
@@ -379,7 +406,8 @@ export type ActiveModule =
   | 'employee-payments'
   | 'expense-categories'
   | 'expenses'
-  | 'reports';
+  | 'reports'
+  | 'users';
 
 export interface ReferentialIntegrityBlock {
   isOpen: boolean;
