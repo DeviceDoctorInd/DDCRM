@@ -54,6 +54,30 @@ export interface Service {
   updatedAt: string;
 }
 
+export interface ProjectDocument {
+  id?: string;
+  name: string; // file name (e.g. Zenith_Logistics_ERP_Proposal_v2.pdf)
+  size?: number; // size in bytes
+  type?: string; // mime type
+  uploadedAt: string; // ISO date string or formatted date
+  url?: string; // Base64 data URL, blob, or object URL
+  externalUrl?: string; // Google Drive or external link
+  notes?: string; // document version notes or summary
+}
+
+export type PaymentPhaseStatus = 'Pending' | 'Invoiced' | 'Received' | 'Overdue';
+
+export interface PaymentPhase {
+  id: string; // unique id e.g. "phase-1", "phase-2"
+  name: string; // e.g. "Phase 1 - Advance / Kickoff"
+  percentage: number; // e.g. 40
+  amount: number; // in project currency
+  amountINR: number; // auto-converted to INR
+  dueDate: string; // YYYY-MM-DD
+  status: PaymentPhaseStatus; // Pending | Invoiced | Received | Overdue
+  notes?: string; // notes on deliverables, conditions
+}
+
 export interface Project {
   id: string; // Smart format: DDI - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE] (auto-generated, read-only)
   clientId: string; // Foreign key to Client.id
@@ -75,8 +99,24 @@ export interface Project {
   balance?: number; // Remaining balance in INR: contractValue - totalReceived
   projectManager: string; // Text input
   notes?: string; // Textarea
+  proposalDocument?: ProjectDocument;
+  proposalDocumentNotes?: string;
+  contractDocument?: ProjectDocument;
+  contractDocumentNotes?: string;
+  paymentPhases?: PaymentPhase[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PaymentProofDocument {
+  id?: string;
+  name: string; // file name (e.g. HDFC_Bank_Transfer_Receipt.png)
+  size?: number; // size in bytes
+  type?: string; // mime type
+  uploadedAt: string; // ISO date string
+  url?: string; // Base64 data URL, blob, or object URL
+  externalUrl?: string; // Google Drive or external link
+  notes?: string; // proof notes / verification details
 }
 
 export interface Payment {
@@ -95,6 +135,8 @@ export interface Payment {
   paymentStatus: PaymentStatus; // Dropdown: Received, Pending, Failed, Cancelled
   daysOverdue: number; // Auto-calculated read-only: if Pending & Today > Due Date -> days, else 0
   notes?: string; // Textarea
+  paymentProof?: PaymentProofDocument; // Uploaded payment proof/receipt screenshot
+  paymentProofNotes?: string; // Dedicated receipt notes
   createdAt: string;
   updatedAt: string;
   // Compatibility helpers
@@ -176,6 +218,8 @@ export interface EmployeePayment {
   paymentMode: EmployeePaymentMode; // Dropdown
   referenceUtr?: string; // Text input - unique check across all employee payments if provided
   notes?: string; // Textarea
+  paymentProof?: PaymentProofDocument; // Uploaded employee payment receipt screenshot
+  paymentProofNotes?: string; // Dedicated receipt notes
   createdAt: string;
   updatedAt: string;
 }
@@ -232,6 +276,8 @@ export interface AuthUser {
   avatar?: string;
 }
 
+export type ReportsSubTab = 'business' | 'client' | 'employee' | 'overview';
+
 export type ActiveModule =
   | 'dashboard'
   | 'clients'
@@ -245,7 +291,8 @@ export type ActiveModule =
   | 'assignments'
   | 'employee-payments'
   | 'expense-categories'
-  | 'expenses';
+  | 'expenses'
+  | 'reports';
 
 export interface ReferentialIntegrityBlock {
   isOpen: boolean;

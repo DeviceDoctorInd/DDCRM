@@ -259,6 +259,58 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 250000,
     projectManager: 'Karthik Ramanathan',
     notes: 'Awaiting client approval on GPS background tracking permissions and geofencing SDK integration.',
+    proposalDocument: {
+      id: 'doc-prop-001',
+      name: 'Zenith_Logistics_ERP_Scope_Proposal_v2.pdf',
+      size: 2450000,
+      type: 'application/pdf',
+      uploadedAt: '2026-06-15T10:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1ZenithLogistics-Proposal-v2/view',
+      notes: 'Initial scope baseline approved by VP Logistics. Includes GPS fleet tracking and automated manifest generation.',
+    },
+    proposalDocumentNotes: 'Initial scope baseline approved by VP Logistics. Includes GPS fleet tracking and automated manifest generation.',
+    contractDocument: {
+      id: 'doc-cont-001',
+      name: 'Zenith_Logistics_Master_Services_Agreement_Signed.pdf',
+      size: 3820000,
+      type: 'application/pdf',
+      uploadedAt: '2026-06-25T14:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1Zenith-Signed-Contract-2026/view',
+      notes: 'Signed MSA with 99.9% uptime SLA and 2-hour critical bug resolution window.',
+    },
+    contractDocumentNotes: 'Signed MSA with 99.9% uptime SLA and 2-hour critical bug resolution window.',
+    paymentPhases: [
+      {
+        id: 'phase-001-1',
+        name: 'Phase 1 - Advance / Project Kickoff',
+        percentage: 40,
+        amount: 180000,
+        amountINR: 180000,
+        dueDate: '2026-07-05',
+        status: 'Received',
+        notes: 'Kickoff advance cleared upon contract signing.',
+      },
+      {
+        id: 'phase-001-2',
+        name: 'Phase 2 - UI/UX & Backend Core Modules',
+        percentage: 30,
+        amount: 135000,
+        amountINR: 135000,
+        dueDate: '2026-08-05',
+        status: 'Invoiced',
+        notes: 'Deliverable: Geofencing, backend architecture, and live vehicle tracker prototype.',
+      },
+      {
+        id: 'phase-001-3',
+        name: 'Phase 3 - Final Go-Live & Staff Training',
+        percentage: 30,
+        amount: 135000,
+        amountINR: 135000,
+        dueDate: '2026-08-30',
+        status: 'Pending',
+        notes: 'Final sign-off, data migration from legacy Excel, and user training sessions.',
+      },
+    ],
     createdAt: '2026-07-01T09:00:00Z',
     updatedAt: '2026-09-15T11:00:00Z',
   },
@@ -283,6 +335,58 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 370000,
     projectManager: 'Karthik Ramanathan',
     notes: 'Undergoing third-party financial cybersecurity audit and SOC2 penetration testing.',
+    proposalDocument: {
+      id: 'doc-prop-002',
+      name: 'CyberShield_Fintech_Portal_Architecture_Proposal.pdf',
+      size: 3100000,
+      type: 'application/pdf',
+      uploadedAt: '2026-07-15T11:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1CyberShield-Architecture-Proposal/view',
+      notes: 'Detailed microservices and banking API integration architecture specification.',
+    },
+    proposalDocumentNotes: 'Detailed microservices and banking API integration architecture specification.',
+    contractDocument: {
+      id: 'doc-cont-002',
+      name: 'CyberShield_Executed_Development_Agreement.pdf',
+      size: 4250000,
+      type: 'application/pdf',
+      uploadedAt: '2026-08-01T16:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1CyberShield-Executed-Agreement/view',
+      notes: 'Executed contract with PCI-DSS compliance clauses and escrow arrangements.',
+    },
+    contractDocumentNotes: 'Executed contract with PCI-DSS compliance clauses and escrow arrangements.',
+    paymentPhases: [
+      {
+        id: 'phase-002-1',
+        name: 'Phase 1 - Advance / Architectural Setup',
+        percentage: 40,
+        amount: 248000,
+        amountINR: 248000,
+        dueDate: '2026-08-15',
+        status: 'Received',
+        notes: 'Initial 40% advance for cloud infrastructure provisioning.',
+      },
+      {
+        id: 'phase-002-2',
+        name: 'Phase 2 - Banking API & Security Hardening',
+        percentage: 30,
+        amount: 186000,
+        amountINR: 186000,
+        dueDate: '2026-09-05',
+        status: 'Invoiced',
+        notes: 'Payment gateway integration and mutual TLS bank connectivity.',
+      },
+      {
+        id: 'phase-002-3',
+        name: 'Phase 3 - Security Audit Sign-off & Production Release',
+        percentage: 30,
+        amount: 186000,
+        amountINR: 186000,
+        dueDate: '2026-09-20',
+        status: 'Pending',
+        notes: 'Final balance upon passing independent SOC2 penetration testing.',
+      },
+    ],
     createdAt: '2026-08-10T10:00:00Z',
     updatedAt: '2026-09-28T14:30:00Z',
   },
@@ -307,6 +411,58 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 440000,
     projectManager: 'Deepak Varma',
     notes: 'Milestone 2 (Payroll and multi-currency billing engine) in active development.',
+    proposalDocument: {
+      id: 'doc-prop-003',
+      name: 'TechNova_Mobile_App_Scope_Wireframes.pdf',
+      size: 5200000,
+      type: 'application/pdf',
+      uploadedAt: '2026-08-15T09:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1TechNova-Wireframes/view',
+      notes: 'Figma wireframes and Flutter mobile architecture plan with offline syncing.',
+    },
+    proposalDocumentNotes: 'Figma wireframes and Flutter mobile architecture plan with offline syncing.',
+    contractDocument: {
+      id: 'doc-cont-003',
+      name: 'TechNova_Signed_Enterprise_Contract.pdf',
+      size: 3400000,
+      type: 'application/pdf',
+      uploadedAt: '2026-08-25T12:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1TechNova-Signed-Contract/view',
+      notes: 'Multi-year maintenance support annexure attached.',
+    },
+    contractDocumentNotes: 'Multi-year maintenance support annexure attached.',
+    paymentPhases: [
+      {
+        id: 'phase-003-1',
+        name: 'Phase 1 - Mobilization & Design Approval',
+        percentage: 50,
+        amount: 440000,
+        amountINR: 440000,
+        dueDate: '2026-09-05',
+        status: 'Received',
+        notes: '50% mobilization payment credited in bank account.',
+      },
+      {
+        id: 'phase-003-2',
+        name: 'Phase 2 - Alpha TestFlight & Play Console Build',
+        percentage: 25,
+        amount: 220000,
+        amountINR: 220000,
+        dueDate: '2026-10-15',
+        status: 'Invoiced',
+        notes: 'Alpha build released to 50 internal company testers.',
+      },
+      {
+        id: 'phase-003-3',
+        name: 'Phase 3 - App Store & Google Play Public Launch',
+        percentage: 25,
+        amount: 220000,
+        amountINR: 220000,
+        dueDate: '2026-11-15',
+        status: 'Pending',
+        notes: 'Public store release and handover of source code repositories.',
+      },
+    ],
     createdAt: '2026-09-01T08:30:00Z',
     updatedAt: '2026-10-10T16:00:00Z',
   },
@@ -331,6 +487,58 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 190000,
     projectManager: 'Deepak Varma',
     notes: 'WebRTC video consultation tested successfully; integrating Razorpay payment gateway.',
+    proposalDocument: {
+      id: 'doc-prop-004',
+      name: 'Apex_Hospital_Telemedicine_Proposal_Doc.pdf',
+      size: 1950000,
+      type: 'application/pdf',
+      uploadedAt: '2026-09-01T10:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1Apex-Telemedicine-Proposal/view',
+      notes: 'HIPAA and Indian telemedicine guidelines compliance checklist included.',
+    },
+    proposalDocumentNotes: 'HIPAA and Indian telemedicine guidelines compliance checklist included.',
+    contractDocument: {
+      id: 'doc-cont-004',
+      name: 'Apex_Hospital_Signed_Service_Contract.pdf',
+      size: 2600000,
+      type: 'application/pdf',
+      uploadedAt: '2026-09-10T15:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1Apex-Signed-Contract/view',
+      notes: 'Medical data confidentiality and patient record encryption agreement.',
+    },
+    contractDocumentNotes: 'Medical data confidentiality and patient record encryption agreement.',
+    paymentPhases: [
+      {
+        id: 'phase-004-1',
+        name: 'Phase 1 - Mobilization & Doctor Portal Setup',
+        percentage: 50,
+        amount: 190000,
+        amountINR: 190000,
+        dueDate: '2026-09-20',
+        status: 'Received',
+        notes: 'Advance received via digital transfer.',
+      },
+      {
+        id: 'phase-004-2',
+        name: 'Phase 2 - Video Consultation & Electronic Health Records',
+        percentage: 30,
+        amount: 114000,
+        amountINR: 114000,
+        dueDate: '2026-10-10',
+        status: 'Invoiced',
+        notes: 'End-to-end encrypted video streaming milestone.',
+      },
+      {
+        id: 'phase-004-3',
+        name: 'Phase 3 - Go-Live & Pharmacy API Integration',
+        percentage: 20,
+        amount: 76000,
+        amountINR: 76000,
+        dueDate: '2026-10-25',
+        status: 'Pending',
+        notes: 'Final deployment and integration with hospital pharmacy billing.',
+      },
+    ],
     createdAt: '2026-09-18T11:00:00Z',
     updatedAt: '2026-10-12T17:15:00Z',
   },
@@ -355,6 +563,48 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 290000,
     projectManager: 'Arjun Singhania',
     notes: 'Q4 lead-generation campaign launched across LinkedIn & Google Ads with 3.8x ROAS benchmark.',
+    proposalDocument: {
+      id: 'doc-prop-005',
+      name: 'CloudMatrix_Q4_Paid_Acquisition_Pitch.pdf',
+      size: 4500000,
+      type: 'application/pdf',
+      uploadedAt: '2026-09-15T14:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1CloudMatrix-Pitch/view',
+      notes: 'Funnel economics, creative ad copies, and tracking pixel architecture.',
+    },
+    proposalDocumentNotes: 'Funnel economics, creative ad copies, and tracking pixel architecture.',
+    contractDocument: {
+      id: 'doc-cont-005',
+      name: 'CloudMatrix_Marketing_Retainer_Agreement.pdf',
+      size: 2800000,
+      type: 'application/pdf',
+      uploadedAt: '2026-09-25T11:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1CloudMatrix-Retainer/view',
+      notes: '2-month performance retainer agreement with weekly KPI check-ins.',
+    },
+    contractDocumentNotes: '2-month performance retainer agreement with weekly KPI check-ins.',
+    paymentPhases: [
+      {
+        id: 'phase-005-1',
+        name: 'Phase 1 - Month 1 Retainer Advance',
+        percentage: 50,
+        amount: 145000,
+        amountINR: 145000,
+        dueDate: '2026-10-05',
+        status: 'Invoiced',
+        notes: 'Month 1 campaign setup and creative design fee.',
+      },
+      {
+        id: 'phase-005-2',
+        name: 'Phase 2 - Month 2 Retainer & Optimization Fee',
+        percentage: 50,
+        amount: 145000,
+        amountINR: 145000,
+        dueDate: '2026-11-01',
+        status: 'Pending',
+        notes: 'Month 2 ad scale and conversion rate optimization fee.',
+      },
+    ],
     createdAt: '2026-10-01T09:30:00Z',
     updatedAt: '2026-10-13T10:00:00Z',
   },
@@ -379,6 +629,58 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 0,
     projectManager: 'Karthik Ramanathan',
     notes: 'Successfully deployed on Vercel and AWS RDS with automated stock synchronization.',
+    proposalDocument: {
+      id: 'doc-prop-006',
+      name: 'Bharat_Retail_ECommerce_Modernization_Proposal.pdf',
+      size: 3200000,
+      type: 'application/pdf',
+      uploadedAt: '2026-04-15T09:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1BharatRetail-Proposal/view',
+      notes: 'Omnichannel inventory sync and POS integration proposal.',
+    },
+    proposalDocumentNotes: 'Omnichannel inventory sync and POS integration proposal.',
+    contractDocument: {
+      id: 'doc-cont-006',
+      name: 'Bharat_Retail_Executed_Development_Agreement.pdf',
+      size: 4100000,
+      type: 'application/pdf',
+      uploadedAt: '2026-05-01T16:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/1BharatRetail-Signed/view',
+      notes: 'Warranty and post-launch maintenance agreement.',
+    },
+    contractDocumentNotes: 'Warranty and post-launch maintenance agreement.',
+    paymentPhases: [
+      {
+        id: 'phase-006-1',
+        name: 'Phase 1 - Advance / Architecture & Schemas',
+        percentage: 40,
+        amount: 208000,
+        amountINR: 208000,
+        dueDate: '2026-05-15',
+        status: 'Received',
+        notes: '40% advance cleared on project kickoff.',
+      },
+      {
+        id: 'phase-006-2',
+        name: 'Phase 2 - Product Catalog & Payment Gateway',
+        percentage: 30,
+        amount: 156000,
+        amountINR: 156000,
+        dueDate: '2026-06-05',
+        status: 'Received',
+        notes: 'Catalog sync and checkout pipeline approved.',
+      },
+      {
+        id: 'phase-006-3',
+        name: 'Phase 3 - Go-Live & AWS Deployment',
+        percentage: 30,
+        amount: 156000,
+        amountINR: 156000,
+        dueDate: '2026-06-24',
+        status: 'Received',
+        notes: 'Final settlement cleared after production deployment.',
+      },
+    ],
     createdAt: '2026-05-10T09:00:00Z',
     updatedAt: '2026-06-26T12:00:00Z',
   },
@@ -401,6 +703,16 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'Sprint 1 kickoff advance cleared in bank.',
+    paymentProof: {
+      id: 'proof-pay-001',
+      name: 'Zenith_HDFC_NEFT_Receipt_200k.png',
+      size: 345000,
+      type: 'image/png',
+      uploadedAt: '2026-07-01T10:15:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-hdfc-neft-receipt/view',
+      notes: 'HDFC Corporate NetBanking NEFT advice verified by accounts desk.',
+    },
+    paymentProofNotes: 'HDFC Corporate NetBanking NEFT advice verified by accounts desk.',
     createdAt: '2026-07-01T10:00:00Z',
     updatedAt: '2026-09-16T10:00:00Z',
     amount: 200000,
@@ -447,6 +759,16 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'API architecture milestone sign-off received.',
+    paymentProof: {
+      id: 'proof-pay-003',
+      name: 'CyberShield_ICICI_IMPS_Screenshot.png',
+      size: 420000,
+      type: 'image/png',
+      uploadedAt: '2026-08-10T11:15:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-icici-imps-screenshot/view',
+      notes: 'IMPS payment advice received with bank UTR confirmation reference.',
+    },
+    paymentProofNotes: 'IMPS payment advice received with bank UTR confirmation reference.',
     createdAt: '2026-08-10T11:00:00Z',
     updatedAt: '2026-10-01T09:00:00Z',
     amount: 250000,
@@ -470,6 +792,16 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: '50% initial contract advance for mobile application build.',
+    paymentProof: {
+      id: 'proof-pay-004',
+      name: 'TechNova_AxisBank_Transfer_Voucher.png',
+      size: 512000,
+      type: 'image/png',
+      uploadedAt: '2026-09-01T09:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-axis-transfer-receipt/view',
+      notes: 'Axis Bank RTGS corporate remittance confirmation attached.',
+    },
+    paymentProofNotes: 'Axis Bank RTGS corporate remittance confirmation attached.',
     createdAt: '2026-09-01T09:00:00Z',
     updatedAt: '2026-09-05T14:00:00Z',
     amount: 440000,
@@ -493,6 +825,16 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'Telemedicine integration milestone payment.',
+    paymentProof: {
+      id: 'proof-pay-005',
+      name: 'Apex_Hospital_SBI_UPI_Receipt.png',
+      size: 380000,
+      type: 'image/png',
+      uploadedAt: '2026-09-18T12:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-sbi-upi-receipt/view',
+      notes: 'State Bank UPI merchant clearance verified with accounts.',
+    },
+    paymentProofNotes: 'State Bank UPI merchant clearance verified with accounts.',
     createdAt: '2026-09-18T12:00:00Z',
     updatedAt: '2026-09-19T10:30:00Z',
     amount: 190000,
@@ -539,6 +881,16 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'Complete project sign-off and final settlement.',
+    paymentProof: {
+      id: 'proof-pay-007',
+      name: 'Bharat_Retail_Kotak_NEFT_Settlement.pdf',
+      size: 470000,
+      type: 'application/pdf',
+      uploadedAt: '2026-06-25T14:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-kotak-neft-pdf/view',
+      notes: 'Final settlement RTGS payment advice verified by finance head.',
+    },
+    paymentProofNotes: 'Final settlement RTGS payment advice verified by finance head.',
     createdAt: '2026-05-10T10:00:00Z',
     updatedAt: '2026-07-12T16:00:00Z',
     amount: 520000,
@@ -720,6 +1072,25 @@ const INITIAL_EMPLOYEES: Employee[] = [
     createdAt: '2025-08-01T09:00:00Z',
     updatedAt: '2026-09-01T10:00:00Z',
   },
+  {
+    id: 'DDI-EMP-007',
+    name: 'Saumya Khandelwal',
+    roleId: 'ROL-003',
+    email: 'saumya.k@devicedoctor.in',
+    status: 'Active',
+    joiningDate: '2024-09-01',
+    costOfEmployee: 85000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Senior UI/UX Specialist & Frontend Designer handling enterprise web apps and mobile interfaces.',
+    joinedDate: '2024-09-01',
+    salary: 85000,
+    monthlyCost: 85000,
+    phone: '+91 98201 33490',
+    assignedProjectsCount: 4,
+    createdAt: '2024-09-01T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
 ];
 
 const INITIAL_ASSIGNMENTS: Assignment[] = [
@@ -777,6 +1148,78 @@ const INITIAL_ASSIGNMENTS: Assignment[] = [
     createdAt: '2026-10-02T09:30:00Z',
     updatedAt: '2026-10-05T11:45:00Z',
   },
+  {
+    id: 'DDI-ASN-004',
+    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
+    clientId: 'CL-001',
+    clientName: 'Zenith Logistics & Supply Chain Ltd',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    roleName: 'UI/UX Designer',
+    assignedDate: '2026-06-15',
+    workAssigned: 'Admin CRM Component Design & Typography System',
+    amount: 5000,
+    amountPaid: 5000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Figma layout tokens and design specifications delivered and signed off.',
+    lastNoteUpdate: '2026-06-30 16:00',
+    createdAt: '2026-06-15T09:00:00Z',
+    updatedAt: '2026-06-30T16:00:00Z',
+  },
+  {
+    id: 'DDI-ASN-005',
+    projectId: 'DDI - CYBERSHIELD FINTECH LABS - FULL-STACK REACT & NODE.JS WEB APP - 1',
+    clientId: 'CL-002',
+    clientName: 'CyberShield Fintech Labs',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    roleName: 'UI/UX Designer',
+    assignedDate: '2026-07-10',
+    workAssigned: 'Authentication Flow & Responsive Wireframes',
+    amount: 5000,
+    amountPaid: 5000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Client MFA wireframes and mobile views completed.',
+    lastNoteUpdate: '2026-07-25 15:30',
+    createdAt: '2026-07-10T10:00:00Z',
+    updatedAt: '2026-07-25T15:30:00Z',
+  },
+  {
+    id: 'DDI-ASN-006',
+    projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
+    clientId: 'CL-003',
+    clientName: 'TechNova Enterprise Solutions',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    roleName: 'UI/UX Designer',
+    assignedDate: '2026-08-02',
+    workAssigned: 'Mobile App Navigation & Dark Theme Design Tokens',
+    amount: 5000,
+    amountPaid: 5000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Exported Flutter SVG asset catalog and color schemes.',
+    lastNoteUpdate: '2026-08-20 18:00',
+    createdAt: '2026-08-02T11:00:00Z',
+    updatedAt: '2026-08-20T18:00:00Z',
+  },
+  {
+    id: 'DDI-ASN-007',
+    projectId: 'DDI - BHARAT RETAIL VENTURES PVT LTD - FULL-STACK REACT & NODE.JS WEB APP - 1',
+    clientId: 'CL-006',
+    clientName: 'Bharat Retail Ventures Pvt Ltd',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    roleName: 'UI/UX Designer',
+    assignedDate: '2026-09-05',
+    workAssigned: 'E-commerce Checkout UI Design & Prototypes',
+    amount: 5000,
+    amountPaid: 5000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Interactive Figma checkout prototype tested with client stakeholders.',
+    lastNoteUpdate: '2026-09-22 17:00',
+    createdAt: '2026-09-05T09:30:00Z',
+    updatedAt: '2026-09-22T17:00:00Z',
+  },
 ];
 
 const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
@@ -791,6 +1234,16 @@ const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
     paymentMode: 'GST Invoice',
     referenceUtr: 'EPAY-NEFT-991823101',
     notes: 'Milestone 1 driver dispatch backend APIs payout cleared.',
+    paymentProof: {
+      id: 'proof-epay-001',
+      name: 'Karthik_R_Salary_Voucher_NEFT.png',
+      size: 285000,
+      type: 'image/png',
+      uploadedAt: '2026-07-15T10:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-epay-voucher-1/view',
+      notes: 'NEFT payout voucher processed through corporate payroll gateway.',
+    },
+    paymentProofNotes: 'NEFT payout voucher processed through corporate payroll gateway.',
     createdAt: '2026-07-15T10:00:00Z',
     updatedAt: '2026-07-15T10:00:00Z',
   },
@@ -805,6 +1258,16 @@ const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
     paymentMode: 'Non GST Online',
     referenceUtr: 'EPAY-UPI-202607281144',
     notes: 'Final sprint sign-off compensation for Zenith logistics ERP.',
+    paymentProof: {
+      id: 'proof-epay-002',
+      name: 'PhonePe_UPI_Karthik_80000.png',
+      size: 310000,
+      type: 'image/png',
+      uploadedAt: '2026-07-28T16:15:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-phonepe-upi-screenshot/view',
+      notes: 'PhonePe UPI business payout confirmation screenshot verified.',
+    },
+    paymentProofNotes: 'PhonePe UPI business payout confirmation screenshot verified.',
     createdAt: '2026-07-28T16:00:00Z',
     updatedAt: '2026-07-28T16:00:00Z',
   },
@@ -819,8 +1282,66 @@ const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
     paymentMode: 'Cash',
     referenceUtr: 'EPAY-IMPS-88273619',
     notes: 'Threat monitoring dashboard UI component delivery payout.',
+    paymentProof: {
+      id: 'proof-epay-003',
+      name: 'Sunita_Menon_Cash_Voucher_Signed.png',
+      size: 215000,
+      type: 'image/png',
+      uploadedAt: '2026-08-20T14:30:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-cash-receipt-voucher/view',
+      notes: 'Signed petty cash disbursement receipt voucher verified by finance.',
+    },
+    paymentProofNotes: 'Signed petty cash disbursement receipt voucher verified by finance.',
     createdAt: '2026-08-20T14:00:00Z',
     updatedAt: '2026-08-20T14:00:00Z',
+  },
+  {
+    id: 'DDI-EPAY-004',
+    assignmentId: 'DDI-ASN-004',
+    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    paymentDate: '2026-07-20',
+    amountPaid: 10000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-UPI-202607204419',
+    notes: 'Design tokens and component design milestone cleared.',
+    paymentProof: {
+      id: 'proof-epay-004',
+      name: 'GooglePay_UPI_Saumya_10000.png',
+      size: 260000,
+      type: 'image/png',
+      uploadedAt: '2026-07-20T12:15:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-gpay-saumya-screenshot/view',
+      notes: 'Google Pay UPI transaction confirmation screenshot attached.',
+    },
+    paymentProofNotes: 'Google Pay UPI transaction confirmation screenshot attached.',
+    createdAt: '2026-07-20T12:00:00Z',
+    updatedAt: '2026-07-20T12:00:00Z',
+  },
+  {
+    id: 'DDI-EPAY-005',
+    assignmentId: 'DDI-ASN-006',
+    projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
+    employeeId: 'DDI-EMP-007',
+    employeeName: 'Saumya Khandelwal',
+    paymentDate: '2026-09-15',
+    amountPaid: 10000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-UPI-202609159921',
+    notes: 'Mobile app navigation and design specs milestone cleared.',
+    paymentProof: {
+      id: 'proof-epay-005',
+      name: 'Paytm_UPI_Saumya_10000.png',
+      size: 245000,
+      type: 'image/png',
+      uploadedAt: '2026-09-15T15:00:00Z',
+      externalUrl: 'https://drive.google.com/file/d/sample-paytm-receipt/view',
+      notes: 'Paytm UPI transfer advice cleared and acknowledged by employee.',
+    },
+    paymentProofNotes: 'Paytm UPI transfer advice cleared and acknowledged by employee.',
+    createdAt: '2026-09-15T14:30:00Z',
+    updatedAt: '2026-09-15T14:30:00Z',
   },
 ];
 
@@ -1091,6 +1612,8 @@ export const normalizePaymentMode = (mode: unknown): PaymentMode => {
 };
 
 class StorageService {
+  private isSyncingGstInvoices = false;
+
   private notifyListeners() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ddi_crm_store_updated'));
@@ -1134,6 +1657,9 @@ class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.EXPENSES)) {
       localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(INITIAL_EXPENSES));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.GST_INVOICES)) {
+      localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
+    }
 
     // Migrate existing records in localStorage to ensure strictly the 4 exact payment modes
     const MIGRATION_KEY = 'ddi_payment_modes_v4_migrated';
@@ -1174,6 +1700,176 @@ class StorageService {
         // ignore migration errors
       }
     }
+
+    // Ensure Saumya Khandelwal sample data is seeded
+    const SAUMYA_MIGRATION_KEY = 'ddi_saumya_seed_v2';
+    if (!localStorage.getItem(SAUMYA_MIGRATION_KEY)) {
+      try {
+        const rawEmps = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
+        if (rawEmps) {
+          const emps: Employee[] = JSON.parse(rawEmps);
+          if (!emps.some((e) => e.name.toLowerCase().includes('saumya'))) {
+            const saumyaEmp = INITIAL_EMPLOYEES.find((e) => e.id === 'DDI-EMP-007');
+            if (saumyaEmp) emps.push(saumyaEmp);
+            localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(emps));
+          }
+        }
+        const rawAsns = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
+        if (rawAsns) {
+          const asns: Assignment[] = JSON.parse(rawAsns);
+          if (!asns.some((a) => a.employeeId === 'DDI-EMP-007')) {
+            const saumyaAsns = INITIAL_ASSIGNMENTS.filter((a) => a.employeeId === 'DDI-EMP-007');
+            asns.push(...saumyaAsns);
+            localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(asns));
+          }
+        }
+        const rawEpays = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
+        if (rawEpays) {
+          const epays: EmployeePayment[] = JSON.parse(rawEpays);
+          if (!epays.some((ep) => ep.employeeId === 'DDI-EMP-007')) {
+            const saumyaEpays = INITIAL_EMPLOYEE_PAYMENTS.filter((ep) => ep.employeeId === 'DDI-EMP-007');
+            epays.push(...saumyaEpays);
+            localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(epays));
+          }
+        }
+        localStorage.setItem(SAUMYA_MIGRATION_KEY, 'true');
+      } catch {
+        // ignore
+      }
+    }
+
+    // Ensure all stored projects have proposalDocument, contractDocument, and paymentPhases
+    const PROJECT_DOCS_PHASES_MIGRATION_KEY = 'ddi_project_docs_phases_v2';
+    if (!localStorage.getItem(PROJECT_DOCS_PHASES_MIGRATION_KEY)) {
+      try {
+        const rawProjects = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+        if (rawProjects) {
+          const list: Project[] = JSON.parse(rawProjects);
+          const updated = list.map((p) => {
+            const initialMatch = INITIAL_PROJECTS.find((ip) => ip.id === p.id);
+            const proposalDoc = p.proposalDocument || initialMatch?.proposalDocument || {
+              id: `doc-prop-${p.id.slice(-6)}`,
+              name: `${(p.clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}_Project_Proposal.pdf`,
+              size: 2450000,
+              type: 'application/pdf',
+              uploadedAt: p.proposalDate || p.createdAt || new Date().toISOString(),
+              externalUrl: 'https://drive.google.com/file/d/sample-proposal/view',
+              notes: p.proposalDocumentNotes || 'Detailed scope of work, technical architecture, and milestones.',
+            };
+            const contractDoc = p.contractDocument || initialMatch?.contractDocument || {
+              id: `doc-cont-${p.id.slice(-6)}`,
+              name: `${(p.clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}_Executed_Contract_Signed.pdf`,
+              size: 3820000,
+              type: 'application/pdf',
+              uploadedAt: p.contractDate || p.createdAt || new Date().toISOString(),
+              externalUrl: 'https://drive.google.com/file/d/sample-contract-signed/view',
+              notes: p.contractDocumentNotes || 'Signed agreement with standard SLA and delivery warranty.',
+            };
+
+            let phases = p.paymentPhases;
+            if (!phases || phases.length === 0) {
+              if (initialMatch?.paymentPhases && initialMatch.paymentPhases.length > 0) {
+                phases = initialMatch.paymentPhases;
+              } else {
+                const contractVal = Number(p.contract) || 100000;
+                const rate = Number(p.exchangeRate) || 1;
+                const p1Amt = Math.round(contractVal * 0.4);
+                const p2Amt = Math.round(contractVal * 0.3);
+                const p3Amt = contractVal - p1Amt - p2Amt;
+                phases = [
+                  {
+                    id: `phase-${p.id}-1`,
+                    name: 'Phase 1 - Advance / Project Kickoff',
+                    percentage: 40,
+                    amount: p1Amt,
+                    amountINR: Math.round(p1Amt * rate),
+                    dueDate: p.startDate || new Date().toISOString().slice(0, 10),
+                    status: (p.totalReceived || 0) >= Math.round(p1Amt * rate) ? 'Received' : 'Invoiced',
+                    notes: 'Advance mobilization payment upon contract execution.',
+                  },
+                  {
+                    id: `phase-${p.id}-2`,
+                    name: 'Phase 2 - Development Milestone & UAT',
+                    percentage: 30,
+                    amount: p2Amt,
+                    amountINR: Math.round(p2Amt * rate),
+                    dueDate: p.committedEndDate || new Date().toISOString().slice(0, 10),
+                    status: (p.totalReceived || 0) >= Math.round((p1Amt + p2Amt) * rate) ? 'Received' : 'Pending',
+                    notes: 'Sprint deliverable completion and core module sign-off.',
+                  },
+                  {
+                    id: `phase-${p.id}-3`,
+                    name: 'Phase 3 - Final Delivery & Production Handover',
+                    percentage: 30,
+                    amount: p3Amt,
+                    amountINR: Math.round(p3Amt * rate),
+                    dueDate: p.committedEndDate || new Date().toISOString().slice(0, 10),
+                    status: p.status === 'Completed' || (p.balance === 0 && (p.contractValue || 0) > 0) ? 'Received' : 'Pending',
+                    notes: 'Final settlement upon deployment and client acceptance.',
+                  },
+                ];
+              }
+            }
+
+            return {
+              ...p,
+              proposalDocument: proposalDoc,
+              proposalDocumentNotes: p.proposalDocumentNotes || proposalDoc.notes,
+              contractDocument: contractDoc,
+              contractDocumentNotes: p.contractDocumentNotes || contractDoc.notes,
+              paymentPhases: phases,
+            };
+          });
+          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
+        }
+        localStorage.setItem(PROJECT_DOCS_PHASES_MIGRATION_KEY, 'true');
+      } catch {
+        // ignore
+      }
+    }
+
+    // Ensure all stored payments and employee payments have paymentProof if available
+    const PAYMENT_PROOFS_MIGRATION_KEY = 'ddi_payment_proofs_v2';
+    if (!localStorage.getItem(PAYMENT_PROOFS_MIGRATION_KEY)) {
+      try {
+        const rawPayments = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
+        if (rawPayments) {
+          const list: Payment[] = JSON.parse(rawPayments);
+          const updated = list.map((p) => {
+            const initialMatch = INITIAL_PAYMENTS.find((ip) => ip.id === p.id);
+            if (!p.paymentProof && initialMatch?.paymentProof) {
+              return {
+                ...p,
+                paymentProof: initialMatch.paymentProof,
+                paymentProofNotes: p.paymentProofNotes || initialMatch.paymentProofNotes,
+              };
+            }
+            return p;
+          });
+          localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+        }
+
+        const rawEpays = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
+        if (rawEpays) {
+          const list: EmployeePayment[] = JSON.parse(rawEpays);
+          const updated = list.map((ep) => {
+            const initialMatch = INITIAL_EMPLOYEE_PAYMENTS.find((iep) => iep.id === ep.id);
+            if (!ep.paymentProof && initialMatch?.paymentProof) {
+              return {
+                ...ep,
+                paymentProof: initialMatch.paymentProof,
+                paymentProofNotes: ep.paymentProofNotes || initialMatch.paymentProofNotes,
+              };
+            }
+            return ep;
+          });
+          localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(updated));
+        }
+        localStorage.setItem(PAYMENT_PROOFS_MIGRATION_KEY, 'true');
+      } catch {
+        // ignore
+      }
+    }
   }
 
   // --- Reset All To Initial Seed ---
@@ -1189,6 +1885,7 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(INITIAL_EMPLOYEE_PAYMENTS));
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(INITIAL_EXPENSE_CATEGORIES));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(INITIAL_EXPENSES));
+    localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
     this.notifyListeners();
   }
 
@@ -1258,7 +1955,27 @@ class StorageService {
       | 'DDI-EXPCAT'
       | 'EXP'
       | 'DDI-EXP'
+      | 'GST'
+      | 'DDI-GST'
   ): string {
+    if (prefix === 'DDI-GST' || prefix === 'GST') {
+      let invoices: GstInvoice[] = [];
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.GST_INVOICES) : null;
+        invoices = raw ? JSON.parse(raw) : INITIAL_GST_INVOICES;
+      } catch {
+        invoices = INITIAL_GST_INVOICES;
+      }
+      const numbers = invoices.map((item) => {
+        const parts = (item.id || '').split('-');
+        const lastPart = parts[parts.length - 1];
+        const num = parseInt(lastPart, 10);
+        return isNaN(num) ? 0 : num;
+      });
+      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+      return `DDI-GST-${String(max + 1).padStart(3, '0')}`;
+    }
+
     if (prefix === 'DDI-EXP' || prefix === 'EXP') {
       const exps = this.getExpenses();
       const numbers = exps.map((item) => {
@@ -2582,6 +3299,154 @@ class StorageService {
 
   public getProjectExpensesTotalINR(projectId: string): number {
     return this.getProjectExpenses(projectId).reduce((sum, e) => sum + (Number(e.amountINR) || 0), 0);
+  }
+
+  // --- GST INVOICES (ZOHO INVOICE TRACKER) ---
+  public getGstInvoices(): GstInvoice[] {
+    this.init();
+    let stored: GstInvoice[] = [];
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.GST_INVOICES) : null;
+      stored = raw ? JSON.parse(raw) : INITIAL_GST_INVOICES;
+    } catch {
+      stored = INITIAL_GST_INVOICES;
+    }
+
+    // Re-entrancy guard to prevent maximum call stack exceeded
+    if (this.isSyncingGstInvoices) {
+      return stored;
+    }
+
+    this.isSyncingGstInvoices = true;
+    try {
+      // Auto sync from Payments where paymentMode === 'GST Invoice'
+      const gstPayments = this.getPayments().filter((p) => p.paymentMode === 'GST Invoice');
+      const storedMap = new Map<string, GstInvoice>(stored.map((g) => [g.paymentId, g]));
+      const clients = this.getClients();
+
+      let hasChanges = false;
+      const syncedList: GstInvoice[] = [];
+
+      // Calculate current max ID sequence number from stored records
+      let maxSeq = 0;
+      for (const item of stored) {
+        const parts = (item.id || '').split('-');
+        const lastPart = parts[parts.length - 1];
+        const num = parseInt(lastPart, 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+
+      for (const pay of gstPayments) {
+        const existing = storedMap.get(pay.id);
+        const amountINR = Number(pay.amountINR ?? pay.amount ?? 0);
+        const gstAmountINR = Math.round(amountINR * 0.18);
+        const client = clients.find((c) => c.id === pay.clientId);
+        const clientName = pay.clientName || client?.name || pay.clientId;
+
+        if (existing) {
+          // Keep manual fields, update auto-filled read-only fields from live payment
+          const updated: GstInvoice = {
+            ...existing,
+            projectId: pay.projectId,
+            clientId: pay.clientId,
+            clientName: clientName,
+            paymentDate: pay.paymentDate,
+            amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
+            currency: pay.currency || 'INR',
+            amountINR: amountINR,
+            gstAmountINR: gstAmountINR,
+          };
+          syncedList.push(updated);
+        } else {
+          // Auto-create new GST Invoice record linked to this payment with strictly sequential ID
+          maxSeq++;
+          const newRecord: GstInvoice = {
+            id: `DDI-GST-${String(maxSeq).padStart(3, '0')}`,
+            paymentId: pay.id,
+            projectId: pay.projectId,
+            clientId: pay.clientId,
+            clientName: clientName,
+            paymentDate: pay.paymentDate,
+            amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
+            currency: pay.currency || 'INR',
+            amountINR: amountINR,
+            gstAmountINR: gstAmountINR,
+            invoiceNumber: '',
+            uploadedToGstPortal: 'No',
+            gstPortalUploadDate: '',
+            notes: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          syncedList.push(newRecord);
+          storedMap.set(pay.id, newRecord);
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges || syncedList.length !== stored.length) {
+        localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(syncedList));
+      }
+
+      return syncedList;
+    } finally {
+      this.isSyncingGstInvoices = false;
+    }
+  }
+
+  public saveGstInvoice(invoice: GstInvoice): { success: boolean; error?: string } {
+    const invoices = this.getGstInvoices();
+    const payments = this.getPayments();
+    const pay = payments.find((p) => p.id === invoice.paymentId);
+
+    if (!pay) {
+      return { success: false, error: `Linked payment record "${invoice.paymentId}" was not found.` };
+    }
+
+    const amountINR = Number(pay.amountINR ?? pay.amount ?? 0);
+    const gstAmountINR = Math.round(amountINR * 0.18);
+    const clients = this.getClients();
+    const client = clients.find((c) => c.id === pay.clientId);
+    const clientName = pay.clientName || client?.name || pay.clientId;
+
+    const now = new Date().toISOString();
+    const existingIndex = invoices.findIndex(
+      (i) => i.id === invoice.id || i.paymentId === invoice.paymentId
+    );
+
+    const updatedRecord: GstInvoice = {
+      id: invoice.id || (existingIndex >= 0 ? invoices[existingIndex].id : this.generateId('DDI-GST')),
+      paymentId: pay.id,
+      projectId: pay.projectId,
+      clientId: pay.clientId,
+      clientName: clientName,
+      paymentDate: pay.paymentDate,
+      amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
+      currency: pay.currency || 'INR',
+      amountINR: amountINR,
+      gstAmountINR: gstAmountINR,
+      invoiceNumber: invoice.invoiceNumber ? invoice.invoiceNumber.trim() : '',
+      uploadedToGstPortal: invoice.uploadedToGstPortal || 'No',
+      gstPortalUploadDate:
+        invoice.uploadedToGstPortal === 'Yes'
+          ? invoice.gstPortalUploadDate || now.slice(0, 10)
+          : '',
+      notes: invoice.notes ? invoice.notes.trim() : '',
+      createdAt: existingIndex >= 0 ? invoices[existingIndex].createdAt : now,
+      updatedAt: now,
+    };
+
+    if (existingIndex >= 0) {
+      invoices[existingIndex] = updatedRecord;
+    } else {
+      invoices.unshift(updatedRecord);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(invoices));
+    this.notifyListeners();
+    return { success: true };
   }
 }
 

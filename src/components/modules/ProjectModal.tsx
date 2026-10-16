@@ -1,9 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { storageService } from '../../services/storageService';
-import { Project, ProjectStatus, PaymentMode, CurrencyCode } from '../../types/crm';
+import {
+  Project,
+  ProjectStatus,
+  PaymentMode,
+  CurrencyCode,
+  ProjectDocument,
+  PaymentPhase,
+  PaymentPhaseStatus,
+} from '../../types/crm';
 import { formatINR } from '../../utils/formatters';
-import { X, Briefcase, Check, AlertCircle } from 'lucide-react';
+import {
+  X,
+  Briefcase,
+  Check,
+  AlertCircle,
+  FileText,
+  FileCheck,
+  Upload,
+  ExternalLink,
+  Download,
+  Trash2,
+  Plus,
+  Calendar,
+  Layers,
+  HelpCircle,
+  CheckCircle2,
+  AlertTriangle,
+} from 'lucide-react';
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   'Proposal',
@@ -45,6 +70,19 @@ const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
   BTC: 7000000,
 };
 
+const PHASE_STATUS_OPTIONS: PaymentPhaseStatus[] = [
+  'Pending',
+  'Invoiced',
+  'Received',
+  'Overdue',
+];
+
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '0 KB';
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 export const ProjectModal: React.FC = () => {
   const {
     isProjectModalOpen,
@@ -62,7 +100,58 @@ export const ProjectModal: React.FC = () => {
   // Sync form data when modal opens
   useEffect(() => {
     if (isProjectModalOpen && projectModalData) {
-      setFormData({ ...projectModalData });
+      const contract = Number(projectModalData.contract) || 0;
+      const rate = Number(projectModalData.exchangeRate) || 1;
+
+      // Ensure default payment phases exist if empty
+      let phases = projectModalData.paymentPhases;
+      if (!phases || phases.length === 0) {
+        const p1Amt = Math.round(contract * 0.4);
+        const p2Amt = Math.round(contract * 0.3);
+        const p3Amt = Math.max(0, contract - p1Amt - p2Amt);
+
+        phases = [
+          {
+            id: `phase-${Date.now()}-1`,
+            name: 'Phase 1 - Advance / Kickoff',
+            percentage: 40,
+            amount: p1Amt,
+            amountINR: Math.round(p1Amt * rate),
+            dueDate: projectModalData.startDate || new Date().toISOString().slice(0, 10),
+            status: 'Pending',
+            notes: 'Advance mobilization payment upon contract execution.',
+          },
+          {
+            id: `phase-${Date.now()}-2`,
+            name: 'Phase 2 - UI/UX & Prototype Milestone',
+            percentage: 30,
+            amount: p2Amt,
+            amountINR: Math.round(p2Amt * rate),
+            dueDate: projectModalData.committedEndDate || new Date().toISOString().slice(0, 10),
+            status: 'Pending',
+            notes: 'Prototype deliverables and core functionality approval.',
+          },
+          {
+            id: `phase-${Date.now()}-3`,
+            name: 'Phase 3 - Final Delivery & Go-Live',
+            percentage: 30,
+            amount: p3Amt,
+            amountINR: Math.round(p3Amt * rate),
+            dueDate: projectModalData.committedEndDate || new Date().toISOString().slice(0, 10),
+            status: 'Pending',
+            notes: 'Production release, server deployment, and project handover.',
+          },
+        ];
+      }
+
+      setFormData({
+        ...projectModalData,
+        paymentPhases: phases,
+        proposalDocumentNotes:
+          projectModalData.proposalDocumentNotes || projectModalData.proposalDocument?.notes || '',
+        contractDocumentNotes:
+          projectModalData.contractDocumentNotes || projectModalData.contractDocument?.notes || '',
+      });
       setFormError(null);
     }
   }, [isProjectModalOpen, projectModalData]);
@@ -144,22 +233,222 @@ export const ProjectModal: React.FC = () => {
   const handleCurrencyChange = (newCurrency: CurrencyCode) => {
     const rate = newCurrency === 'INR' ? 1 : (DEFAULT_EXCHANGE_RATES[newCurrency] || 1);
     const contract = Number(formData.contract) || 0;
+    const newContractValue = Math.round(contract * rate);
+
+    // Sync phase amountINR values
+    const updatedPhases = (formData.paymentPhases || []).map((ph) => ({
+      ...ph,
+      amountINR: Math.round(ph.amount * rate),
+    }));
+
     setFormData((prev) => ({
       ...prev,
       currency: newCurrency,
       exchangeRate: rate,
-      contractValue: Math.round(contract * rate),
+      contractValue: newContractValue,
+      paymentPhases: updatedPhases,
     }));
   };
 
   const handleContractOrRateChange = (newContract: number, newRate: number) => {
+    const newContractValue = Math.round(newContract * newRate);
+
+    // Re-sync payment phase amounts based on existing percentages
+    const updatedPhases = (formData.paymentPhases || []).map((ph) => {
+      const newAmt = Math.round((newContract * ph.percentage) / 100);
+      return {
+        ...ph,
+        amount: newAmt,
+        amountINR: Math.round(newAmt * newRate),
+      };
+    });
+
     setFormData((prev) => ({
       ...prev,
       contract: newContract,
       exchangeRate: newRate,
-      contractValue: Math.round(newContract * newRate),
+      contractValue: newContractValue,
+      paymentPhases: updatedPhases,
     }));
   };
+
+  // --- File Upload Handlers (Proposal & Contract) ---
+  const handleFileUpload = (
+    field: 'proposalDocument' | 'contractDocument',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Url = reader.result as string;
+      const doc: ProjectDocument = {
+        id: `doc-${Date.now()}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadedAt: new Date().toISOString(),
+        url: base64Url,
+        notes: field === 'proposalDocument' ? formData.proposalDocumentNotes : formData.contractDocumentNotes,
+      };
+
+      setFormData((prev) => ({
+        ...prev,
+        [field]: doc,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveDocument = (field: 'proposalDocument' | 'contractDocument') => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: undefined,
+    }));
+  };
+
+  // --- Payment Phase Handlers ---
+  const handleAddPhase = () => {
+    const phases = formData.paymentPhases || [];
+    const contract = Number(formData.contract) || 0;
+    const rate = Number(formData.exchangeRate) || 1;
+
+    // Default remaining percentage
+    const currentTotalPct = phases.reduce((sum, p) => sum + (Number(p.percentage) || 0), 0);
+    const remPct = Math.max(0, 100 - currentTotalPct);
+    const remAmt = Math.round((contract * remPct) / 100);
+
+    const newPhase: PaymentPhase = {
+      id: `phase-${Date.now()}-${phases.length + 1}`,
+      name: `Phase ${phases.length + 1} - Milestone`,
+      percentage: remPct > 0 ? remPct : 20,
+      amount: remPct > 0 ? remAmt : Math.round(contract * 0.2),
+      amountINR: Math.round((remPct > 0 ? remAmt : Math.round(contract * 0.2)) * rate),
+      dueDate: formData.committedEndDate || formData.startDate || new Date().toISOString().slice(0, 10),
+      status: 'Pending',
+      notes: '',
+    };
+
+    setFormData((prev) => ({
+      ...prev,
+      paymentPhases: [...(prev.paymentPhases || []), newPhase],
+    }));
+  };
+
+  const handleRemovePhase = (phaseId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      paymentPhases: (prev.paymentPhases || []).filter((p) => p.id !== phaseId),
+    }));
+  };
+
+  const handlePhaseChange = (
+    phaseId: string,
+    field: keyof PaymentPhase,
+    val: string | number
+  ) => {
+    const contract = Number(formData.contract) || 0;
+    const rate = Number(formData.exchangeRate) || 1;
+
+    setFormData((prev) => {
+      const updated = (prev.paymentPhases || []).map((ph) => {
+        if (ph.id !== phaseId) return ph;
+
+        if (field === 'percentage') {
+          const pct = Math.max(0, Math.min(100, Number(val) || 0));
+          const amt = Math.round((contract * pct) / 100);
+          return {
+            ...ph,
+            percentage: pct,
+            amount: amt,
+            amountINR: Math.round(amt * rate),
+          };
+        }
+
+        if (field === 'amount') {
+          const amt = Math.max(0, Number(val) || 0);
+          const pct = contract > 0 ? parseFloat(((amt / contract) * 100).toFixed(1)) : 0;
+          return {
+            ...ph,
+            amount: amt,
+            percentage: pct,
+            amountINR: Math.round(amt * rate),
+          };
+        }
+
+        return {
+          ...ph,
+          [field]: val,
+        };
+      });
+
+      return {
+        ...prev,
+        paymentPhases: updated,
+      };
+    });
+  };
+
+  const handleAutoDistributePhases = () => {
+    const contract = Number(formData.contract) || 0;
+    const rate = Number(formData.exchangeRate) || 1;
+    const p1Amt = Math.round(contract * 0.4);
+    const p2Amt = Math.round(contract * 0.3);
+    const p3Amt = Math.max(0, contract - p1Amt - p2Amt);
+
+    const standardPhases: PaymentPhase[] = [
+      {
+        id: `phase-${Date.now()}-1`,
+        name: 'Phase 1 - Advance / Kickoff (40%)',
+        percentage: 40,
+        amount: p1Amt,
+        amountINR: Math.round(p1Amt * rate),
+        dueDate: formData.startDate || new Date().toISOString().slice(0, 10),
+        status: 'Pending',
+        notes: 'Advance mobilization payment upon contract execution.',
+      },
+      {
+        id: `phase-${Date.now()}-2`,
+        name: 'Phase 2 - Core Dev & Prototype (30%)',
+        percentage: 30,
+        amount: p2Amt,
+        amountINR: Math.round(p2Amt * rate),
+        dueDate: formData.committedEndDate || new Date().toISOString().slice(0, 10),
+        status: 'Pending',
+        notes: 'Deliverable milestones & prototype approval.',
+      },
+      {
+        id: `phase-${Date.now()}-3`,
+        name: 'Phase 3 - Go-Live & Handover (30%)',
+        percentage: 30,
+        amount: p3Amt,
+        amountINR: Math.round(p3Amt * rate),
+        dueDate: formData.committedEndDate || new Date().toISOString().slice(0, 10),
+        status: 'Pending',
+        notes: 'Final production deployment and code sign-off.',
+      },
+    ];
+
+    setFormData((prev) => ({
+      ...prev,
+      paymentPhases: standardPhases,
+    }));
+  };
+
+  // Phase allocation statistics
+  const currentPhases = formData.paymentPhases || [];
+  const totalPhasePercentage = currentPhases.reduce(
+    (sum, p) => sum + (Number(p.percentage) || 0),
+    0
+  );
+  const totalPhaseAmount = currentPhases.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const totalPhaseAmountINR = currentPhases.reduce(
+    (sum, p) => sum + (Number(p.amountINR) || 0),
+    0
+  );
+  const contractValueINR = formData.contractValue || 0;
+  const isAllocationBalanced = Math.abs(totalPhasePercentage - 100) < 0.1;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,6 +486,11 @@ export const ProjectModal: React.FC = () => {
         Math.round((Number(formData.contract) || 0) * (Number(formData.exchangeRate) || 1)),
       projectManager: formData.projectManager || 'Lead Project Manager',
       notes: formData.notes || '',
+      proposalDocument: formData.proposalDocument,
+      proposalDocumentNotes: formData.proposalDocumentNotes || formData.proposalDocument?.notes || '',
+      contractDocument: formData.contractDocument,
+      contractDocumentNotes: formData.contractDocumentNotes || formData.contractDocument?.notes || '',
+      paymentPhases: formData.paymentPhases || [],
       createdAt: formData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -211,21 +505,24 @@ export const ProjectModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-6">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-cyan-600/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
               <Briefcase className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                {isProjectModalEditing ? `Edit Project (${formData.id})` : 'New Project'}
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>{isProjectModalEditing ? `Edit Project` : 'New Project'}</span>
+                {formData.id && (
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-semibold truncate max-w-xs">
+                    {formData.id}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isProjectModalEditing
-                  ? 'Update client engagement details, timelines, and commercial parameters'
-                  : `Add new client engagement · Assigned ID: ${formData.id || 'PRJ-Auto'}`}
+                Client engagement details, proposal & contract documents, and dynamic payment milestone schedule
               </p>
             </div>
           </div>
@@ -239,8 +536,8 @@ export const ProjectModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Form strictly containing the 19 exact specified fields */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        {/* Form Container */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
           {formError && (
             <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -250,11 +547,10 @@ export const ProjectModal: React.FC = () => {
 
           {/* SECTION 1: Client & Identification */}
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-              1. Project & Client Identification
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-1.5">
+              <span>1. Project & Client Identification</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Field 1: Project ID (Auto-generated, read-only) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Project ID (Auto-generated, Read-only)
@@ -268,7 +564,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 2: Client Dropdown (Populated dynamically from Clients module) */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Client <span className="text-rose-500">*</span>
@@ -288,7 +583,6 @@ export const ProjectModal: React.FC = () => {
                 </select>
               </div>
 
-              {/* Field 3: Client ID (Auto-filled & read-only) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Client ID (Auto-filled, Read-only)
@@ -301,7 +595,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 4: Client Name (Auto-filled & read-only) */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Client Name (Auto-filled, Read-only)
@@ -322,7 +615,6 @@ export const ProjectModal: React.FC = () => {
               2. Scope & Governance
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Field 5: Service Type (Dropdown populated from Services module) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Service Type <span className="text-rose-500">*</span>
@@ -342,7 +634,6 @@ export const ProjectModal: React.FC = () => {
                 </select>
               </div>
 
-              {/* Field 18: Project Manager (Text input) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Project Manager <span className="text-rose-500">*</span>
@@ -357,7 +648,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 12: Status (Dropdown) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Status
@@ -377,7 +667,6 @@ export const ProjectModal: React.FC = () => {
                 </select>
               </div>
 
-              {/* Field 13: Payment Mode (Dropdown) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Payment Mode
@@ -405,7 +694,6 @@ export const ProjectModal: React.FC = () => {
               3. Project Schedule & Milestone Dates
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {/* Field 6: Proposal Date (Date picker) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Proposal Date
@@ -418,7 +706,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 7: Contract/Agreement Date (Date picker) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Contract/Agreement Date
@@ -431,7 +718,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 8: Project Start Date (Date picker) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Project Start Date <span className="text-rose-500">*</span>
@@ -447,7 +733,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 9: Committed Days (Number input) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Committed Days
@@ -467,7 +752,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 10: Committed End Date (Auto-calculated & read-only) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Committed End Date (Auto-calculated, Read-only)
@@ -480,7 +764,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 11: Actual End Date (Date picker, optional) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Actual End Date (Optional)
@@ -495,13 +778,267 @@ export const ProjectModal: React.FC = () => {
             </div>
           </div>
 
-          {/* SECTION 4: Financials & Commercials */}
+          {/* SECTION 4: PROJECT DOCUMENTS (Proposal & Contract) */}
+          <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                <span>Project Documents (Proposal & Contract Uploads)</span>
+              </div>
+              <span className="text-[10px] text-slate-500">PDF, DOC, DOCX, Images, or Cloud Links</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Proposal Document Upload Box */}
+              <div className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>Proposal Document</span>
+                    </span>
+                    {formData.proposalDocument ? (
+                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Attached
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">Not uploaded</span>
+                    )}
+                  </div>
+
+                  {formData.proposalDocument ? (
+                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 mb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                            {formData.proposalDocument.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {formatFileSize(formData.proposalDocument.size)} •{' '}
+                            {formData.proposalDocument.uploadedAt
+                              ? new Date(formData.proposalDocument.uploadedAt).toLocaleDateString('en-IN')
+                              : 'Uploaded'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {(formData.proposalDocument.url || formData.proposalDocument.externalUrl) && (
+                            <a
+                              href={formData.proposalDocument.url || formData.proposalDocument.externalUrl}
+                              download={formData.proposalDocument.name}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1 rounded text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 transition-colors"
+                              title="Download / View Proposal"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument('proposalDocument')}
+                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                            title="Remove Document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-3">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+                        <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                          Click to upload Proposal
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">PDF, DOCX, PNG (Max 10MB)</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                          onChange={(e) => handleFileUpload('proposalDocument', e)}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* External Link Field */}
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      External Link / Google Drive URL (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={formData.proposalDocument?.externalUrl || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            proposalDocument: {
+                              ...(prev.proposalDocument || {
+                                id: `doc-${Date.now()}`,
+                                name: 'Proposal_Document_External.pdf',
+                                uploadedAt: new Date().toISOString(),
+                              }),
+                              externalUrl: val,
+                            },
+                          }));
+                        }}
+                        placeholder="https://drive.google.com/file/d/..."
+                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono text-[11px]"
+                      />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
+                    </div>
+                  </div>
+
+                  {/* Proposal Document Notes */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Proposal Document Notes / Version Summary
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.proposalDocumentNotes || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, proposalDocumentNotes: e.target.value })
+                      }
+                      placeholder="e.g. Approved scope baseline, version v2.1 with revised infrastructure milestones..."
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contract / Agreement Document Upload Box */}
+              <div className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Contract / Agreement Document</span>
+                    </span>
+                    {formData.contractDocument ? (
+                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Signed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">Not uploaded</span>
+                    )}
+                  </div>
+
+                  {formData.contractDocument ? (
+                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 mb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                            {formData.contractDocument.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {formatFileSize(formData.contractDocument.size)} •{' '}
+                            {formData.contractDocument.uploadedAt
+                              ? new Date(formData.contractDocument.uploadedAt).toLocaleDateString('en-IN')
+                              : 'Uploaded'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {(formData.contractDocument.url || formData.contractDocument.externalUrl) && (
+                            <a
+                              href={formData.contractDocument.url || formData.contractDocument.externalUrl}
+                              download={formData.contractDocument.name}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1 rounded text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 transition-colors"
+                              title="Download / View Contract"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument('contractDocument')}
+                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                            title="Remove Document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-3">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+                        <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                          Click to upload Signed Contract
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">PDF, Signed Agreement (Max 10MB)</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                          onChange={(e) => handleFileUpload('contractDocument', e)}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* External Link Field */}
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Signed Contract Link / External Drive URL (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={formData.contractDocument?.externalUrl || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            contractDocument: {
+                              ...(prev.contractDocument || {
+                                id: `doc-${Date.now()}`,
+                                name: 'Signed_Contract_External.pdf',
+                                uploadedAt: new Date().toISOString(),
+                              }),
+                              externalUrl: val,
+                            },
+                          }));
+                        }}
+                        placeholder="https://drive.google.com/file/d/..."
+                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-[11px]"
+                      />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
+                    </div>
+                  </div>
+
+                  {/* Contract Document Notes */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Contract Notes / Special Terms & SLA Clauses
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.contractDocumentNotes || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, contractDocumentNotes: e.target.value })
+                      }
+                      placeholder="e.g. 99.9% uptime SLA, 2-hour bug turnaround, 3-month free bug warranty..."
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 5: Financials & Commercials */}
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-              4. Commercial Valuation & Foreign Exchange
+              5. Commercial Valuation & Foreign Exchange
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
-              {/* Field 14: Currency (Dropdown) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Currency
@@ -519,7 +1056,6 @@ export const ProjectModal: React.FC = () => {
                 </select>
               </div>
 
-              {/* Field 15: Contract (Numeric input) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Contract ({formData.currency || 'INR'})
@@ -539,7 +1075,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 16: Exchange Rate (Numeric input) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Exchange Rate (to INR)
@@ -559,7 +1094,6 @@ export const ProjectModal: React.FC = () => {
                 />
               </div>
 
-              {/* Field 17: Contract Value (Auto-calculated & read-only in INR) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Contract Value (INR, Read-only)
@@ -571,12 +1105,249 @@ export const ProjectModal: React.FC = () => {
             </div>
           </div>
 
-          {/* SECTION 5: Notes */}
+          {/* SECTION 6: DYNAMIC PHASES OF PAYMENT / MILESTONES BUILDER */}
+          <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>Phases of Payment & Milestone Schedule</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Breakdown installments, due dates, deliverable notes & link to contract value
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAutoDistributePhases}
+                  className="px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+                  title="Auto-split into standard 40% Kickoff, 30% Milestone, 30% Delivery"
+                >
+                  Standard 40/30/30
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddPhase}
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Payment Phase</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Phase Rows */}
+            <div className="space-y-3">
+              {currentPhases.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+                  <Layers className="w-6 h-6 mx-auto mb-1 text-slate-300" />
+                  <p>No payment phases defined yet.</p>
+                  <button
+                    type="button"
+                    onClick={handleAddPhase}
+                    className="mt-2 text-indigo-600 hover:underline font-semibold"
+                  >
+                    + Click to add first phase
+                  </button>
+                </div>
+              ) : (
+                currentPhases.map((phase, idx) => (
+                  <div
+                    key={phase.id || idx}
+                    className="p-3.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                      {/* Phase Title */}
+                      <div className="sm:col-span-4">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Phase #{idx + 1} Name / Title
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={phase.name}
+                          onChange={(e) => handlePhaseChange(phase.id, 'name', e.target.value)}
+                          placeholder="e.g. Phase 1 - Advance / Kickoff"
+                          className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Percentage (%) */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Share (%)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={phase.percentage}
+                            onChange={(e) =>
+                              handlePhaseChange(phase.id, 'percentage', parseFloat(e.target.value) || 0)
+                            }
+                            className="w-full pr-6 pl-2.5 py-1.5 text-xs font-mono font-bold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                          <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">%</span>
+                        </div>
+                      </div>
+
+                      {/* Amount in Currency */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 truncate">
+                          Amount ({formData.currency || 'INR'})
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={phase.amount}
+                          onChange={(e) =>
+                            handlePhaseChange(phase.id, 'amount', parseFloat(e.target.value) || 0)
+                          }
+                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        {formData.currency !== 'INR' && (
+                          <div className="text-[10px] font-mono text-slate-400 mt-0.5 truncate">
+                            ≈ {formatINR(phase.amountINR)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Due Date */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Expected / Due
+                        </label>
+                        <input
+                          type="date"
+                          value={phase.dueDate || ''}
+                          onChange={(e) => handlePhaseChange(phase.id, 'dueDate', e.target.value)}
+                          className="w-full px-2 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      {/* Status & Remove */}
+                      <div className="sm:col-span-2 flex items-center gap-1.5 pt-0.5">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Status
+                          </label>
+                          <select
+                            value={phase.status || 'Pending'}
+                            onChange={(e) =>
+                              handlePhaseChange(phase.id, 'status', e.target.value as PaymentPhaseStatus)
+                            }
+                            className={`w-full px-2 py-1.5 text-[11px] font-semibold rounded-md border text-slate-900 dark:text-slate-100 focus:outline-none ${
+                              phase.status === 'Received'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                                : phase.status === 'Invoiced'
+                                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-800 dark:text-blue-300'
+                                : phase.status === 'Overdue'
+                                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                            }`}
+                          >
+                            {PHASE_STATUS_OPTIONS.map((st) => (
+                              <option key={st} value={st}>
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhase(phase.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mt-4"
+                          title="Remove Phase"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Phase Notes input */}
+                    <div>
+                      <input
+                        type="text"
+                        value={phase.notes || ''}
+                        onChange={(e) => handlePhaseChange(phase.id, 'notes', e.target.value)}
+                        placeholder="Phase notes: deliverables required, client sign-off conditions, or invoice references..."
+                        className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Validation Helper & Progress Bar */}
+            <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  {isAllocationBalanced ? (
+                    <span className="flex items-center gap-1.5 text-emerald-600 font-semibold">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Total Allocated Across Phases: {totalPhasePercentage.toFixed(1)}%</span>
+                    </span>
+                  ) : totalPhasePercentage < 100 ? (
+                    <span className="flex items-center gap-1.5 text-amber-600 font-semibold">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>
+                        Total Allocated: {totalPhasePercentage.toFixed(1)}% ({formatINR(totalPhaseAmountINR)} /{' '}
+                        {formatINR(contractValueINR)}) — {(100 - totalPhasePercentage).toFixed(1)}% unallocated
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-rose-600 font-semibold">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>
+                        Total Allocated: {totalPhasePercentage.toFixed(1)}% — Exceeds Contract Value by{' '}
+                        {(totalPhasePercentage - 100).toFixed(1)}%!
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-slate-500 font-mono text-[11px]">
+                  Sum: {formData.currency || 'INR'} {totalPhaseAmount.toLocaleString()} ({formatINR(totalPhaseAmountINR)})
+                </div>
+              </div>
+
+              {/* Visual Progress Bar */}
+              <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden flex">
+                {currentPhases.map((phase, idx) => {
+                  const width = `${Math.min(100, phase.percentage)}%`;
+                  const color =
+                    phase.status === 'Received'
+                      ? 'bg-emerald-500'
+                      : phase.status === 'Invoiced'
+                      ? 'bg-blue-500'
+                      : phase.status === 'Overdue'
+                      ? 'bg-rose-500'
+                      : 'bg-indigo-400';
+                  return (
+                    <div
+                      key={phase.id || idx}
+                      style={{ width }}
+                      className={`${color} h-full border-r border-white dark:border-slate-900 transition-all`}
+                      title={`${phase.name}: ${phase.percentage}% (${phase.status})`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 7: Notes */}
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-              5. Delivery Notes & Scope
+              7. Delivery Notes & Scope
             </div>
-            {/* Field 19: Notes (Textarea) */}
             <textarea
               rows={3}
               value={formData.notes || ''}
@@ -587,7 +1358,7 @@ export const ProjectModal: React.FC = () => {
           </div>
 
           {/* Modal Actions */}
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 pb-1">
             <button
               type="button"
               onClick={closeProjectModal}

@@ -12,8 +12,10 @@ import {
   ExpenseCategory,
   ExpenseCategoryStatus,
   Expense,
+  GstInvoice,
   AuthUser,
   ActiveModule,
+  ReportsSubTab,
 } from '../types/crm';
 import { storageService } from '../services/storageService';
 
@@ -38,6 +40,8 @@ interface CrmContextType {
   // Navigation & Theme
   activeModule: ActiveModule;
   setActiveModule: (module: ActiveModule) => void;
+  activeReportsTab: ReportsSubTab;
+  setActiveReportsTab: (tab: ReportsSubTab) => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
 
@@ -58,6 +62,7 @@ interface CrmContextType {
   employeePayments: EmployeePayment[];
   expenseCategories: ExpenseCategory[];
   expenses: Expense[];
+  gstInvoices: GstInvoice[];
 
   // Entity Finders (Relational ID Linking)
   getClientById: (id: string) => Client | undefined;
@@ -70,6 +75,8 @@ interface CrmContextType {
   getEmployeePaymentById: (id: string) => EmployeePayment | undefined;
   getExpenseCategoryById: (id: string) => ExpenseCategory | undefined;
   getExpenseById: (id: string) => Expense | undefined;
+  getGstInvoiceById: (id: string) => GstInvoice | undefined;
+  getGstInvoiceByPaymentId: (paymentId: string) => GstInvoice | undefined;
   getProjectExpenses: (projectId: string) => Expense[];
   getProjectExpensesTotalINR: (projectId: string) => number;
 
@@ -118,6 +125,8 @@ interface CrmContextType {
   saveExpense: (expense: Expense) => { success: boolean; error?: string };
   deleteExpense: (expenseId: string) => { success: boolean; error?: string };
 
+  saveGstInvoice: (invoice: GstInvoice) => { success: boolean; error?: string };
+
   // Referential Deletion Protection Modal
   referentialModal: ReferentialBlockState;
   closeReferentialModal: () => void;
@@ -144,6 +153,7 @@ const CrmContext = createContext<CrmContextType | undefined>(undefined);
 
 export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeModule, setActiveModule] = useState<ActiveModule>('dashboard');
+  const [activeReportsTab, setActiveReportsTab] = useState<ReportsSubTab>('business');
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
 
@@ -159,6 +169,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [employeePayments, setEmployeePayments] = useState<EmployeePayment[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [gstInvoices, setGstInvoices] = useState<GstInvoice[]>([]);
 
   // Modals & Feedback
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -246,6 +257,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setEmployeePayments(storageService.getEmployeePayments());
     setExpenseCategories(storageService.getExpenseCategories());
     setExpenses(storageService.getExpenses());
+    setGstInvoices(storageService.getGstInvoices());
     setAuthUserState(storageService.getAuthUser());
     const currentTheme = storageService.getTheme();
     setThemeState(currentTheme);
@@ -333,6 +345,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const employeePaymentMap = useMemo(() => new Map(employeePayments.map((p) => [p.id, p])), [employeePayments]);
   const expenseCategoryMap = useMemo(() => new Map(expenseCategories.map((c) => [c.id, c])), [expenseCategories]);
   const expenseMap = useMemo(() => new Map(expenses.map((e) => [e.id, e])), [expenses]);
+  const gstInvoiceMap = useMemo(() => new Map(gstInvoices.map((g) => [g.id, g])), [gstInvoices]);
+  const gstInvoicePaymentMap = useMemo(() => new Map(gstInvoices.map((g) => [g.paymentId, g])), [gstInvoices]);
 
   const getClientById = (id: string) => clientMap.get(id);
   const getCategoryById = (id: string) => categoryMap.get(id);
@@ -344,6 +358,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getEmployeePaymentById = (id: string) => employeePaymentMap.get(id);
   const getExpenseCategoryById = (id: string) => expenseCategoryMap.get(id);
   const getExpenseById = (id: string) => expenseMap.get(id);
+  const getGstInvoiceById = (id: string) => gstInvoiceMap.get(id);
+  const getGstInvoiceByPaymentId = (paymentId: string) => gstInvoicePaymentMap.get(paymentId);
   const getProjectExpenses = (projectId: string) => {
     if (!projectId || projectId === 'NA') return [];
     return expenses.filter((e) => e.projectId === projectId);
@@ -749,6 +765,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  const saveGstInvoiceAction = (invoice: GstInvoice) => {
+    const res = storageService.saveGstInvoice(invoice);
+    if (res.success) {
+      showToast(`GST Invoice details for "${invoice.invoiceNumber || invoice.id}" updated.`, 'success');
+    } else {
+      showToast(res.error || 'Failed to save GST invoice.', 'error');
+    }
+    return res;
+  };
+
   const resetData = () => {
     storageService.resetToSampleData();
     showToast('Reset all CRM data to initial sample dataset.', 'info');
@@ -759,6 +785,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         activeModule,
         setActiveModule,
+        activeReportsTab,
+        setActiveReportsTab,
         theme,
         toggleTheme,
         authUser,
@@ -775,6 +803,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         employeePayments,
         expenseCategories,
         expenses,
+        gstInvoices,
         getClientById,
         getCategoryById,
         getServiceById,
@@ -785,6 +814,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getEmployeePaymentById,
         getExpenseCategoryById,
         getExpenseById,
+        getGstInvoiceById,
+        getGstInvoiceByPaymentId,
         getProjectExpenses,
         getProjectExpensesTotalINR,
         getCategoryServicesCount,
@@ -818,6 +849,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setExpenseCategoryStatus: (id, status) => storageService.setExpenseCategoryStatus(id, status),
         saveExpense: saveExpenseAction,
         deleteExpense: deleteExpenseAction,
+        saveGstInvoice: saveGstInvoiceAction,
         referentialModal,
         closeReferentialModal,
         openReferentialBlock,

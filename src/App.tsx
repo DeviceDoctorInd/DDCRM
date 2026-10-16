@@ -25,6 +25,8 @@ import { AssignmentsModule } from './components/modules/AssignmentsModule';
 import { EmployeePaymentsModule } from './components/modules/EmployeePaymentsModule';
 import { ExpenseCategoriesModule } from './components/modules/ExpenseCategoriesModule';
 import { ExpensesModule } from './components/modules/ExpensesModule';
+import { GstInvoicesModule } from './components/modules/GstInvoicesModule';
+import { ReportsModule } from './components/modules/ReportsModule';
 
 const MainLayout: React.FC = () => {
   const { authUser, activeModule } = useCrm();
@@ -50,6 +52,8 @@ const MainLayout: React.FC = () => {
         return <ProjectsModule />;
       case 'payments':
         return <PaymentsModule />;
+      case 'gst-invoices':
+        return <GstInvoicesModule />;
       case 'roles':
         return <EmployeeRolesModule />;
       case 'employees':
@@ -62,6 +66,8 @@ const MainLayout: React.FC = () => {
         return <ExpenseCategoriesModule />;
       case 'expenses':
         return <ExpensesModule />;
+      case 'reports':
+        return <ReportsModule />;
       default:
         return <DashboardModule />;
     }

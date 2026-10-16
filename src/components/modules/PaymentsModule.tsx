@@ -18,7 +18,15 @@ import {
   AlertCircle,
   Clock,
   Layers,
+  Upload,
+  FileCheck,
+  FileText,
+  Eye,
+  ExternalLink,
+  Download,
 } from 'lucide-react';
+import { PaymentProofModal } from '../common/PaymentProofModal';
+import { PaymentProofDocument } from '../../types/crm';
 
 const PAYMENT_STATUS_OPTIONS: PaymentStatus[] = ['Received', 'Pending', 'Failed', 'Cancelled'];
 
@@ -73,6 +81,10 @@ export const PaymentsModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Payment>>({});
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Payment Proof Modal Lightbox state
+  const [selectedPaymentForProof, setSelectedPaymentForProof] = useState<Payment | null>(null);
+  const [isProofModalOpen, setIsProofModalOpen] = useState(false);
 
   // KPIs
   const totalReceivedINR = payments
@@ -166,6 +178,16 @@ export const PaymentsModule: React.FC = () => {
           header: 'Days Overdue',
           format: (r) => r.daysOverdue ?? calculateDaysOverdue(r.dueDate, r.paymentStatus),
         },
+        {
+          key: 'paymentProof',
+          header: 'Payment Proof File',
+          format: (r) => (r.paymentProof ? r.paymentProof.name : 'N/A'),
+        },
+        {
+          key: 'paymentProofNotes',
+          header: 'Payment Proof Notes',
+          format: (r) => r.paymentProofNotes || r.paymentProof?.notes || '',
+        },
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
       ],
       'DeviceDoctorIndia_Payments'
@@ -206,6 +228,8 @@ export const PaymentsModule: React.FC = () => {
       paymentStatus: 'Received',
       daysOverdue: 0,
       notes: '',
+      paymentProof: undefined,
+      paymentProofNotes: '',
     });
     setIsModalOpen(true);
   };
@@ -220,8 +244,54 @@ export const PaymentsModule: React.FC = () => {
       amountReceived: pay.amountReceived ?? pay.amount ?? 0,
       amountINR: pay.amountINR ?? pay.amount ?? 0,
       daysOverdue: overdue,
+      paymentProof: pay.paymentProof,
+      paymentProofNotes: pay.paymentProofNotes || pay.paymentProof?.notes || '',
     });
     setIsModalOpen(true);
+  };
+
+  // Proof File Upload Handlers
+  const handleFileUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const proofDoc: PaymentProofDocument = {
+        id: `proof-${Date.now()}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        uploadedAt: new Date().toISOString(),
+        url: base64,
+        notes: formData.paymentProofNotes || '',
+      };
+      setFormData((prev) => ({
+        ...prev,
+        paymentProof: proofDoc,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleExternalUrlChange = (url: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      paymentProof: prev.paymentProof
+        ? { ...prev.paymentProof, externalUrl: url }
+        : {
+            id: `proof-${Date.now()}`,
+            name: 'Online_Receipt_Link',
+            uploadedAt: new Date().toISOString(),
+            externalUrl: url,
+            notes: prev.paymentProofNotes || '',
+          },
+    }));
+  };
+
+  const handleRemoveProof = () => {
+    setFormData((prev) => ({
+      ...prev,
+      paymentProof: undefined,
+    }));
   };
 
   // Handlers for Project ID selection & reactive field updates
@@ -352,6 +422,8 @@ export const PaymentsModule: React.FC = () => {
       paymentStatus: formData.paymentStatus || 'Received',
       daysOverdue: overdueDays,
       notes: formData.notes || '',
+      paymentProof: formData.paymentProof,
+      paymentProofNotes: formData.paymentProofNotes || formData.paymentProof?.notes || '',
       createdAt: formData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       amount: amountINR,
@@ -433,6 +505,7 @@ export const PaymentsModule: React.FC = () => {
                 <th className="py-3 px-4">Payment Mode</th>
                 <th className="py-3 px-4">Reference / UTR</th>
                 <th className="py-3 px-4">Due Date & Aging</th>
+                <th className="py-3 px-4">Payment Proof</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -440,7 +513,7 @@ export const PaymentsModule: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
               {filteredPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     <CreditCard className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                     <p className="text-sm font-medium">No payment records found.</p>
                     <p className="text-xs mt-1">Click "Add Payment" to record a new client transaction.</p>
@@ -537,6 +610,31 @@ export const PaymentsModule: React.FC = () => {
                           <div className="text-[10px] text-slate-400 mt-0.5">
                             {pay.paymentStatus === 'Received' ? 'Settled' : 'On schedule'}
                           </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {pay.paymentProof ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPaymentForProof(pay);
+                              setIsProofModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shadow-xs"
+                            title={`View Payment Proof / Screenshot (${pay.paymentProof.name})`}
+                          >
+                            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>View Proof</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(pay)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 italic hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Attach Payment Proof / Receipt Screenshot"
+                          >
+                            <span>+ Attach Proof</span>
+                          </button>
                         )}
                       </td>
                       <td className="py-3.5 px-4">
@@ -898,10 +996,151 @@ export const PaymentsModule: React.FC = () => {
                 </div>
               </div>
 
-              {/* SECTION 4: Notes */}
+              {/* SECTION 4: Payment Proof / Receipt Upload */}
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>4. Payment Proof / Receipt Upload</span>
+                  </span>
+                  {formData.paymentProof && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Attached
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                  {formData.paymentProof ? (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-3">
+                        {formData.paymentProof.url?.startsWith('data:image/') ||
+                        formData.paymentProof.name?.match(/\.(png|jpg|jpeg|webp)$/i) ? (
+                          <div className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shrink-0 relative group">
+                            <img
+                              src={formData.paymentProof.url}
+                              alt="Payment Proof"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
+                            <FileText className="w-6 h-6" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate max-w-xs">
+                            {formData.paymentProof.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {formData.paymentProof.size
+                              ? `${(formData.paymentProof.size / 1024).toFixed(1)} KB • `
+                              : ''}
+                            Uploaded: {formatDate(formData.paymentProof.uploadedAt || new Date().toISOString())}
+                          </p>
+                          {formData.paymentProof.externalUrl && (
+                            <a
+                              href={formData.paymentProof.externalUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-cyan-600 hover:underline flex items-center gap-0.5 mt-0.5"
+                            >
+                              <span>External receipt link</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <label className="cursor-pointer px-2.5 py-1 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors">
+                          <span>Replace</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleFileUpload(e.target.files[0]);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleRemoveProof}
+                          className="p-1 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                          title="Remove attachment"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-400 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
+                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 mb-1.5 transition-colors" />
+                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Click to upload screenshot / receipt proof
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          PNG, JPG, JPEG, WEBP, or PDF (Screenshots & transaction receipts)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleFileUpload(e.target.files[0]);
+                            }
+                          }}
+                        />
+                      </label>
+
+                      {/* Optional External Link */}
+                      <div className="flex items-center gap-2">
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <input
+                          type="url"
+                          placeholder="Or paste Google Drive / external receipt URL..."
+                          value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
+                          onChange={(e) => handleExternalUrlChange(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dedicated Payment Proof Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Payment Proof Notes (Voucher & Clearance Verification)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.paymentProofNotes || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData((prev) => ({
+                          ...prev,
+                          paymentProofNotes: val,
+                          paymentProof: prev.paymentProof
+                            ? { ...prev.paymentProof, notes: val }
+                            : prev.paymentProof,
+                        }));
+                      }}
+                      placeholder="e.g. PhonePe UPI transaction screenshot verified by accounts desk • IMPS reference cleared in HDFC..."
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 5: Notes */}
               <div>
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-                  4. Transaction Notes
+                  5. Transaction Notes
                 </div>
                 {/* Field 15: Notes (Textarea) */}
                 <textarea
@@ -933,6 +1172,38 @@ export const PaymentsModule: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Payment Proof Lightbox Modal */}
+      {selectedPaymentForProof && (
+        <PaymentProofModal
+          isOpen={isProofModalOpen}
+          onClose={() => {
+            setIsProofModalOpen(false);
+            setSelectedPaymentForProof(null);
+          }}
+          title="Client Payment Proof & Clearance Voucher"
+          paymentId={selectedPaymentForProof.id}
+          partyLabel={`Client: ${
+            selectedPaymentForProof.clientName ||
+            getClientById(selectedPaymentForProof.clientId)?.name ||
+            selectedPaymentForProof.clientId
+          }`}
+          amountINR={
+            selectedPaymentForProof.amountINR || selectedPaymentForProof.amount || 0
+          }
+          paymentDate={selectedPaymentForProof.paymentDate}
+          paymentMode={selectedPaymentForProof.paymentMode}
+          referenceUtr={selectedPaymentForProof.referenceUtr}
+          proofDocument={selectedPaymentForProof.paymentProof}
+          proofNotes={
+            selectedPaymentForProof.paymentProofNotes ||
+            selectedPaymentForProof.paymentProof?.notes
+          }
+          onEditProof={() => {
+            handleOpenEdit(selectedPaymentForProof);
+          }}
+        />
       )}
     </div>
   );
