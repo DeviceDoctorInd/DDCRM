@@ -37,7 +37,11 @@ import {
 } from 'recharts';
 
 export const BusinessOverviewSubModule: React.FC = () => {
-  const { clients, projects, payments, employeePayments, assignments, expenses } = useCrm();
+  const { clients, projects, payments, employeePayments, assignments, expenses, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
+
+  const reportTitle = isConsolidatedView
+    ? 'CONSOLIDATED GROUP — BUSINESS OVERVIEW'
+    : `${activeBrand.toUpperCase()} — BUSINESS OVERVIEW`;
 
   // --- Helper to evaluate project delayed status and days ---
   const getProjectDelay = (p: (typeof projects)[0]) => {
@@ -288,7 +292,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
         },
         { key: 'notes', header: 'Formula & Source' },
       ],
-      `DeviceDoctorIndia_Business_Overview_${new Date().toISOString().slice(0, 10)}`
+      `${brandPrefix}_Business_Overview_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -298,7 +302,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
           <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <span>DEVICE DOCTOR — BUSINESS OVERVIEW</span>
+            <span>{reportTitle}</span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
               EXECUTIVE BRIEFING
             </span>

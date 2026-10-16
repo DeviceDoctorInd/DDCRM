@@ -24,6 +24,8 @@ export const ExpenseCategoriesModule: React.FC = () => {
     saveExpenseCategory,
     deleteExpenseCategory,
     setExpenseCategoryStatus,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,7 +92,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
         { key: 'status', header: 'Status' },
         { key: 'createdAt', header: 'Created At' },
       ],
-      'ddi_expense_categories_register'
+      `${brandPrefix}_expense_categories_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -98,10 +100,11 @@ export const ExpenseCategoriesModule: React.FC = () => {
   const handleOpenAdd = () => {
     setIsEditing(false);
     setFormError(null);
-    const newId = storageService.generateId('DDI-EXPCAT');
+    const newId = storageService.generateId('EXPCAT', activeBrand);
 
     setFormData({
       id: newId,
+      brand: activeBrand,
       name: '',
       description: '',
       status: 'Active',
@@ -140,7 +143,8 @@ export const ExpenseCategoriesModule: React.FC = () => {
     }
 
     const payload: ExpenseCategory = {
-      id: formData.id || storageService.generateId('DDI-EXPCAT'),
+      id: formData.id || storageService.generateId('EXPCAT', activeBrand),
+      brand: formData.brand || activeBrand,
       name: trimmedName,
       description: formData.description?.trim() || '',
       status: formData.status || 'Active',

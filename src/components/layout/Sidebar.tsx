@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { ActiveModule, ReportsSubTab } from '../../types/crm';
+import { BrandSwitcher } from '../common/BrandSwitcher';
 import {
   LayoutDashboard,
   Users,
@@ -187,28 +188,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-slate-900 text-slate-200 border-r border-slate-800">
-      {/* Brand Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-            <Wrench className="w-5 h-5 text-white" />
-          </div>
-          {!isCollapsed && (
-            <div className="min-w-0">
-              <div className="text-sm font-bold tracking-tight text-white truncate">
-                Device Doctor India
-              </div>
-              <div className="text-[11px] text-cyan-400 font-medium truncate">
-                Enterprise CRM Portal
-              </div>
-            </div>
-          )}
+      {/* Active Brand Workspace Switcher Header */}
+      <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <BrandSwitcher variant="sidebar" isCollapsed={isCollapsed} />
         </div>
 
         {/* Mobile close button */}
         <button
           onClick={onCloseMobile}
-          className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md"
+          className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md shrink-0"
           aria-label="Close menu"
         >
           <X className="w-5 h-5" />

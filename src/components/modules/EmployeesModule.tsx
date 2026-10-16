@@ -29,6 +29,8 @@ export const EmployeesModule: React.FC = () => {
     saveEmployee,
     deleteEmployee,
     getRoleById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,7 +159,7 @@ export const EmployeesModule: React.FC = () => {
         { key: 'comesUnderTds', header: 'Comes Under TDS' },
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
       ],
-      'DeviceDoctorIndia_Employees_Directory'
+      `${brandPrefix}_Employees_Directory_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -166,7 +168,7 @@ export const EmployeesModule: React.FC = () => {
     setIsEditing(false);
 
     // Auto-generate fresh Employee ID
-    const freshId = storageService.generateId('DDI-EMP');
+    const freshId = storageService.generateId('EMP', activeBrand);
     const firstRoleId = roles.find((r) => r.status === 'Active')?.id || (roles[0]?.id ?? '');
 
     setFormData({
@@ -241,6 +243,7 @@ export const EmployeesModule: React.FC = () => {
 
     const payload: Employee = {
       id: formData.id,
+      brand: activeBrand,
       name: formData.name.trim(),
       roleId: formData.roleId,
       email: cleanEmail,

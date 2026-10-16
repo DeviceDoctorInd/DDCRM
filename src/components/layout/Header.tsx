@@ -1,5 +1,6 @@
 import React from 'react';
 import { useCrm } from '../../context/CrmContext';
+import { BrandSwitcher } from '../common/BrandSwitcher';
 import { Menu, Sun, Moon, RotateCcw, Shield, Plus } from 'lucide-react';
 
 interface HeaderProps {
@@ -14,6 +15,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     resetData,
     authUser,
     openAddProjectModal,
+    activeBrand,
+    brandMeta,
+    isConsolidatedView,
   } = useCrm();
 
   const moduleNames: Record<string, string> = {
@@ -23,13 +27,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     services: 'Agency Services Catalog',
     projects: 'Projects & Client Engagements',
     payments: 'Payment Ledger & Invoices',
+    'gst-invoices': 'GST Invoices & IRN Filing',
     roles: 'Employee Roles & Job Hierarchy',
     employees: 'Employees Directory',
+    assignments: 'Project Task Assignments',
+    'employee-payments': 'Employee Payouts & Compensation',
+    'expense-categories': 'Expense Categories',
+    expenses: 'Operational & Cloud Expenses',
+    reports: 'Audited Reports & Analytics',
   };
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4">
-      {/* Left zone: Mobile toggle + Breadcrumb */}
+    <header className="sticky top-0 z-20 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4">
+      {/* Left zone: Mobile toggle + Brand Switcher + Breadcrumb */}
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobileSidebar}
@@ -39,14 +49,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
-            Device Doctor India
-          </span>
+        {/* Global Brand Switcher in Top Header */}
+        <BrandSwitcher variant="header" />
+
+        <div className="hidden sm:flex items-center gap-2 text-xs">
           <span className="text-slate-400">/</span>
-          <span className="text-cyan-600 dark:text-cyan-400 font-medium">
+          <span className={`${brandMeta.accentText} font-medium`}>
             {moduleNames[activeModule] || activeModule}
           </span>
+          {isConsolidatedView && (
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+              Consolidated
+            </span>
+          )}
         </div>
       </div>
 
@@ -55,11 +70,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
         {/* Top Header Quick-Action Button: Add Project */}
         <button
           onClick={openAddProjectModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors cursor-pointer"
-          title="Add New Client Project"
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white ${brandMeta.accentBg} ${brandMeta.accentHover} rounded-lg shadow-sm transition-colors cursor-pointer`}
+          title={`Add New Client Project for ${activeBrand}`}
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Add Project</span>
+          <span className="hidden sm:inline">Add Project</span>
+          <span className="sm:hidden">Add</span>
         </button>
 
         {/* Currency Marker */}
@@ -70,15 +86,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
         {/* Reset Demo Data button */}
         <button
           onClick={() => {
-            if (window.confirm('Reset all CRM data to initial sample dataset for Device Doctor India?')) {
+            if (window.confirm('Reset all CRM data to initial sample dataset for Device Doctor India, Codestro, and FX Launch Pad?')) {
               resetData();
             }
           }}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title="Reset database to initial realistic sample data"
+          title="Reset database to initial sample data for all 3 brands"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Reset Data</span>
+          <span className="hidden lg:inline">Reset Data</span>
         </button>
 
         {/* Light / Dark Mode Toggle */}
@@ -97,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
 
         {/* User Badge */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-          <div className="w-8 h-8 rounded-full bg-cyan-600/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold text-xs">
+          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${brandMeta.avatarBg} text-white flex items-center justify-center font-bold text-xs shadow-xs`}>
             <Shield className="w-4 h-4" />
           </div>
           <div className="hidden xl:block text-left">

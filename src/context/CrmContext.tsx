@@ -16,6 +16,11 @@ import {
   AuthUser,
   ActiveModule,
   ReportsSubTab,
+  BrandName,
+  BrandPrefix,
+  BrandMeta,
+  BRAND_CONFIG,
+  getBrandPrefix,
 } from '../types/crm';
 import { storageService } from '../services/storageService';
 
@@ -45,12 +50,20 @@ interface CrmContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
 
+  // Multi-Brand Workspace Architecture
+  activeBrand: BrandName;
+  setActiveBrand: (brand: BrandName) => void;
+  brandPrefix: BrandPrefix;
+  brandMeta: BrandMeta;
+  isConsolidatedView: boolean;
+  setIsConsolidatedView: (consolidated: boolean) => void;
+
   // Auth
   authUser: AuthUser | null;
   login: (email: string, pass: string) => boolean;
   logout: () => void;
 
-  // Relational Entities
+  // Brand-Scoped (or Consolidated in Reports/Dashboard) Relational Entities
   clients: Client[];
   categories: ServiceCategory[];
   services: Service[];
@@ -64,7 +77,14 @@ interface CrmContextType {
   expenses: Expense[];
   gstInvoices: GstInvoice[];
 
-  // Entity Finders (Relational ID Linking)
+  // Master Unfiltered Collections (Across all 3 brands)
+  allClients: Client[];
+  allProjects: Project[];
+  allPayments: Payment[];
+  allExpenses: Expense[];
+  allEmployees: Employee[];
+
+  // Entity Finders (Relational ID Linking across system)
   getClientById: (id: string) => Client | undefined;
   getCategoryById: (id: string) => ServiceCategory | undefined;
   getServiceById: (id: string) => Service | undefined;
@@ -157,19 +177,23 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
 
-  // Entities state
-  const [clients, setClients] = useState<Client[]>([]);
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [roles, setRoles] = useState<EmployeeRole[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [employeePayments, setEmployeePayments] = useState<EmployeePayment[]>([]);
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [gstInvoices, setGstInvoices] = useState<GstInvoice[]>([]);
+  // Multi-brand workspace state
+  const [activeBrand, setActiveBrandState] = useState<BrandName>(() => storageService.getActiveBrand());
+  const [isConsolidatedView, setIsConsolidatedViewState] = useState<boolean>(false);
+
+  // Raw entities state (holding master list across all brands)
+  const [rawClients, setRawClients] = useState<Client[]>([]);
+  const [rawCategories, setRawCategories] = useState<ServiceCategory[]>([]);
+  const [rawServices, setRawServices] = useState<Service[]>([]);
+  const [rawProjects, setRawProjects] = useState<Project[]>([]);
+  const [rawPayments, setRawPayments] = useState<Payment[]>([]);
+  const [rawRoles, setRawRoles] = useState<EmployeeRole[]>([]);
+  const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
+  const [rawAssignments, setRawAssignments] = useState<Assignment[]>([]);
+  const [rawEmployeePayments, setRawEmployeePayments] = useState<EmployeePayment[]>([]);
+  const [rawExpenseCategories, setRawExpenseCategories] = useState<ExpenseCategory[]>([]);
+  const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
+  const [rawGstInvoices, setRawGstInvoices] = useState<GstInvoice[]>([]);
 
   // Modals & Feedback
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -188,17 +212,102 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isProjectModalEditing, setIsProjectModalEditing] = useState(false);
   const [projectModalData, setProjectModalData] = useState<Partial<Project> | null>(null);
 
+  // Brand Switcher handler
+  const setActiveBrand = (brand: BrandName) => {
+    setActiveBrandState(brand);
+    storageService.setActiveBrand(brand);
+    showToast(`Switched active workspace to "${brand}" (${getBrandPrefix(brand)})`, 'info');
+  };
+
+  const setIsConsolidatedView = (val: boolean) => {
+    setIsConsolidatedViewState(val);
+    if (val) {
+      showToast('Consolidated Group View enabled: Displaying aggregated data across all 3 brands.', 'info');
+    } else {
+      showToast(`Restored brand-isolated workspace: ${activeBrand}`, 'info');
+    }
+  };
+
+  const brandPrefix = getBrandPrefix(activeBrand);
+  const brandMeta = BRAND_CONFIG[activeBrand] || BRAND_CONFIG['Device Doctor India'];
+
+  // Determine if active view should consolidate (only in Dashboard or Reports when toggled)
+  const shouldConsolidate = isConsolidatedView && (activeModule === 'dashboard' || activeModule === 'reports');
+
+  // Filtered entity sets for the active workspace
+  const clients = useMemo(() => {
+    if (shouldConsolidate) return rawClients;
+    return rawClients.filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
+  }, [rawClients, shouldConsolidate, activeBrand]);
+
+  const categories = useMemo(() => {
+    if (shouldConsolidate) return rawCategories;
+    return rawCategories.filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
+  }, [rawCategories, shouldConsolidate, activeBrand]);
+
+  const services = useMemo(() => {
+    if (shouldConsolidate) return rawServices;
+    return rawServices.filter((s) => (s.brand || 'Device Doctor India') === activeBrand);
+  }, [rawServices, shouldConsolidate, activeBrand]);
+
+  const projects = useMemo(() => {
+    if (shouldConsolidate) return rawProjects;
+    return rawProjects.filter((p) => (p.brand || 'Device Doctor India') === activeBrand);
+  }, [rawProjects, shouldConsolidate, activeBrand]);
+
+  const payments = useMemo(() => {
+    if (shouldConsolidate) return rawPayments;
+    return rawPayments.filter((p) => (p.brand || 'Device Doctor India') === activeBrand);
+  }, [rawPayments, shouldConsolidate, activeBrand]);
+
+  const roles = useMemo(() => {
+    if (shouldConsolidate) return rawRoles;
+    return rawRoles.filter((r) => (r.brand || 'Device Doctor India') === activeBrand);
+  }, [rawRoles, shouldConsolidate, activeBrand]);
+
+  const employees = useMemo(() => {
+    if (shouldConsolidate) return rawEmployees;
+    return rawEmployees.filter((e) => (e.brand || 'Device Doctor India') === activeBrand);
+  }, [rawEmployees, shouldConsolidate, activeBrand]);
+
+  const assignments = useMemo(() => {
+    if (shouldConsolidate) return rawAssignments;
+    return rawAssignments.filter((a) => (a.brand || 'Device Doctor India') === activeBrand);
+  }, [rawAssignments, shouldConsolidate, activeBrand]);
+
+  const employeePayments = useMemo(() => {
+    if (shouldConsolidate) return rawEmployeePayments;
+    return rawEmployeePayments.filter((ep) => (ep.brand || 'Device Doctor India') === activeBrand);
+  }, [rawEmployeePayments, shouldConsolidate, activeBrand]);
+
+  const expenseCategories = useMemo(() => {
+    if (shouldConsolidate) return rawExpenseCategories;
+    return rawExpenseCategories.filter((ec) => (ec.brand || 'Device Doctor India') === activeBrand);
+  }, [rawExpenseCategories, shouldConsolidate, activeBrand]);
+
+  const expenses = useMemo(() => {
+    if (shouldConsolidate) return rawExpenses;
+    return rawExpenses.filter((e) => (e.brand || 'Device Doctor India') === activeBrand);
+  }, [rawExpenses, shouldConsolidate, activeBrand]);
+
+  const gstInvoices = useMemo(() => {
+    if (shouldConsolidate) return rawGstInvoices;
+    return rawGstInvoices.filter((g) => (g.brand || 'Device Doctor India') === activeBrand);
+  }, [rawGstInvoices, shouldConsolidate, activeBrand]);
+
   const openAddProjectModal = () => {
     setIsProjectModalEditing(false);
-    const freshClients = storageService.getClients();
-    const freshServices = storageService.getServices();
+    const freshClients = storageService.getClients().filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
+    const freshServices = storageService.getServices().filter((s) => (s.brand || 'Device Doctor India') === activeBrand);
     const defaultClient = freshClients.length > 0 ? freshClients[0] : undefined;
     const defaultService = freshServices.length > 0 ? freshServices[0] : undefined;
     const autoId = storageService.generateSmartProjectId(
       defaultClient?.name || 'CLIENT',
       defaultService?.name || 'SERVICE',
       defaultClient?.id,
-      defaultService?.id
+      defaultService?.id,
+      undefined,
+      activeBrand
     );
     const today = new Date().toISOString().slice(0, 10);
     const committedDays = 30;
@@ -206,11 +315,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     endD.setDate(endD.getDate() + committedDays);
     const endDate = endD.toISOString().slice(0, 10);
     const currency = defaultClient?.preferredCurrency || 'INR';
-    const rate = currency === 'INR' ? 1 : 84.5;
+    const rate = currency === 'INR' ? 1 : (currency === 'USD' ? 84.5 : (currency === 'EUR' ? 92 : 1));
     const contract = 150000;
 
     setProjectModalData({
       id: autoId,
+      brand: activeBrand,
       clientId: defaultClient?.id || '',
       clientName: defaultClient?.name || '',
       serviceId: defaultService?.id || '',
@@ -226,7 +336,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       contract,
       exchangeRate: rate,
       contractValue: Math.round(contract * rate),
-      projectManager: 'Karthik Ramanathan',
+      projectManager: activeBrand === 'Codestro' ? 'Rohan Malhotra' : (activeBrand === 'FX Launch Pad' ? 'Sameer Saxena' : 'Karthik Ramanathan'),
       notes: '',
     });
     setIsProjectModalOpen(true);
@@ -246,19 +356,20 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const loadAll = () => {
     storageService.init();
-    setClients(storageService.getClients());
-    setCategories(storageService.getCategories());
-    setServices(storageService.getServices());
-    setProjects(storageService.getProjects());
-    setPayments(storageService.getPayments());
-    setRoles(storageService.getRoles());
-    setEmployees(storageService.getEmployees());
-    setAssignments(storageService.getAssignments());
-    setEmployeePayments(storageService.getEmployeePayments());
-    setExpenseCategories(storageService.getExpenseCategories());
-    setExpenses(storageService.getExpenses());
-    setGstInvoices(storageService.getGstInvoices());
+    setRawClients(storageService.getClients());
+    setRawCategories(storageService.getCategories());
+    setRawServices(storageService.getServices());
+    setRawProjects(storageService.getProjects());
+    setRawPayments(storageService.getPayments());
+    setRawRoles(storageService.getRoles());
+    setRawEmployees(storageService.getEmployees());
+    setRawAssignments(storageService.getAssignments());
+    setRawEmployeePayments(storageService.getEmployeePayments());
+    setRawExpenseCategories(storageService.getExpenseCategories());
+    setRawExpenses(storageService.getExpenses());
+    setRawGstInvoices(storageService.getGstInvoices());
     setAuthUserState(storageService.getAuthUser());
+    setActiveBrandState(storageService.getActiveBrand());
     const currentTheme = storageService.getTheme();
     setThemeState(currentTheme);
     if (currentTheme === 'dark') {
@@ -311,7 +422,6 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const login = (email: string, pass: string): boolean => {
-    // Local mock auth check: accepts default admin or any valid email
     if (email && pass.length >= 4) {
       const user: AuthUser = {
         id: 'USR-001',
@@ -334,19 +444,19 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast('Logged out securely.', 'info');
   };
 
-  // Relational entity lookup maps
-  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
-  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const serviceMap = useMemo(() => new Map(services.map((s) => [s.id, s])), [services]);
-  const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
-  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const employeeMap = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
-  const assignmentMap = useMemo(() => new Map(assignments.map((a) => [a.id, a])), [assignments]);
-  const employeePaymentMap = useMemo(() => new Map(employeePayments.map((p) => [p.id, p])), [employeePayments]);
-  const expenseCategoryMap = useMemo(() => new Map(expenseCategories.map((c) => [c.id, c])), [expenseCategories]);
-  const expenseMap = useMemo(() => new Map(expenses.map((e) => [e.id, e])), [expenses]);
-  const gstInvoiceMap = useMemo(() => new Map(gstInvoices.map((g) => [g.id, g])), [gstInvoices]);
-  const gstInvoicePaymentMap = useMemo(() => new Map(gstInvoices.map((g) => [g.paymentId, g])), [gstInvoices]);
+  // Relational entity lookup maps across all master entities
+  const clientMap = useMemo(() => new Map(rawClients.map((c) => [c.id, c])), [rawClients]);
+  const categoryMap = useMemo(() => new Map(rawCategories.map((c) => [c.id, c])), [rawCategories]);
+  const serviceMap = useMemo(() => new Map(rawServices.map((s) => [s.id, s])), [rawServices]);
+  const roleMap = useMemo(() => new Map(rawRoles.map((r) => [r.id, r])), [rawRoles]);
+  const projectMap = useMemo(() => new Map(rawProjects.map((p) => [p.id, p])), [rawProjects]);
+  const employeeMap = useMemo(() => new Map(rawEmployees.map((e) => [e.id, e])), [rawEmployees]);
+  const assignmentMap = useMemo(() => new Map(rawAssignments.map((a) => [a.id, a])), [rawAssignments]);
+  const employeePaymentMap = useMemo(() => new Map(rawEmployeePayments.map((p) => [p.id, p])), [rawEmployeePayments]);
+  const expenseCategoryMap = useMemo(() => new Map(rawExpenseCategories.map((c) => [c.id, c])), [rawExpenseCategories]);
+  const expenseMap = useMemo(() => new Map(rawExpenses.map((e) => [e.id, e])), [rawExpenses]);
+  const gstInvoiceMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.id, g])), [rawGstInvoices]);
+  const gstInvoicePaymentMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.paymentId, g])), [rawGstInvoices]);
 
   const getClientById = (id: string) => clientMap.get(id);
   const getCategoryById = (id: string) => categoryMap.get(id);
@@ -362,13 +472,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getGstInvoiceByPaymentId = (paymentId: string) => gstInvoicePaymentMap.get(paymentId);
   const getProjectExpenses = (projectId: string) => {
     if (!projectId || projectId === 'NA') return [];
-    return expenses.filter((e) => e.projectId === projectId);
+    return rawExpenses.filter((e) => e.projectId === projectId);
   };
   const getProjectExpensesTotalINR = (projectId: string) => {
     return getProjectExpenses(projectId).reduce((sum, e) => sum + (Number(e.amountINR) || 0), 0);
   };
 
-  // Auto-calculated counts
+  // Auto-calculated counts within active workspace
   const getCategoryServicesCount = (catId: string) => {
     return services.filter((s) => s.categoryId === catId).length;
   };
@@ -385,11 +495,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return employees.filter((e) => e.roleId === roleId).length;
   };
 
-  // --- Strict Enforcement Actions ---
+  // --- Strict Enforcement Actions with Auto-Brand Tagging ---
   const saveClientAction = (client: Client) => {
+    if (!client.brand) client.brand = activeBrand;
     const res = storageService.saveClient(client);
     if (res.success) {
-      showToast(`Client "${client.name}" saved successfully.`, 'success');
+      showToast(`Client "${client.name}" saved to ${client.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save client.', 'error');
     }
@@ -426,9 +537,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveCategoryAction = (category: ServiceCategory) => {
+    if (!category.brand) category.brand = activeBrand;
     const res = storageService.saveCategory(category);
     if (res.success) {
-      showToast(`Category "${category.name}" saved successfully.`, 'success');
+      showToast(`Category "${category.name}" saved to ${category.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save category.', 'error');
     }
@@ -465,9 +577,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveServiceAction = (service: Service) => {
+    if (!service.brand) service.brand = activeBrand;
     const res = storageService.saveService(service);
     if (res.success) {
-      showToast(`Service "${service.name}" saved successfully.`, 'success');
+      showToast(`Service "${service.name}" saved to ${service.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save service.', 'error');
     }
@@ -504,9 +617,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveProjectAction = (project: Project) => {
+    if (!project.brand) project.brand = activeBrand;
     const res = storageService.saveProject(project);
     if (res.success) {
-      showToast(`Project ${project.id} for "${project.clientName}" saved successfully.`, 'success');
+      showToast(`Project ${project.id} saved to ${project.brand}.`, 'success');
     }
     return res;
   };
@@ -548,9 +662,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const savePaymentAction = (payment: Payment) => {
+    if (!payment.brand) payment.brand = activeBrand;
     const res = storageService.savePayment(payment);
     if (res.success) {
-      showToast(`Payment ${payment.id} saved.`, 'success');
+      showToast(`Payment ${payment.id} saved to ${payment.brand}.`, 'success');
     }
     return res;
   };
@@ -564,9 +679,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveRoleAction = (role: EmployeeRole) => {
+    if (!role.brand) role.brand = activeBrand;
     const res = storageService.saveRole(role);
     if (res.success) {
-      showToast(`Role "${role.roleName}" saved successfully.`, 'success');
+      showToast(`Role "${role.roleName}" saved to ${role.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save role.', 'error');
     }
@@ -605,9 +721,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveEmployeeAction = (employee: Employee) => {
+    if (!employee.brand) employee.brand = activeBrand;
     const res = storageService.saveEmployee(employee);
     if (res.success) {
-      showToast(`Employee "${employee.name}" saved.`, 'success');
+      showToast(`Employee "${employee.name}" onboarded into ${employee.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save employee.', 'error');
     }
@@ -646,9 +763,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveAssignmentAction = (assignment: Assignment) => {
+    if (!assignment.brand) assignment.brand = activeBrand;
     const res = storageService.saveAssignment(assignment);
     if (res.success) {
-      showToast(`Assignment ${assignment.id} saved successfully.`, 'success');
+      showToast(`Assignment ${assignment.id} saved to ${assignment.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save assignment.', 'error');
     }
@@ -685,9 +803,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveEmployeePaymentAction = (payment: EmployeePayment) => {
+    if (!payment.brand) payment.brand = activeBrand;
     const res = storageService.saveEmployeePayment(payment);
     if (res.success) {
-      showToast(`Employee Payment ${payment.id} saved successfully.`, 'success');
+      showToast(`Employee Payment ${payment.id} saved to ${payment.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save employee payment.', 'error');
     }
@@ -705,9 +824,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveExpenseCategoryAction = (category: ExpenseCategory) => {
+    if (!category.brand) category.brand = activeBrand;
     const res = storageService.saveExpenseCategory(category);
     if (res.success) {
-      showToast(`Expense Category "${category.name}" saved successfully.`, 'success');
+      showToast(`Expense Category "${category.name}" saved to ${category.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save expense category.', 'error');
     }
@@ -746,9 +866,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveExpenseAction = (expense: Expense) => {
+    if (!expense.brand) expense.brand = activeBrand;
     const res = storageService.saveExpense(expense);
     if (res.success) {
-      showToast(`Expense record "${expense.id}" saved successfully.`, 'success');
+      showToast(`Expense record "${expense.id}" saved to ${expense.brand}.`, 'success');
     } else {
       showToast(res.error || 'Failed to save expense record.', 'error');
     }
@@ -766,6 +887,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveGstInvoiceAction = (invoice: GstInvoice) => {
+    if (!invoice.brand) invoice.brand = activeBrand;
     const res = storageService.saveGstInvoice(invoice);
     if (res.success) {
       showToast(`GST Invoice details for "${invoice.invoiceNumber || invoice.id}" updated.`, 'success');
@@ -777,7 +899,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const resetData = () => {
     storageService.resetToSampleData();
-    showToast('Reset all CRM data to initial sample dataset.', 'info');
+    showToast('Reset all CRM data to initial multi-brand dataset (Device Doctor India, Codestro, FX Launch Pad).', 'info');
   };
 
   return (
@@ -789,6 +911,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActiveReportsTab,
         theme,
         toggleTheme,
+        activeBrand,
+        setActiveBrand,
+        brandPrefix,
+        brandMeta,
+        isConsolidatedView,
+        setIsConsolidatedView,
         authUser,
         login,
         logout,
@@ -804,6 +932,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         expenseCategories,
         expenses,
         gstInvoices,
+        allClients: rawClients,
+        allProjects: rawProjects,
+        allPayments: rawPayments,
+        allExpenses: rawExpenses,
+        allEmployees: rawEmployees,
         getClientById,
         getCategoryById,
         getServiceById,

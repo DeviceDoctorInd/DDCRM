@@ -9,14 +9,12 @@ import {
   Employee,
   Assignment,
   EmployeePayment,
-  EmployeePaymentMode,
   ExpenseCategory,
-  ExpenseCategoryStatus,
   Expense,
-  ExpensePaymentStatus,
   GstInvoice,
-  GstPortalUploadStatus,
   AuthUser,
+  BrandName,
+  getBrandPrefix,
 } from '../types/crm';
 import { calculateDaysOverdue } from '../utils/formatters';
 
@@ -35,12 +33,16 @@ const STORAGE_KEYS = {
   EXPENSES: 'ddi_crm_expenses_v2',
   AUTH: 'ddi_crm_auth_v2',
   THEME: 'ddi_crm_theme_v2',
+  BRAND: 'ddi_crm_active_brand_v1',
 };
 
-// Initial IT Solutions & Digital Marketing Seed Data for Device Doctor India
-const INITIAL_CLIENTS: Client[] = [
+// ============================================================================
+// 1. BRAND 1: DEVICE DOCTOR INDIA (Prefix: DDI)
+// ============================================================================
+const DDI_CLIENTS: Client[] = [
   {
-    id: 'CL-001',
+    id: 'DDI-CL-001',
+    brand: 'Device Doctor India',
     name: 'Zenith Logistics & Supply Chain Ltd',
     contactPerson: 'Rajesh Nair',
     phone: '+91 98201 44521',
@@ -56,7 +58,8 @@ const INITIAL_CLIENTS: Client[] = [
     updatedAt: '2026-08-10T14:20:00Z',
   },
   {
-    id: 'CL-002',
+    id: 'DDI-CL-002',
+    brand: 'Device Doctor India',
     name: 'CyberShield Fintech Labs',
     contactPerson: 'Priyanka Sharma',
     phone: '+91 98112 33890',
@@ -72,7 +75,8 @@ const INITIAL_CLIENTS: Client[] = [
     updatedAt: '2026-09-02T09:15:00Z',
   },
   {
-    id: 'CL-003',
+    id: 'DDI-CL-003',
+    brand: 'Device Doctor India',
     name: 'TechNova Enterprise Solutions',
     contactPerson: 'Anand Kulkarni',
     phone: '+91 80412 88901',
@@ -88,7 +92,8 @@ const INITIAL_CLIENTS: Client[] = [
     updatedAt: '2026-10-01T16:45:00Z',
   },
   {
-    id: 'CL-004',
+    id: 'DDI-CL-004',
+    brand: 'Device Doctor India',
     name: 'Apex Super-Speciality Hospital',
     contactPerson: 'Dr. Srinivas Rao',
     phone: '+91 94401 56230',
@@ -104,7 +109,8 @@ const INITIAL_CLIENTS: Client[] = [
     updatedAt: '2026-06-18T10:30:00Z',
   },
   {
-    id: 'CL-005',
+    id: 'DDI-CL-005',
+    brand: 'Device Doctor India',
     name: 'CloudMatrix Infotech Pune',
     contactPerson: 'Neha Deshmukh',
     phone: '+91 97654 32109',
@@ -120,7 +126,8 @@ const INITIAL_CLIENTS: Client[] = [
     updatedAt: '2026-09-25T11:15:00Z',
   },
   {
-    id: 'CL-006',
+    id: 'DDI-CL-006',
+    brand: 'Device Doctor India',
     name: 'Bharat Retail Ventures Pvt Ltd',
     contactPerson: 'Vikramaditya Sen',
     phone: '+91 99030 11445',
@@ -137,9 +144,10 @@ const INITIAL_CLIENTS: Client[] = [
   },
 ];
 
-const INITIAL_CATEGORIES: ServiceCategory[] = [
+const DDI_CATEGORIES: ServiceCategory[] = [
   {
-    id: 'CAT-001',
+    id: 'DDI-CAT-001',
+    brand: 'Device Doctor India',
     name: 'Web & Custom Software Development',
     description: 'Enterprise web applications, React/Next.js client portals, Node.js microservices, and custom API backends.',
     status: 'Active',
@@ -147,7 +155,8 @@ const INITIAL_CATEGORIES: ServiceCategory[] = [
     updatedAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'CAT-002',
+    id: 'DDI-CAT-002',
+    brand: 'Device Doctor India',
     name: 'Mobile App Development',
     description: 'Cross-platform iOS and Android mobile apps engineered with Flutter, React Native, offline synchronization, and push notifications.',
     status: 'Active',
@@ -155,7 +164,8 @@ const INITIAL_CATEGORIES: ServiceCategory[] = [
     updatedAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'CAT-003',
+    id: 'DDI-CAT-003',
+    brand: 'Device Doctor India',
     name: 'Digital Marketing & SEO',
     description: 'Organic search optimization, technical SEO audits, multi-channel performance advertising on Google & Meta, and conversion tracking.',
     status: 'Active',
@@ -163,7 +173,8 @@ const INITIAL_CATEGORIES: ServiceCategory[] = [
     updatedAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'CAT-004',
+    id: 'DDI-CAT-004',
+    brand: 'Device Doctor India',
     name: 'UI/UX & Brand Design',
     description: 'User experience research, interactive Figma prototypes, design systems, visual branding identities, and design audits.',
     status: 'Active',
@@ -171,7 +182,8 @@ const INITIAL_CATEGORIES: ServiceCategory[] = [
     updatedAt: '2026-01-01T00:00:00Z',
   },
   {
-    id: 'CAT-005',
+    id: 'DDI-CAT-005',
+    brand: 'Device Doctor India',
     name: 'Cloud & DevOps Engineering',
     description: 'AWS & GCP infrastructure automation, Docker/Kubernetes container orchestration, CI/CD pipelines, and cloud security monitoring.',
     status: 'Active',
@@ -180,56 +192,62 @@ const INITIAL_CATEGORIES: ServiceCategory[] = [
   },
 ];
 
-const INITIAL_SERVICES: Service[] = [
+const DDI_SERVICES: Service[] = [
   {
-    id: 'SRV-001',
+    id: 'DDI-SRV-001',
+    brand: 'Device Doctor India',
     name: 'Full-Stack React & Node.js Web App',
-    categoryId: 'CAT-001',
+    categoryId: 'DDI-CAT-001',
     description: 'Modern single-page applications, responsive dashboards, secure JWT authentication, and REST/GraphQL APIs.',
     status: 'Active',
     createdAt: '2025-01-10T00:00:00Z',
     updatedAt: '2026-01-10T00:00:00Z',
   },
   {
-    id: 'SRV-002',
+    id: 'DDI-SRV-002',
+    brand: 'Device Doctor India',
     name: 'Custom ERP & CRM Development',
-    categoryId: 'CAT-001',
+    categoryId: 'DDI-CAT-001',
     description: 'Tailored enterprise resource management software with role-based permissions, automated invoicing, and inventory control.',
     status: 'Active',
     createdAt: '2025-01-10T00:00:00Z',
     updatedAt: '2026-01-10T00:00:00Z',
   },
   {
-    id: 'SRV-003',
+    id: 'DDI-SRV-003',
+    brand: 'Device Doctor India',
     name: 'Flutter iOS/Android App Development',
-    categoryId: 'CAT-002',
+    categoryId: 'DDI-CAT-002',
     description: 'High-performance cross-platform mobile apps with native UI components, offline-first local caching, and payment SDKs.',
     status: 'Active',
     createdAt: '2025-01-15T00:00:00Z',
     updatedAt: '2026-01-15T00:00:00Z',
   },
   {
-    id: 'SRV-004',
+    id: 'DDI-SRV-004',
+    brand: 'Device Doctor India',
     name: 'Technical SEO & Content Strategy',
-    categoryId: 'CAT-003',
+    categoryId: 'DDI-CAT-003',
     description: 'Core Web Vitals optimization, semantic schema markup, programmatic SEO architecture, and keyword ranking strategy.',
     status: 'Active',
     createdAt: '2025-02-01T00:00:00Z',
     updatedAt: '2026-02-01T00:00:00Z',
   },
   {
-    id: 'SRV-005',
+    id: 'DDI-SRV-005',
+    brand: 'Device Doctor India',
     name: 'Performance Marketing (Meta & Google Ads)',
-    categoryId: 'CAT-003',
+    categoryId: 'DDI-CAT-003',
     description: 'Data-driven paid customer acquisition campaigns, audience segmentation, remarketing funnels, and ROAS optimization.',
     status: 'Active',
     createdAt: '2025-02-10T00:00:00Z',
     updatedAt: '2026-02-10T00:00:00Z',
   },
   {
-    id: 'SRV-006',
+    id: 'DDI-SRV-006',
+    brand: 'Device Doctor India',
     name: 'Design System & Interactive UI/UX Prototyping',
-    categoryId: 'CAT-004',
+    categoryId: 'DDI-CAT-004',
     description: 'Complete component libraries in Figma, responsive typography & spacing scales, user journeys, and usability testing.',
     status: 'Active',
     createdAt: '2025-03-01T00:00:00Z',
@@ -237,12 +255,13 @@ const INITIAL_SERVICES: Service[] = [
   },
 ];
 
-const INITIAL_PROJECTS: Project[] = [
+const DDI_PROJECTS: Project[] = [
   {
     id: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    brand: 'Device Doctor India',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
-    serviceId: 'SRV-003',
+    serviceId: 'DDI-SRV-002',
     proposalDate: '2026-06-15',
     contractDate: '2026-06-25',
     startDate: '2026-07-01',
@@ -259,26 +278,6 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 250000,
     projectManager: 'Karthik Ramanathan',
     notes: 'Awaiting client approval on GPS background tracking permissions and geofencing SDK integration.',
-    proposalDocument: {
-      id: 'doc-prop-001',
-      name: 'Zenith_Logistics_ERP_Scope_Proposal_v2.pdf',
-      size: 2450000,
-      type: 'application/pdf',
-      uploadedAt: '2026-06-15T10:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1ZenithLogistics-Proposal-v2/view',
-      notes: 'Initial scope baseline approved by VP Logistics. Includes GPS fleet tracking and automated manifest generation.',
-    },
-    proposalDocumentNotes: 'Initial scope baseline approved by VP Logistics. Includes GPS fleet tracking and automated manifest generation.',
-    contractDocument: {
-      id: 'doc-cont-001',
-      name: 'Zenith_Logistics_Master_Services_Agreement_Signed.pdf',
-      size: 3820000,
-      type: 'application/pdf',
-      uploadedAt: '2026-06-25T14:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1Zenith-Signed-Contract-2026/view',
-      notes: 'Signed MSA with 99.9% uptime SLA and 2-hour critical bug resolution window.',
-    },
-    contractDocumentNotes: 'Signed MSA with 99.9% uptime SLA and 2-hour critical bug resolution window.',
     paymentPhases: [
       {
         id: 'phase-001-1',
@@ -316,9 +315,10 @@ const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'DDI - CYBERSHIELD FINTECH LABS - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-002',
+    brand: 'Device Doctor India',
+    clientId: 'DDI-CL-002',
     clientName: 'CyberShield Fintech Labs',
-    serviceId: 'SRV-001',
+    serviceId: 'DDI-SRV-001',
     proposalDate: '2026-07-15',
     contractDate: '2026-08-01',
     startDate: '2026-08-10',
@@ -335,26 +335,6 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 370000,
     projectManager: 'Karthik Ramanathan',
     notes: 'Undergoing third-party financial cybersecurity audit and SOC2 penetration testing.',
-    proposalDocument: {
-      id: 'doc-prop-002',
-      name: 'CyberShield_Fintech_Portal_Architecture_Proposal.pdf',
-      size: 3100000,
-      type: 'application/pdf',
-      uploadedAt: '2026-07-15T11:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1CyberShield-Architecture-Proposal/view',
-      notes: 'Detailed microservices and banking API integration architecture specification.',
-    },
-    proposalDocumentNotes: 'Detailed microservices and banking API integration architecture specification.',
-    contractDocument: {
-      id: 'doc-cont-002',
-      name: 'CyberShield_Executed_Development_Agreement.pdf',
-      size: 4250000,
-      type: 'application/pdf',
-      uploadedAt: '2026-08-01T16:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1CyberShield-Executed-Agreement/view',
-      notes: 'Executed contract with PCI-DSS compliance clauses and escrow arrangements.',
-    },
-    contractDocumentNotes: 'Executed contract with PCI-DSS compliance clauses and escrow arrangements.',
     paymentPhases: [
       {
         id: 'phase-002-1',
@@ -392,9 +372,10 @@ const INITIAL_PROJECTS: Project[] = [
   },
   {
     id: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
-    clientId: 'CL-003',
+    brand: 'Device Doctor India',
+    clientId: 'DDI-CL-003',
     clientName: 'TechNova Enterprise Solutions',
-    serviceId: 'SRV-002',
+    serviceId: 'DDI-SRV-003',
     proposalDate: '2026-08-15',
     contractDate: '2026-08-25',
     startDate: '2026-09-01',
@@ -411,26 +392,6 @@ const INITIAL_PROJECTS: Project[] = [
     balance: 440000,
     projectManager: 'Deepak Varma',
     notes: 'Milestone 2 (Payroll and multi-currency billing engine) in active development.',
-    proposalDocument: {
-      id: 'doc-prop-003',
-      name: 'TechNova_Mobile_App_Scope_Wireframes.pdf',
-      size: 5200000,
-      type: 'application/pdf',
-      uploadedAt: '2026-08-15T09:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1TechNova-Wireframes/view',
-      notes: 'Figma wireframes and Flutter mobile architecture plan with offline syncing.',
-    },
-    proposalDocumentNotes: 'Figma wireframes and Flutter mobile architecture plan with offline syncing.',
-    contractDocument: {
-      id: 'doc-cont-003',
-      name: 'TechNova_Signed_Enterprise_Contract.pdf',
-      size: 3400000,
-      type: 'application/pdf',
-      uploadedAt: '2026-08-25T12:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1TechNova-Signed-Contract/view',
-      notes: 'Multi-year maintenance support annexure attached.',
-    },
-    contractDocumentNotes: 'Multi-year maintenance support annexure attached.',
     paymentPhases: [
       {
         id: 'phase-003-1',
@@ -466,231 +427,14 @@ const INITIAL_PROJECTS: Project[] = [
     createdAt: '2026-09-01T08:30:00Z',
     updatedAt: '2026-10-10T16:00:00Z',
   },
-  {
-    id: 'DDI - APEX SUPER-SPECIALITY HOSPITAL - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-004',
-    clientName: 'Apex Super-Speciality Hospital',
-    serviceId: 'SRV-003',
-    proposalDate: '2026-09-01',
-    contractDate: '2026-09-10',
-    startDate: '2026-09-18',
-    committedDays: 37,
-    committedEndDate: '2026-10-25',
-    actualEndDate: '',
-    status: 'In Progress',
-    paymentMode: 'Non GST Online',
-    currency: 'INR',
-    contract: 380000,
-    exchangeRate: 1,
-    contractValue: 380000,
-    totalReceived: 190000,
-    balance: 190000,
-    projectManager: 'Deepak Varma',
-    notes: 'WebRTC video consultation tested successfully; integrating Razorpay payment gateway.',
-    proposalDocument: {
-      id: 'doc-prop-004',
-      name: 'Apex_Hospital_Telemedicine_Proposal_Doc.pdf',
-      size: 1950000,
-      type: 'application/pdf',
-      uploadedAt: '2026-09-01T10:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1Apex-Telemedicine-Proposal/view',
-      notes: 'HIPAA and Indian telemedicine guidelines compliance checklist included.',
-    },
-    proposalDocumentNotes: 'HIPAA and Indian telemedicine guidelines compliance checklist included.',
-    contractDocument: {
-      id: 'doc-cont-004',
-      name: 'Apex_Hospital_Signed_Service_Contract.pdf',
-      size: 2600000,
-      type: 'application/pdf',
-      uploadedAt: '2026-09-10T15:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1Apex-Signed-Contract/view',
-      notes: 'Medical data confidentiality and patient record encryption agreement.',
-    },
-    contractDocumentNotes: 'Medical data confidentiality and patient record encryption agreement.',
-    paymentPhases: [
-      {
-        id: 'phase-004-1',
-        name: 'Phase 1 - Mobilization & Doctor Portal Setup',
-        percentage: 50,
-        amount: 190000,
-        amountINR: 190000,
-        dueDate: '2026-09-20',
-        status: 'Received',
-        notes: 'Advance received via digital transfer.',
-      },
-      {
-        id: 'phase-004-2',
-        name: 'Phase 2 - Video Consultation & Electronic Health Records',
-        percentage: 30,
-        amount: 114000,
-        amountINR: 114000,
-        dueDate: '2026-10-10',
-        status: 'Invoiced',
-        notes: 'End-to-end encrypted video streaming milestone.',
-      },
-      {
-        id: 'phase-004-3',
-        name: 'Phase 3 - Go-Live & Pharmacy API Integration',
-        percentage: 20,
-        amount: 76000,
-        amountINR: 76000,
-        dueDate: '2026-10-25',
-        status: 'Pending',
-        notes: 'Final deployment and integration with hospital pharmacy billing.',
-      },
-    ],
-    createdAt: '2026-09-18T11:00:00Z',
-    updatedAt: '2026-10-12T17:15:00Z',
-  },
-  {
-    id: 'DDI - CLOUDMATRIX INFOTECH PUNE - PERFORMANCE MARKETING (META & GOOGLE ADS) - 1',
-    clientId: 'CL-005',
-    clientName: 'CloudMatrix Infotech Pune',
-    serviceId: 'SRV-005',
-    proposalDate: '2026-09-15',
-    contractDate: '2026-09-25',
-    startDate: '2026-10-01',
-    committedDays: 60,
-    committedEndDate: '2026-11-30',
-    actualEndDate: '',
-    status: 'In Progress',
-    paymentMode: 'Cash',
-    currency: 'INR',
-    contract: 290000,
-    exchangeRate: 1,
-    contractValue: 290000,
-    totalReceived: 0,
-    balance: 290000,
-    projectManager: 'Arjun Singhania',
-    notes: 'Q4 lead-generation campaign launched across LinkedIn & Google Ads with 3.8x ROAS benchmark.',
-    proposalDocument: {
-      id: 'doc-prop-005',
-      name: 'CloudMatrix_Q4_Paid_Acquisition_Pitch.pdf',
-      size: 4500000,
-      type: 'application/pdf',
-      uploadedAt: '2026-09-15T14:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1CloudMatrix-Pitch/view',
-      notes: 'Funnel economics, creative ad copies, and tracking pixel architecture.',
-    },
-    proposalDocumentNotes: 'Funnel economics, creative ad copies, and tracking pixel architecture.',
-    contractDocument: {
-      id: 'doc-cont-005',
-      name: 'CloudMatrix_Marketing_Retainer_Agreement.pdf',
-      size: 2800000,
-      type: 'application/pdf',
-      uploadedAt: '2026-09-25T11:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1CloudMatrix-Retainer/view',
-      notes: '2-month performance retainer agreement with weekly KPI check-ins.',
-    },
-    contractDocumentNotes: '2-month performance retainer agreement with weekly KPI check-ins.',
-    paymentPhases: [
-      {
-        id: 'phase-005-1',
-        name: 'Phase 1 - Month 1 Retainer Advance',
-        percentage: 50,
-        amount: 145000,
-        amountINR: 145000,
-        dueDate: '2026-10-05',
-        status: 'Invoiced',
-        notes: 'Month 1 campaign setup and creative design fee.',
-      },
-      {
-        id: 'phase-005-2',
-        name: 'Phase 2 - Month 2 Retainer & Optimization Fee',
-        percentage: 50,
-        amount: 145000,
-        amountINR: 145000,
-        dueDate: '2026-11-01',
-        status: 'Pending',
-        notes: 'Month 2 ad scale and conversion rate optimization fee.',
-      },
-    ],
-    createdAt: '2026-10-01T09:30:00Z',
-    updatedAt: '2026-10-13T10:00:00Z',
-  },
-  {
-    id: 'DDI - BHARAT RETAIL VENTURES PVT LTD - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-006',
-    clientName: 'Bharat Retail Ventures Pvt Ltd',
-    serviceId: 'SRV-001',
-    proposalDate: '2026-04-15',
-    contractDate: '2026-05-01',
-    startDate: '2026-05-10',
-    committedDays: 46,
-    committedEndDate: '2026-06-25',
-    actualEndDate: '2026-06-24',
-    status: 'Completed',
-    paymentMode: 'GST Invoice',
-    currency: 'INR',
-    contract: 520000,
-    exchangeRate: 1,
-    contractValue: 520000,
-    totalReceived: 520000,
-    balance: 0,
-    projectManager: 'Karthik Ramanathan',
-    notes: 'Successfully deployed on Vercel and AWS RDS with automated stock synchronization.',
-    proposalDocument: {
-      id: 'doc-prop-006',
-      name: 'Bharat_Retail_ECommerce_Modernization_Proposal.pdf',
-      size: 3200000,
-      type: 'application/pdf',
-      uploadedAt: '2026-04-15T09:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1BharatRetail-Proposal/view',
-      notes: 'Omnichannel inventory sync and POS integration proposal.',
-    },
-    proposalDocumentNotes: 'Omnichannel inventory sync and POS integration proposal.',
-    contractDocument: {
-      id: 'doc-cont-006',
-      name: 'Bharat_Retail_Executed_Development_Agreement.pdf',
-      size: 4100000,
-      type: 'application/pdf',
-      uploadedAt: '2026-05-01T16:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/1BharatRetail-Signed/view',
-      notes: 'Warranty and post-launch maintenance agreement.',
-    },
-    contractDocumentNotes: 'Warranty and post-launch maintenance agreement.',
-    paymentPhases: [
-      {
-        id: 'phase-006-1',
-        name: 'Phase 1 - Advance / Architecture & Schemas',
-        percentage: 40,
-        amount: 208000,
-        amountINR: 208000,
-        dueDate: '2026-05-15',
-        status: 'Received',
-        notes: '40% advance cleared on project kickoff.',
-      },
-      {
-        id: 'phase-006-2',
-        name: 'Phase 2 - Product Catalog & Payment Gateway',
-        percentage: 30,
-        amount: 156000,
-        amountINR: 156000,
-        dueDate: '2026-06-05',
-        status: 'Received',
-        notes: 'Catalog sync and checkout pipeline approved.',
-      },
-      {
-        id: 'phase-006-3',
-        name: 'Phase 3 - Go-Live & AWS Deployment',
-        percentage: 30,
-        amount: 156000,
-        amountINR: 156000,
-        dueDate: '2026-06-24',
-        status: 'Received',
-        notes: 'Final settlement cleared after production deployment.',
-      },
-    ],
-    createdAt: '2026-05-10T09:00:00Z',
-    updatedAt: '2026-06-26T12:00:00Z',
-  },
 ];
 
-const INITIAL_PAYMENTS: Payment[] = [
+const DDI_PAYMENTS: Payment[] = [
   {
     id: 'DDI-PAY-001',
+    brand: 'Device Doctor India',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
     paymentMode: 'GST Invoice',
     paymentDate: '2026-07-01',
@@ -703,16 +447,6 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'Sprint 1 kickoff advance cleared in bank.',
-    paymentProof: {
-      id: 'proof-pay-001',
-      name: 'Zenith_HDFC_NEFT_Receipt_200k.png',
-      size: 345000,
-      type: 'image/png',
-      uploadedAt: '2026-07-01T10:15:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-hdfc-neft-receipt/view',
-      notes: 'HDFC Corporate NetBanking NEFT advice verified by accounts desk.',
-    },
-    paymentProofNotes: 'HDFC Corporate NetBanking NEFT advice verified by accounts desk.',
     createdAt: '2026-07-01T10:00:00Z',
     updatedAt: '2026-09-16T10:00:00Z',
     amount: 200000,
@@ -722,8 +456,9 @@ const INITIAL_PAYMENTS: Payment[] = [
   },
   {
     id: 'DDI-PAY-002',
+    brand: 'Device Doctor India',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
     paymentMode: 'GST Invoice',
     paymentDate: '2026-09-01',
@@ -745,8 +480,9 @@ const INITIAL_PAYMENTS: Payment[] = [
   },
   {
     id: 'DDI-PAY-003',
+    brand: 'Device Doctor India',
     projectId: 'DDI - CYBERSHIELD FINTECH LABS - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-002',
+    clientId: 'DDI-CL-002',
     clientName: 'CyberShield Fintech Labs',
     paymentMode: 'Non GST Online',
     paymentDate: '2026-08-10',
@@ -759,16 +495,6 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: 'API architecture milestone sign-off received.',
-    paymentProof: {
-      id: 'proof-pay-003',
-      name: 'CyberShield_ICICI_IMPS_Screenshot.png',
-      size: 420000,
-      type: 'image/png',
-      uploadedAt: '2026-08-10T11:15:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-icici-imps-screenshot/view',
-      notes: 'IMPS payment advice received with bank UTR confirmation reference.',
-    },
-    paymentProofNotes: 'IMPS payment advice received with bank UTR confirmation reference.',
     createdAt: '2026-08-10T11:00:00Z',
     updatedAt: '2026-10-01T09:00:00Z',
     amount: 250000,
@@ -778,8 +504,9 @@ const INITIAL_PAYMENTS: Payment[] = [
   },
   {
     id: 'DDI-PAY-004',
+    brand: 'Device Doctor India',
     projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
-    clientId: 'CL-003',
+    clientId: 'DDI-CL-003',
     clientName: 'TechNova Enterprise Solutions',
     paymentMode: 'GST Invoice',
     paymentDate: '2026-09-01',
@@ -792,16 +519,6 @@ const INITIAL_PAYMENTS: Payment[] = [
     paymentStatus: 'Received',
     daysOverdue: 0,
     notes: '50% initial contract advance for mobile application build.',
-    paymentProof: {
-      id: 'proof-pay-004',
-      name: 'TechNova_AxisBank_Transfer_Voucher.png',
-      size: 512000,
-      type: 'image/png',
-      uploadedAt: '2026-09-01T09:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-axis-transfer-receipt/view',
-      notes: 'Axis Bank RTGS corporate remittance confirmation attached.',
-    },
-    paymentProofNotes: 'Axis Bank RTGS corporate remittance confirmation attached.',
     createdAt: '2026-09-01T09:00:00Z',
     updatedAt: '2026-09-05T14:00:00Z',
     amount: 440000,
@@ -809,100 +526,12 @@ const INITIAL_PAYMENTS: Payment[] = [
     outstandingAmount: 0,
     paymentMethod: 'GST Invoice',
   },
-  {
-    id: 'DDI-PAY-005',
-    projectId: 'DDI - APEX SUPER-SPECIALITY HOSPITAL - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-004',
-    clientName: 'Apex Super-Speciality Hospital',
-    paymentMode: 'Non GST Online',
-    paymentDate: '2026-09-18',
-    dueDate: '2026-09-20',
-    amountReceived: 190000,
-    currency: 'INR',
-    exchangeRate: 1,
-    amountINR: 190000,
-    referenceUtr: 'UPI-SBI-6617283940',
-    paymentStatus: 'Received',
-    daysOverdue: 0,
-    notes: 'Telemedicine integration milestone payment.',
-    paymentProof: {
-      id: 'proof-pay-005',
-      name: 'Apex_Hospital_SBI_UPI_Receipt.png',
-      size: 380000,
-      type: 'image/png',
-      uploadedAt: '2026-09-18T12:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-sbi-upi-receipt/view',
-      notes: 'State Bank UPI merchant clearance verified with accounts.',
-    },
-    paymentProofNotes: 'State Bank UPI merchant clearance verified with accounts.',
-    createdAt: '2026-09-18T12:00:00Z',
-    updatedAt: '2026-09-19T10:30:00Z',
-    amount: 190000,
-    receivedAmount: 190000,
-    outstandingAmount: 0,
-    paymentMethod: 'Non GST Online',
-  },
-  {
-    id: 'DDI-PAY-006',
-    projectId: 'DDI - CLOUDMATRIX INFOTECH PUNE - PERFORMANCE MARKETING (META & GOOGLE ADS) - 1',
-    clientId: 'CL-005',
-    clientName: 'CloudMatrix Infotech Pune',
-    paymentMode: 'Non GST Online',
-    paymentDate: '2026-10-01',
-    dueDate: '2026-10-10',
-    amountReceived: 100000,
-    currency: 'INR',
-    exchangeRate: 1,
-    amountINR: 100000,
-    referenceUtr: 'STRIPE-CHG-554182903',
-    paymentStatus: 'Pending',
-    daysOverdue: calculateDaysOverdue('2026-10-10', 'Pending'),
-    notes: 'Ad spend management retainer invoice awaiting approval.',
-    createdAt: '2026-10-01T10:00:00Z',
-    updatedAt: '2026-10-01T10:00:00Z',
-    amount: 100000,
-    receivedAmount: 0,
-    outstandingAmount: 100000,
-    paymentMethod: 'Non GST Online',
-  },
-  {
-    id: 'DDI-PAY-007',
-    projectId: 'DDI - BHARAT RETAIL VENTURES PVT LTD - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-006',
-    clientName: 'Bharat Retail Ventures Pvt Ltd',
-    paymentMode: 'GST Invoice',
-    paymentDate: '2026-06-25',
-    dueDate: '2026-06-30',
-    amountReceived: 520000,
-    currency: 'INR',
-    exchangeRate: 1,
-    amountINR: 520000,
-    referenceUtr: 'UTR-KOTK-4418290192',
-    paymentStatus: 'Received',
-    daysOverdue: 0,
-    notes: 'Complete project sign-off and final settlement.',
-    paymentProof: {
-      id: 'proof-pay-007',
-      name: 'Bharat_Retail_Kotak_NEFT_Settlement.pdf',
-      size: 470000,
-      type: 'application/pdf',
-      uploadedAt: '2026-06-25T14:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-kotak-neft-pdf/view',
-      notes: 'Final settlement RTGS payment advice verified by finance head.',
-    },
-    paymentProofNotes: 'Final settlement RTGS payment advice verified by finance head.',
-    createdAt: '2026-05-10T10:00:00Z',
-    updatedAt: '2026-07-12T16:00:00Z',
-    amount: 520000,
-    receivedAmount: 520000,
-    outstandingAmount: 0,
-    paymentMethod: 'GST Invoice',
-  },
 ];
 
-const INITIAL_ROLES: EmployeeRole[] = [
+const DDI_ROLES: EmployeeRole[] = [
   {
-    id: 'ROL-001',
+    id: 'DDI-ROL-001',
+    brand: 'Device Doctor India',
     roleName: 'Full-Stack Developer',
     department: 'Software Engineering',
     status: 'Active',
@@ -911,7 +540,8 @@ const INITIAL_ROLES: EmployeeRole[] = [
     updatedAt: '2025-01-01T00:00:00Z',
   },
   {
-    id: 'ROL-002',
+    id: 'DDI-ROL-002',
+    brand: 'Device Doctor India',
     roleName: 'App Developer',
     department: 'Mobile Engineering',
     status: 'Active',
@@ -920,7 +550,8 @@ const INITIAL_ROLES: EmployeeRole[] = [
     updatedAt: '2025-01-01T00:00:00Z',
   },
   {
-    id: 'ROL-003',
+    id: 'DDI-ROL-003',
+    brand: 'Device Doctor India',
     roleName: 'UI/UX Designer',
     department: 'Product Design',
     status: 'Active',
@@ -928,40 +559,14 @@ const INITIAL_ROLES: EmployeeRole[] = [
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
   },
-  {
-    id: 'ROL-004',
-    roleName: 'SEO Specialist',
-    department: 'Digital Marketing & Growth',
-    status: 'Active',
-    description: 'Technical SEO audits, organic growth strategies, Google & Meta PPC ads, search visibility, and conversion funnels.',
-    createdAt: '2025-01-01T00:00:00Z',
-    updatedAt: '2025-01-01T00:00:00Z',
-  },
-  {
-    id: 'ROL-005',
-    roleName: 'Project Manager',
-    department: 'Delivery & Agile Operations',
-    status: 'Active',
-    description: 'Client communications, sprint planning, milestone delivery, resource allocation, and QA sign-offs.',
-    createdAt: '2025-01-01T00:00:00Z',
-    updatedAt: '2025-01-01T00:00:00Z',
-  },
-  {
-    id: 'ROL-006',
-    roleName: 'Cloud & DevOps Engineer',
-    department: 'Cloud Solutions & DevOps',
-    status: 'Active',
-    description: 'AWS/GCP infrastructure, Kubernetes orchestration, CI/CD automated deployment pipelines, and cloud security.',
-    createdAt: '2025-01-01T00:00:00Z',
-    updatedAt: '2025-01-01T00:00:00Z',
-  },
 ];
 
-const INITIAL_EMPLOYEES: Employee[] = [
+const DDI_EMPLOYEES: Employee[] = [
   {
     id: 'DDI-EMP-001',
+    brand: 'Device Doctor India',
     name: 'Karthik Ramanathan',
-    roleId: 'ROL-001',
+    roleId: 'DDI-ROL-001',
     email: 'karthik.r@devicedoctor.in',
     status: 'Active',
     joiningDate: '2024-02-15',
@@ -973,14 +578,15 @@ const INITIAL_EMPLOYEES: Employee[] = [
     salary: 105000,
     monthlyCost: 105000,
     phone: '+91 98450 12890',
-    assignedProjectsCount: 4,
+    assignedProjectsCount: 3,
     createdAt: '2024-02-15T09:00:00Z',
     updatedAt: '2026-09-01T10:00:00Z',
   },
   {
     id: 'DDI-EMP-002',
+    brand: 'Device Doctor India',
     name: 'Deepak Varma',
-    roleId: 'ROL-002',
+    roleId: 'DDI-ROL-002',
     email: 'deepak.v@devicedoctor.in',
     status: 'Active',
     joiningDate: '2024-06-01',
@@ -992,90 +598,15 @@ const INITIAL_EMPLOYEES: Employee[] = [
     salary: 95000,
     monthlyCost: 95000,
     phone: '+91 97110 44556',
-    assignedProjectsCount: 3,
+    assignedProjectsCount: 2,
     createdAt: '2024-06-01T09:00:00Z',
     updatedAt: '2026-09-01T10:00:00Z',
   },
   {
     id: 'DDI-EMP-003',
-    name: 'Sunita Menon',
-    roleId: 'ROL-003',
-    email: 'sunita.m@devicedoctor.in',
-    status: 'Active',
-    joiningDate: '2024-09-10',
-    costOfEmployee: 88000,
-    employeeType: 'Salary Basis',
-    comesUnderTds: 'Yes',
-    notes: 'Product designer specializing in clean SaaS dashboards and mobile design systems in Figma.',
-    joinedDate: '2024-09-10',
-    salary: 88000,
-    monthlyCost: 88000,
-    phone: '+91 99203 77812',
-    assignedProjectsCount: 4,
-    createdAt: '2024-09-10T09:00:00Z',
-    updatedAt: '2026-09-01T10:00:00Z',
-  },
-  {
-    id: 'DDI-EMP-004',
-    name: 'Arjun Singhania',
-    roleId: 'ROL-004',
-    email: 'arjun.s@devicedoctor.in',
-    status: 'Active',
-    joiningDate: '2025-01-20',
-    costOfEmployee: 82000,
-    employeeType: 'Salary Basis',
-    comesUnderTds: 'Yes',
-    notes: 'Handles Google Ads, Meta campaigns, technical on-page SEO, and backlink outreach.',
-    joinedDate: '2025-01-20',
-    salary: 82000,
-    monthlyCost: 82000,
-    phone: '+91 98104 55902',
-    assignedProjectsCount: 5,
-    createdAt: '2025-01-20T09:00:00Z',
-    updatedAt: '2026-09-01T10:00:00Z',
-  },
-  {
-    id: 'DDI-EMP-005',
-    name: 'Meera Iyer',
-    roleId: 'ROL-005',
-    email: 'meera.i@devicedoctor.in',
-    status: 'Active',
-    joiningDate: '2025-04-12',
-    costOfEmployee: 110000,
-    employeeType: 'Salary Basis',
-    comesUnderTds: 'Yes',
-    notes: 'PMP certified. Oversees sprint planning, client communications, and on-time milestone delivery.',
-    joinedDate: '2025-04-12',
-    salary: 110000,
-    monthlyCost: 110000,
-    phone: '+91 94451 88204',
-    assignedProjectsCount: 3,
-    createdAt: '2025-04-12T09:00:00Z',
-    updatedAt: '2026-09-01T10:00:00Z',
-  },
-  {
-    id: 'DDI-EMP-006',
-    name: 'Vikram Joshi',
-    roleId: 'ROL-006',
-    email: 'vikram.j@devicedoctor.in',
-    status: 'Active',
-    joiningDate: '2025-08-01',
-    costOfEmployee: 65000,
-    employeeType: 'Contract Basis',
-    comesUnderTds: 'No',
-    notes: 'External cloud infrastructure consultant for Kubernetes clusters and CI/CD pipelines.',
-    joinedDate: '2025-08-01',
-    salary: 65000,
-    monthlyCost: 65000,
-    phone: '+91 98331 44229',
-    assignedProjectsCount: 2,
-    createdAt: '2025-08-01T09:00:00Z',
-    updatedAt: '2026-09-01T10:00:00Z',
-  },
-  {
-    id: 'DDI-EMP-007',
+    brand: 'Device Doctor India',
     name: 'Saumya Khandelwal',
-    roleId: 'ROL-003',
+    roleId: 'DDI-ROL-003',
     email: 'saumya.k@devicedoctor.in',
     status: 'Active',
     joiningDate: '2024-09-01',
@@ -1087,17 +618,18 @@ const INITIAL_EMPLOYEES: Employee[] = [
     salary: 85000,
     monthlyCost: 85000,
     phone: '+91 98201 33490',
-    assignedProjectsCount: 4,
+    assignedProjectsCount: 2,
     createdAt: '2024-09-01T09:00:00Z',
     updatedAt: '2026-09-01T10:00:00Z',
   },
 ];
 
-const INITIAL_ASSIGNMENTS: Assignment[] = [
+const DDI_ASSIGNMENTS: Assignment[] = [
   {
     id: 'DDI-ASN-001',
+    brand: 'Device Doctor India',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
     employeeId: 'DDI-EMP-001',
     employeeName: 'Karthik Ramanathan',
@@ -1107,124 +639,36 @@ const INITIAL_ASSIGNMENTS: Assignment[] = [
     amount: 180000,
     amountPaid: 180000,
     paymentStatus: 'Paid',
-    employeeNotes: 'Completed driver dispatch APIs, JWT auth tokens, and warehouse webhook listeners. Fully tested in staging.',
+    employeeNotes: 'Completed driver dispatch APIs, JWT auth tokens, and warehouse webhook listeners.',
     lastNoteUpdate: '2026-07-28 17:30',
     createdAt: '2026-07-02T10:00:00Z',
     updatedAt: '2026-07-28T17:30:00Z',
   },
   {
     id: 'DDI-ASN-002',
-    projectId: 'DDI - CYBERSHIELD FINTECH LABS - CLOUD INFRASTRUCTURE & DEVSECOPS - 1',
-    clientId: 'CL-002',
-    clientName: 'CyberShield Fintech Labs',
-    employeeId: 'DDI-EMP-003',
-    employeeName: 'Sunita Menon',
-    roleName: 'UI/UX Designer',
-    assignedDate: '2026-08-05',
-    workAssigned: 'Security Incident Dashboard & Audit Log UI Wireframes',
-    amount: 95000,
-    amountPaid: 50000,
-    paymentStatus: 'Partially Paid',
-    employeeNotes: 'Delivered high-fidelity Figma components for threat visualization and audit logs. Milestone 1 sign-off achieved.',
-    lastNoteUpdate: '2026-08-20 14:15',
-    createdAt: '2026-08-05T11:00:00Z',
-    updatedAt: '2026-08-20T14:15:00Z',
-  },
-  {
-    id: 'DDI-ASN-003',
-    projectId: 'DDI - CLOUDMATRIX INFOTECH PUNE - PERFORMANCE MARKETING (META & GOOGLE ADS) - 1',
-    clientId: 'CL-005',
-    clientName: 'CloudMatrix Infotech Pune',
+    brand: 'Device Doctor India',
+    projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
+    clientId: 'DDI-CL-003',
+    clientName: 'TechNova Enterprise Solutions',
     employeeId: 'DDI-EMP-002',
     employeeName: 'Deepak Varma',
-    roleName: 'Mobile App Developer',
-    assignedDate: '2026-10-02',
-    workAssigned: 'Ad Conversion Tracking SDK Integration & Mobile Deep Links',
-    amount: 75000,
-    amountPaid: 0,
-    paymentStatus: 'Pending',
-    employeeNotes: 'Configuring Branch.io deep linking and Google Analytics 4 conversion triggers in Flutter app.',
-    lastNoteUpdate: '2026-10-05 11:45',
-    createdAt: '2026-10-02T09:30:00Z',
-    updatedAt: '2026-10-05T11:45:00Z',
-  },
-  {
-    id: 'DDI-ASN-004',
-    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
-    clientName: 'Zenith Logistics & Supply Chain Ltd',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    roleName: 'UI/UX Designer',
-    assignedDate: '2026-06-15',
-    workAssigned: 'Admin CRM Component Design & Typography System',
-    amount: 5000,
-    amountPaid: 5000,
-    paymentStatus: 'Paid',
-    employeeNotes: 'Figma layout tokens and design specifications delivered and signed off.',
-    lastNoteUpdate: '2026-06-30 16:00',
-    createdAt: '2026-06-15T09:00:00Z',
-    updatedAt: '2026-06-30T16:00:00Z',
-  },
-  {
-    id: 'DDI-ASN-005',
-    projectId: 'DDI - CYBERSHIELD FINTECH LABS - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-002',
-    clientName: 'CyberShield Fintech Labs',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    roleName: 'UI/UX Designer',
-    assignedDate: '2026-07-10',
-    workAssigned: 'Authentication Flow & Responsive Wireframes',
-    amount: 5000,
-    amountPaid: 5000,
-    paymentStatus: 'Paid',
-    employeeNotes: 'Client MFA wireframes and mobile views completed.',
-    lastNoteUpdate: '2026-07-25 15:30',
-    createdAt: '2026-07-10T10:00:00Z',
-    updatedAt: '2026-07-25T15:30:00Z',
-  },
-  {
-    id: 'DDI-ASN-006',
-    projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
-    clientId: 'CL-003',
-    clientName: 'TechNova Enterprise Solutions',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    roleName: 'UI/UX Designer',
-    assignedDate: '2026-08-02',
-    workAssigned: 'Mobile App Navigation & Dark Theme Design Tokens',
-    amount: 5000,
-    amountPaid: 5000,
-    paymentStatus: 'Paid',
-    employeeNotes: 'Exported Flutter SVG asset catalog and color schemes.',
-    lastNoteUpdate: '2026-08-20 18:00',
-    createdAt: '2026-08-02T11:00:00Z',
-    updatedAt: '2026-08-20T18:00:00Z',
-  },
-  {
-    id: 'DDI-ASN-007',
-    projectId: 'DDI - BHARAT RETAIL VENTURES PVT LTD - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-006',
-    clientName: 'Bharat Retail Ventures Pvt Ltd',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    roleName: 'UI/UX Designer',
-    assignedDate: '2026-09-05',
-    workAssigned: 'E-commerce Checkout UI Design & Prototypes',
-    amount: 5000,
-    amountPaid: 5000,
-    paymentStatus: 'Paid',
-    employeeNotes: 'Interactive Figma checkout prototype tested with client stakeholders.',
-    lastNoteUpdate: '2026-09-22 17:00',
-    createdAt: '2026-09-05T09:30:00Z',
-    updatedAt: '2026-09-22T17:00:00Z',
+    roleName: 'App Developer',
+    assignedDate: '2026-09-02',
+    workAssigned: 'Flutter Native Storage & Multi-tenant State Architecture',
+    amount: 140000,
+    amountPaid: 70000,
+    paymentStatus: 'Partially Paid',
+    employeeNotes: 'Offline state cache and push notifications active.',
+    lastNoteUpdate: '2026-09-25 15:00',
+    createdAt: '2026-09-02T09:00:00Z',
+    updatedAt: '2026-09-25T15:00:00Z',
   },
 ];
 
-const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
+const DDI_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
   {
     id: 'DDI-EPAY-001',
+    brand: 'Device Doctor India',
     assignmentId: 'DDI-ASN-001',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
     employeeId: 'DDI-EMP-001',
@@ -1234,21 +678,12 @@ const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
     paymentMode: 'GST Invoice',
     referenceUtr: 'EPAY-NEFT-991823101',
     notes: 'Milestone 1 driver dispatch backend APIs payout cleared.',
-    paymentProof: {
-      id: 'proof-epay-001',
-      name: 'Karthik_R_Salary_Voucher_NEFT.png',
-      size: 285000,
-      type: 'image/png',
-      uploadedAt: '2026-07-15T10:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-epay-voucher-1/view',
-      notes: 'NEFT payout voucher processed through corporate payroll gateway.',
-    },
-    paymentProofNotes: 'NEFT payout voucher processed through corporate payroll gateway.',
     createdAt: '2026-07-15T10:00:00Z',
     updatedAt: '2026-07-15T10:00:00Z',
   },
   {
     id: 'DDI-EPAY-002',
+    brand: 'Device Doctor India',
     assignmentId: 'DDI-ASN-001',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
     employeeId: 'DDI-EMP-001',
@@ -1258,96 +693,15 @@ const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
     paymentMode: 'Non GST Online',
     referenceUtr: 'EPAY-UPI-202607281144',
     notes: 'Final sprint sign-off compensation for Zenith logistics ERP.',
-    paymentProof: {
-      id: 'proof-epay-002',
-      name: 'PhonePe_UPI_Karthik_80000.png',
-      size: 310000,
-      type: 'image/png',
-      uploadedAt: '2026-07-28T16:15:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-phonepe-upi-screenshot/view',
-      notes: 'PhonePe UPI business payout confirmation screenshot verified.',
-    },
-    paymentProofNotes: 'PhonePe UPI business payout confirmation screenshot verified.',
     createdAt: '2026-07-28T16:00:00Z',
     updatedAt: '2026-07-28T16:00:00Z',
   },
-  {
-    id: 'DDI-EPAY-003',
-    assignmentId: 'DDI-ASN-002',
-    projectId: 'DDI - CYBERSHIELD FINTECH LABS - CLOUD INFRASTRUCTURE & DEVSECOPS - 1',
-    employeeId: 'DDI-EMP-003',
-    employeeName: 'Sunita Menon',
-    paymentDate: '2026-08-20',
-    amountPaid: 50000,
-    paymentMode: 'Cash',
-    referenceUtr: 'EPAY-IMPS-88273619',
-    notes: 'Threat monitoring dashboard UI component delivery payout.',
-    paymentProof: {
-      id: 'proof-epay-003',
-      name: 'Sunita_Menon_Cash_Voucher_Signed.png',
-      size: 215000,
-      type: 'image/png',
-      uploadedAt: '2026-08-20T14:30:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-cash-receipt-voucher/view',
-      notes: 'Signed petty cash disbursement receipt voucher verified by finance.',
-    },
-    paymentProofNotes: 'Signed petty cash disbursement receipt voucher verified by finance.',
-    createdAt: '2026-08-20T14:00:00Z',
-    updatedAt: '2026-08-20T14:00:00Z',
-  },
-  {
-    id: 'DDI-EPAY-004',
-    assignmentId: 'DDI-ASN-004',
-    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    paymentDate: '2026-07-20',
-    amountPaid: 10000,
-    paymentMode: 'Non GST Online',
-    referenceUtr: 'EPAY-UPI-202607204419',
-    notes: 'Design tokens and component design milestone cleared.',
-    paymentProof: {
-      id: 'proof-epay-004',
-      name: 'GooglePay_UPI_Saumya_10000.png',
-      size: 260000,
-      type: 'image/png',
-      uploadedAt: '2026-07-20T12:15:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-gpay-saumya-screenshot/view',
-      notes: 'Google Pay UPI transaction confirmation screenshot attached.',
-    },
-    paymentProofNotes: 'Google Pay UPI transaction confirmation screenshot attached.',
-    createdAt: '2026-07-20T12:00:00Z',
-    updatedAt: '2026-07-20T12:00:00Z',
-  },
-  {
-    id: 'DDI-EPAY-005',
-    assignmentId: 'DDI-ASN-006',
-    projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
-    employeeId: 'DDI-EMP-007',
-    employeeName: 'Saumya Khandelwal',
-    paymentDate: '2026-09-15',
-    amountPaid: 10000,
-    paymentMode: 'Non GST Online',
-    referenceUtr: 'EPAY-UPI-202609159921',
-    notes: 'Mobile app navigation and design specs milestone cleared.',
-    paymentProof: {
-      id: 'proof-epay-005',
-      name: 'Paytm_UPI_Saumya_10000.png',
-      size: 245000,
-      type: 'image/png',
-      uploadedAt: '2026-09-15T15:00:00Z',
-      externalUrl: 'https://drive.google.com/file/d/sample-paytm-receipt/view',
-      notes: 'Paytm UPI transfer advice cleared and acknowledged by employee.',
-    },
-    paymentProofNotes: 'Paytm UPI transfer advice cleared and acknowledged by employee.',
-    createdAt: '2026-09-15T14:30:00Z',
-    updatedAt: '2026-09-15T14:30:00Z',
-  },
 ];
 
-const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+const DDI_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   {
     id: 'DDI-EXPCAT-001',
+    brand: 'Device Doctor India',
     name: 'Hosting',
     description: 'Web hosting, VPS, dedicated servers, and CDN hosting services.',
     status: 'Active',
@@ -1356,6 +710,7 @@ const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   },
   {
     id: 'DDI-EXPCAT-002',
+    brand: 'Device Doctor India',
     name: 'Domain',
     description: 'Domain name registration, DNS renewals, and SSL certification costs.',
     status: 'Active',
@@ -1364,101 +719,23 @@ const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   },
   {
     id: 'DDI-EXPCAT-003',
-    name: 'Software / Subscription',
-    description: 'Software licenses, Figma, GitHub, Jira, IDEs, and monthly SaaS subscriptions.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-004',
-    name: 'Advertising',
-    description: 'Meta Ads, Google Ads, LinkedIn marketing, and client performance campaigns.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-005',
-    name: 'Freelancer',
-    description: 'External contractors, specialist developer payouts, and 3D / motion artists.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-006',
-    name: 'Travel',
-    description: 'Local transit, cab fares, outstation client visits, and flight tickets.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-007',
-    name: 'Client Meeting',
-    description: 'Client hospitality, business lunches, stakeholder refreshments, and conferences.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-008',
+    brand: 'Device Doctor India',
     name: 'Server / Cloud',
     description: 'AWS, Google Cloud Platform, Azure VMs, container clusters, and storage.',
     status: 'Active',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   },
-  {
-    id: 'DDI-EXPCAT-009',
-    name: 'API / Service',
-    description: 'Third-party developer APIs, OpenAI / Gemini tokens, SMS gateways, and webhook services.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-010',
-    name: 'Printing',
-    description: 'Marketing collateral, visiting cards, client contracts, and banner prints.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-011',
-    name: 'Office',
-    description: 'Office lease rent, broadband internet, power utilities, and facility maintenance.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-012',
-    name: 'Other',
-    description: 'Miscellaneous operational expenses and unforeseen contingency expenditures.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
-  {
-    id: 'DDI-EXPCAT-013',
-    name: 'Salary',
-    description: 'Core in-house employee monthly salaries and statutory allowances.',
-    status: 'Active',
-    createdAt: '2026-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
-  },
 ];
 
-const INITIAL_EXPENSES: Expense[] = [
+const DDI_EXPENSES: Expense[] = [
   {
     id: 'DDI-EXP-001',
-    projectId: 'DDI - CYBERSHIELD FINTECH LABS - CLOUD INFRASTRUCTURE & DEVSECOPS - 1',
-    clientId: 'CL-002',
-    clientName: 'CyberShield Fintech Labs',
-    expenseCategoryId: 'DDI-EXPCAT-008',
+    brand: 'Device Doctor India',
+    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
+    clientId: 'DDI-CL-001',
+    clientName: 'Zenith Logistics & Supply Chain Ltd',
+    expenseCategoryId: 'DDI-EXPCAT-003',
     expenseCategoryName: 'Server / Cloud',
     vendor: 'Amazon Web Services (AWS)',
     description: 'Dedicated Kubernetes cluster node pools & CloudWatch audit logging instances.',
@@ -1468,14 +745,15 @@ const INITIAL_EXPENSES: Expense[] = [
     amountINR: 29575,
     expenseDate: '2026-08-15',
     paymentStatus: 'Paid',
-    notes: 'Billed to CyberShield Fintech Labs dedicated cloud staging environment.',
+    notes: 'Billed to Zenith Logistics cloud staging environment.',
     createdAt: '2026-08-15T10:00:00Z',
     updatedAt: '2026-08-15T10:00:00Z',
   },
   {
     id: 'DDI-EXP-002',
+    brand: 'Device Doctor India',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
     expenseCategoryId: 'DDI-EXPCAT-002',
     expenseCategoryName: 'Domain',
@@ -1487,37 +765,19 @@ const INITIAL_EXPENSES: Expense[] = [
     amountINR: 6800,
     expenseDate: '2026-07-10',
     paymentStatus: 'Paid',
-    notes: 'Primary and webhook driver portal domains registered for Zenith Logistics ERP.',
+    notes: 'Primary and webhook driver portal domains registered.',
     createdAt: '2026-07-10T11:00:00Z',
     updatedAt: '2026-07-10T11:00:00Z',
   },
-  {
-    id: 'DDI-EXP-003',
-    projectId: 'NA',
-    clientId: 'NA',
-    clientName: 'NA',
-    expenseCategoryId: 'DDI-EXPCAT-003',
-    expenseCategoryName: 'Software / Subscription',
-    vendor: 'Figma Inc',
-    description: 'Annual agency team design seats and FigJam enterprise collaboration license.',
-    amount: 45000,
-    currency: 'INR',
-    exchangeRate: 1,
-    amountINR: 45000,
-    expenseDate: '2026-09-05',
-    paymentStatus: 'Pending',
-    notes: 'Monthly software subscription invoice pending corporate account card clearance.',
-    createdAt: '2026-09-05T09:30:00Z',
-    updatedAt: '2026-09-05T09:30:00Z',
-  },
 ];
 
-const INITIAL_GST_INVOICES: GstInvoice[] = [
+const DDI_GST_INVOICES: GstInvoice[] = [
   {
     id: 'DDI-GST-001',
+    brand: 'Device Doctor India',
     paymentId: 'DDI-PAY-001',
     projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
+    clientId: 'DDI-CL-001',
     clientName: 'Zenith Logistics & Supply Chain Ltd',
     paymentDate: '2026-07-01',
     amountReceived: 200000,
@@ -1533,27 +793,10 @@ const INITIAL_GST_INVOICES: GstInvoice[] = [
   },
   {
     id: 'DDI-GST-002',
-    paymentId: 'DDI-PAY-007',
-    projectId: 'DDI - BHARAT RETAIL VENTURES PVT LTD - FULL-STACK REACT & NODE.JS WEB APP - 1',
-    clientId: 'CL-006',
-    clientName: 'Bharat Retail Ventures Pvt Ltd',
-    paymentDate: '2026-06-25',
-    amountReceived: 520000,
-    currency: 'INR',
-    amountINR: 520000,
-    gstAmountINR: 93600,
-    invoiceNumber: 'INV-2026-002',
-    uploadedToGstPortal: 'Yes',
-    gstPortalUploadDate: '2026-07-10',
-    notes: 'Bharat Retail Ventures Q1 final invoice uploaded to GST portal.',
-    createdAt: '2026-06-25T10:00:00Z',
-    updatedAt: '2026-07-10T14:00:00Z',
-  },
-  {
-    id: 'DDI-GST-003',
+    brand: 'Device Doctor India',
     paymentId: 'DDI-PAY-004',
     projectId: 'DDI - TECHNOVA ENTERPRISE SOLUTIONS - FLUTTER IOS/ANDROID APP DEVELOPMENT - 1',
-    clientId: 'CL-003',
+    clientId: 'DDI-CL-003',
     clientName: 'TechNova Enterprise Solutions',
     paymentDate: '2026-09-01',
     amountReceived: 440000,
@@ -1563,34 +806,1466 @@ const INITIAL_GST_INVOICES: GstInvoice[] = [
     invoiceNumber: 'INV-2026-003',
     uploadedToGstPortal: 'No',
     gstPortalUploadDate: '',
-    notes: 'TechNova mobile advance invoice created in Zoho Books; pending upload to GST portal.',
+    notes: 'TechNova advance invoice in Zoho Books.',
     createdAt: '2026-09-01T09:00:00Z',
     updatedAt: '2026-09-01T09:00:00Z',
   },
+];
+
+// ============================================================================
+// 2. BRAND 2: CODESTRO (Prefix: CDS) — SaaS & Software Development Agency
+// ============================================================================
+const CDS_CLIENTS: Client[] = [
   {
-    id: 'DDI-GST-004',
-    paymentId: 'DDI-PAY-002',
-    projectId: 'DDI - ZENITH LOGISTICS & SUPPLY CHAIN LTD - CUSTOM ERP & CRM DEVELOPMENT - 1',
-    clientId: 'CL-001',
-    clientName: 'Zenith Logistics & Supply Chain Ltd',
-    paymentDate: '2026-09-01',
-    amountReceived: 150000,
-    currency: 'INR',
-    amountINR: 150000,
-    gstAmountINR: 27000,
-    invoiceNumber: 'INV-2026-004',
-    uploadedToGstPortal: 'No',
-    gstPortalUploadDate: '',
-    notes: 'Zenith Logistics milestone 2 invoice drafted in Zoho Books; awaiting payment clearance.',
-    createdAt: '2026-08-10T11:00:00Z',
-    updatedAt: '2026-08-10T11:00:00Z',
+    id: 'CDS-CL-001',
+    brand: 'Codestro',
+    name: 'AlphaStream Media Corp',
+    contactPerson: 'Vikram Oberoi',
+    phone: '+91 98210 11223',
+    email: 'vikram@alphastream.io',
+    city: 'Gurugram',
+    country: 'India',
+    gstNumber: '06AAACA8899K1Z5',
+    preferredCurrency: 'INR',
+    clientSince: '2025-08-10',
+    status: 'Active',
+    notes: 'High-throughput video streaming SaaS and subscription payment infrastructure.',
+    createdAt: '2025-08-10T10:00:00Z',
+    updatedAt: '2026-09-12T11:00:00Z',
+  },
+  {
+    id: 'CDS-CL-002',
+    brand: 'Codestro',
+    name: 'NexaFlow AI Logistics',
+    contactPerson: 'Tanvi Deshmukh',
+    phone: '+91 98450 33441',
+    email: 'tanvi.d@nexaflow.ai',
+    city: 'Bengaluru',
+    country: 'India',
+    gstNumber: '29AABCN6677P1ZP',
+    preferredCurrency: 'INR',
+    clientSince: '2025-11-05',
+    status: 'Active',
+    notes: 'Enterprise logistics route dispatch optimization using LLM copilot.',
+    createdAt: '2025-11-05T09:30:00Z',
+    updatedAt: '2026-10-02T14:15:00Z',
+  },
+  {
+    id: 'CDS-CL-003',
+    brand: 'Codestro',
+    name: 'OmniPay Cloud Systems',
+    contactPerson: 'Aditya Kapoor',
+    phone: '+91 98101 77665',
+    email: 'aditya@omnipaycloud.com',
+    city: 'Mumbai',
+    country: 'India',
+    gstNumber: '27AACCO5544J1Z8',
+    preferredCurrency: 'INR',
+    clientSince: '2026-02-18',
+    status: 'Active',
+    notes: 'Unified multi-rail fintech payment gateway and merchant dashboard.',
+    createdAt: '2026-02-18T10:00:00Z',
+    updatedAt: '2026-08-20T16:40:00Z',
+  },
+  {
+    id: 'CDS-CL-004',
+    brand: 'Codestro',
+    name: 'Vortex Healthtech UK',
+    contactPerson: 'Oliver Bennett',
+    phone: '+44 20 7946 0912',
+    email: 'oliver@vortexhealth.co.uk',
+    city: 'London',
+    country: 'United Kingdom',
+    preferredCurrency: 'GBP',
+    clientSince: '2026-04-10',
+    status: 'Prospect',
+    notes: 'Clinic scheduling SaaS, patient tele-triage with HIPAA/GDPR encryption.',
+    createdAt: '2026-04-10T12:00:00Z',
+    updatedAt: '2026-09-01T15:00:00Z',
   },
 ];
 
+const CDS_CATEGORIES: ServiceCategory[] = [
+  {
+    id: 'CDS-CAT-001',
+    brand: 'Codestro',
+    name: 'Full-Stack Web & SaaS Engineering',
+    description: 'Next.js 15, React 19, server actions, multi-tenant databases, and high-velocity web platforms.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-CAT-002',
+    brand: 'Codestro',
+    name: 'AI Agents & Workflow Automation',
+    description: 'LLM agents, vector semantic search, RAG pipelines, and automated customer operations.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-CAT-003',
+    brand: 'Codestro',
+    name: 'Scalable Cloud Microservices',
+    description: 'Node.js/Go event-driven architectures, Redis pub/sub, Dockerized serverless, and resilient APIs.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-CAT-004',
+    brand: 'Codestro',
+    name: 'UI/UX & Design Systems',
+    description: 'Radix/shadcn design systems, motion animations, Figma token handoffs, and dark-mode aesthetics.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+];
+
+const CDS_SERVICES: Service[] = [
+  {
+    id: 'CDS-SRV-001',
+    brand: 'Codestro',
+    name: 'Next.js Enterprise SaaS Platform',
+    categoryId: 'CDS-CAT-001',
+    description: 'Production B2B SaaS boilerplate, Stripe/Razorpay billing, organization workspaces, and audit logs.',
+    status: 'Active',
+    createdAt: '2025-06-15T00:00:00Z',
+    updatedAt: '2026-01-15T00:00:00Z',
+  },
+  {
+    id: 'CDS-SRV-002',
+    brand: 'Codestro',
+    name: 'AI Copilot & Intelligent Workflows',
+    categoryId: 'CDS-CAT-002',
+    description: 'In-app generative AI copilots, tool calling, document intelligence, and real-time streaming assistants.',
+    status: 'Active',
+    createdAt: '2025-07-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-SRV-003',
+    brand: 'Codestro',
+    name: 'Scalable GraphQL & Node.js APIs',
+    categoryId: 'CDS-CAT-003',
+    description: 'High-throughput GraphQL/REST endpoints, caching layers, rate limiting, and webhook dispatchers.',
+    status: 'Active',
+    createdAt: '2025-07-15T00:00:00Z',
+    updatedAt: '2026-02-15T00:00:00Z',
+  },
+  {
+    id: 'CDS-SRV-004',
+    brand: 'Codestro',
+    name: 'Enterprise Figma Design System',
+    categoryId: 'CDS-CAT-004',
+    description: 'Pixel-perfect component library, responsive grid systems, accessibility checks, and code-ready tokens.',
+    status: 'Active',
+    createdAt: '2025-08-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+];
+
+const CDS_PROJECTS: Project[] = [
+  {
+    id: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    brand: 'Codestro',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    serviceId: 'CDS-SRV-001',
+    proposalDate: '2026-06-01',
+    contractDate: '2026-06-15',
+    startDate: '2026-07-01',
+    committedDays: 60,
+    committedEndDate: '2026-08-30',
+    actualEndDate: '',
+    status: 'In Progress',
+    paymentMode: 'GST Invoice',
+    currency: 'INR',
+    contract: 550000,
+    exchangeRate: 1,
+    contractValue: 550000,
+    totalReceived: 350000,
+    balance: 200000,
+    projectManager: 'Rohan Malhotra',
+    notes: 'Video transcoding and paywall subscriptions module delivered. Webhook testing underway.',
+    paymentPhases: [
+      {
+        id: 'phase-cds-1-1',
+        name: 'Phase 1 - Kickoff & Multi-Tenant Setup',
+        percentage: 40,
+        amount: 220000,
+        amountINR: 220000,
+        dueDate: '2026-07-05',
+        status: 'Received',
+        notes: 'Workspace architecture and authentication setup.',
+      },
+      {
+        id: 'phase-cds-1-2',
+        name: 'Phase 2 - Video Streaming & Paywall Engine',
+        percentage: 30,
+        amount: 165000,
+        amountINR: 165000,
+        dueDate: '2026-08-01',
+        status: 'Received',
+        notes: 'HLS video playback and Stripe recurring billing.',
+      },
+      {
+        id: 'phase-cds-1-3',
+        name: 'Phase 3 - Analytics & Production Release',
+        percentage: 30,
+        amount: 165000,
+        amountINR: 165000,
+        dueDate: '2026-08-30',
+        status: 'Pending',
+        notes: 'Final load testing and AWS CloudFront setup.',
+      },
+    ],
+    createdAt: '2026-07-01T09:00:00Z',
+    updatedAt: '2026-09-10T14:00:00Z',
+  },
+  {
+    id: 'CDS - NEXAFLOW AI LOGISTICS - AI COPILOT & INTELLIGENT WORKFLOWS - 1',
+    brand: 'Codestro',
+    clientId: 'CDS-CL-002',
+    clientName: 'NexaFlow AI Logistics',
+    serviceId: 'CDS-SRV-002',
+    proposalDate: '2026-07-10',
+    contractDate: '2026-07-25',
+    startDate: '2026-08-01',
+    committedDays: 50,
+    committedEndDate: '2026-09-20',
+    actualEndDate: '',
+    status: 'In Progress',
+    paymentMode: 'Non GST Online',
+    currency: 'INR',
+    contract: 720000,
+    exchangeRate: 1,
+    contractValue: 720000,
+    totalReceived: 400000,
+    balance: 320000,
+    projectManager: 'Rohan Malhotra',
+    notes: 'Fleet automated dispatch AI copilot with pgvector route matching in active pilot.',
+    paymentPhases: [
+      {
+        id: 'phase-cds-2-1',
+        name: 'Phase 1 - LLM Tooling & Route Knowledge Base',
+        percentage: 50,
+        amount: 360000,
+        amountINR: 360000,
+        dueDate: '2026-08-10',
+        status: 'Received',
+        notes: 'Vector database pipeline and API endpoints.',
+      },
+      {
+        id: 'phase-cds-2-2',
+        name: 'Phase 2 - Driver App Copilot Integration',
+        percentage: 50,
+        amount: 360000,
+        amountINR: 360000,
+        dueDate: '2026-09-20',
+        status: 'Pending',
+        notes: 'Driver real-time voice and text dispatcher assistant.',
+      },
+    ],
+    createdAt: '2026-08-01T10:00:00Z',
+    updatedAt: '2026-09-22T16:30:00Z',
+  },
+  {
+    id: 'CDS - OMNIPAY CLOUD SYSTEMS - SCALABLE GRAPHQL & NODE.JS APIS - 1',
+    brand: 'Codestro',
+    clientId: 'CDS-CL-003',
+    clientName: 'OmniPay Cloud Systems',
+    serviceId: 'CDS-SRV-003',
+    proposalDate: '2026-04-10',
+    contractDate: '2026-04-20',
+    startDate: '2026-05-01',
+    committedDays: 45,
+    committedEndDate: '2026-06-15',
+    actualEndDate: '2026-06-14',
+    status: 'Completed',
+    paymentMode: 'GST Invoice',
+    currency: 'INR',
+    contract: 480000,
+    exchangeRate: 1,
+    contractValue: 480000,
+    totalReceived: 480000,
+    balance: 0,
+    projectManager: 'Aanya Sengupta',
+    notes: 'Successfully deployed on Kubernetes cluster with 99.99% uptime benchmark achieved.',
+    paymentPhases: [
+      {
+        id: 'phase-cds-3-1',
+        name: 'Phase 1 - Advance & Schema Drafting',
+        percentage: 50,
+        amount: 240000,
+        amountINR: 240000,
+        dueDate: '2026-05-05',
+        status: 'Received',
+        notes: 'Kickoff milestone cleared.',
+      },
+      {
+        id: 'phase-cds-3-2',
+        name: 'Phase 2 - Final Deployment & UAT',
+        percentage: 50,
+        amount: 240000,
+        amountINR: 240000,
+        dueDate: '2026-06-15',
+        status: 'Received',
+        notes: 'Final sign-off and load test clearance.',
+      },
+    ],
+    createdAt: '2026-05-01T09:00:00Z',
+    updatedAt: '2026-06-18T12:00:00Z',
+  },
+];
+
+const CDS_PAYMENTS: Payment[] = [
+  {
+    id: 'CDS-PAY-001',
+    brand: 'Codestro',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    paymentMode: 'GST Invoice',
+    paymentDate: '2026-07-05',
+    dueDate: '2026-07-05',
+    amountReceived: 220000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 220000,
+    referenceUtr: 'UTR-HDFC-CDS-11029',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'SaaS foundation advance credited via RTGS.',
+    createdAt: '2026-07-05T10:00:00Z',
+    updatedAt: '2026-07-05T10:00:00Z',
+    amount: 220000,
+    receivedAmount: 220000,
+    outstandingAmount: 0,
+    paymentMethod: 'GST Invoice',
+  },
+  {
+    id: 'CDS-PAY-002',
+    brand: 'Codestro',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    paymentMode: 'GST Invoice',
+    paymentDate: '2026-08-01',
+    dueDate: '2026-08-01',
+    amountReceived: 130000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 130000,
+    referenceUtr: 'UTR-HDFC-CDS-11088',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'Streaming module milestone payout.',
+    createdAt: '2026-08-01T11:00:00Z',
+    updatedAt: '2026-08-01T11:00:00Z',
+    amount: 130000,
+    receivedAmount: 130000,
+    outstandingAmount: 0,
+    paymentMethod: 'GST Invoice',
+  },
+  {
+    id: 'CDS-PAY-003',
+    brand: 'Codestro',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    paymentMode: 'GST Invoice',
+    paymentDate: '2026-09-01',
+    dueDate: '2026-09-15',
+    amountReceived: 200000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 200000,
+    referenceUtr: 'INV-CDS-2026-002',
+    paymentStatus: 'Pending',
+    daysOverdue: calculateDaysOverdue('2026-09-15', 'Pending'),
+    notes: 'Final milestone invoice sent to client finance team.',
+    createdAt: '2026-09-01T09:30:00Z',
+    updatedAt: '2026-09-01T09:30:00Z',
+    amount: 200000,
+    receivedAmount: 0,
+    outstandingAmount: 200000,
+    paymentMethod: 'GST Invoice',
+  },
+  {
+    id: 'CDS-PAY-004',
+    brand: 'Codestro',
+    projectId: 'CDS - NEXAFLOW AI LOGISTICS - AI COPILOT & INTELLIGENT WORKFLOWS - 1',
+    clientId: 'CDS-CL-002',
+    clientName: 'NexaFlow AI Logistics',
+    paymentMode: 'Non GST Online',
+    paymentDate: '2026-08-05',
+    dueDate: '2026-08-10',
+    amountReceived: 400000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 400000,
+    referenceUtr: 'UTR-ICIC-CDS-99214',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'AI Copilot prototype milestone cleared.',
+    createdAt: '2026-08-05T11:00:00Z',
+    updatedAt: '2026-08-05T11:00:00Z',
+    amount: 400000,
+    receivedAmount: 400000,
+    outstandingAmount: 0,
+    paymentMethod: 'Non GST Online',
+  },
+  {
+    id: 'CDS-PAY-005',
+    brand: 'Codestro',
+    projectId: 'CDS - OMNIPAY CLOUD SYSTEMS - SCALABLE GRAPHQL & NODE.JS APIS - 1',
+    clientId: 'CDS-CL-003',
+    clientName: 'OmniPay Cloud Systems',
+    paymentMode: 'GST Invoice',
+    paymentDate: '2026-06-15',
+    dueDate: '2026-06-15',
+    amountReceived: 480000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 480000,
+    referenceUtr: 'UTR-KOTK-CDS-44182',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'Final settlement for GraphQL payment gateway API.',
+    createdAt: '2026-06-15T10:00:00Z',
+    updatedAt: '2026-06-15T10:00:00Z',
+    amount: 480000,
+    receivedAmount: 480000,
+    outstandingAmount: 0,
+    paymentMethod: 'GST Invoice',
+  },
+];
+
+const CDS_ROLES: EmployeeRole[] = [
+  {
+    id: 'CDS-ROL-001',
+    brand: 'Codestro',
+    roleName: 'Lead Full-Stack Engineer',
+    department: 'Engineering',
+    status: 'Active',
+    description: 'Next.js 15, React 19, TypeScript, PostgreSQL, and scalable microservice architectures.',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2025-06-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-ROL-002',
+    brand: 'Codestro',
+    roleName: 'AI & ML Systems Architect',
+    department: 'AI Research & Delivery',
+    status: 'Active',
+    description: 'Vector databases, LangChain, embeddings, model fine-tuning, and AI inference latency optimization.',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2025-06-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-ROL-003',
+    brand: 'Codestro',
+    roleName: 'Senior Product Designer',
+    department: 'Design Systems',
+    status: 'Active',
+    description: 'Figma component libraries, user journey design, interactive micro-interactions, and design tokens.',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2025-06-01T00:00:00Z',
+  },
+];
+
+const CDS_EMPLOYEES: Employee[] = [
+  {
+    id: 'CDS-EMP-001',
+    brand: 'Codestro',
+    name: 'Rohan Malhotra',
+    roleId: 'CDS-ROL-001',
+    email: 'rohan.m@codestro.dev',
+    status: 'Active',
+    joiningDate: '2025-06-15',
+    costOfEmployee: 115000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Technical Lead for SaaS architectures and high-performance React frontends.',
+    joinedDate: '2025-06-15',
+    salary: 115000,
+    monthlyCost: 115000,
+    phone: '+91 98110 55441',
+    assignedProjectsCount: 2,
+    createdAt: '2025-06-15T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 'CDS-EMP-002',
+    brand: 'Codestro',
+    name: 'Aanya Sengupta',
+    roleId: 'CDS-ROL-002',
+    email: 'aanya.s@codestro.dev',
+    status: 'Active',
+    joiningDate: '2025-07-01',
+    costOfEmployee: 125000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Specialist in custom LLM workflow pipelines, pgvector search, and Gemini tool integrations.',
+    joinedDate: '2025-07-01',
+    salary: 125000,
+    monthlyCost: 125000,
+    phone: '+91 98302 44332',
+    assignedProjectsCount: 2,
+    createdAt: '2025-07-01T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 'CDS-EMP-003',
+    brand: 'Codestro',
+    name: 'Tanya Verghese',
+    roleId: 'CDS-ROL-003',
+    email: 'tanya.v@codestro.dev',
+    status: 'Active',
+    joiningDate: '2025-09-10',
+    costOfEmployee: 90000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Product designer for dark-mode SaaS dashboards and component systems.',
+    joinedDate: '2025-09-10',
+    salary: 90000,
+    monthlyCost: 90000,
+    phone: '+91 98401 77889',
+    assignedProjectsCount: 1,
+    createdAt: '2025-09-10T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+];
+
+const CDS_ASSIGNMENTS: Assignment[] = [
+  {
+    id: 'CDS-ASN-001',
+    brand: 'Codestro',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    employeeId: 'CDS-EMP-001',
+    employeeName: 'Rohan Malhotra',
+    roleName: 'Lead Full-Stack Engineer',
+    assignedDate: '2026-07-02',
+    workAssigned: 'Video Transcoding & HLS Stream Distribution Engine',
+    amount: 160000,
+    amountPaid: 160000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Completed HLS adaptive streaming and paywall integration.',
+    lastNoteUpdate: '2026-07-28 17:00',
+    createdAt: '2026-07-02T10:00:00Z',
+    updatedAt: '2026-07-28T17:00:00Z',
+  },
+  {
+    id: 'CDS-ASN-002',
+    brand: 'Codestro',
+    projectId: 'CDS - NEXAFLOW AI LOGISTICS - AI COPILOT & INTELLIGENT WORKFLOWS - 1',
+    clientId: 'CDS-CL-002',
+    clientName: 'NexaFlow AI Logistics',
+    employeeId: 'CDS-EMP-002',
+    employeeName: 'Aanya Sengupta',
+    roleName: 'AI & ML Systems Architect',
+    assignedDate: '2026-08-05',
+    workAssigned: 'LangChain Pipeline & Fleet Dispatch Route Optimization',
+    amount: 210000,
+    amountPaid: 120000,
+    paymentStatus: 'Partially Paid',
+    employeeNotes: 'Benchmarked route query response at sub-400ms.',
+    lastNoteUpdate: '2026-08-25 16:30',
+    createdAt: '2026-08-05T11:00:00Z',
+    updatedAt: '2026-08-25T16:30:00Z',
+  },
+  {
+    id: 'CDS-ASN-003',
+    brand: 'Codestro',
+    projectId: 'CDS - OMNIPAY CLOUD SYSTEMS - SCALABLE GRAPHQL & NODE.JS APIS - 1',
+    clientId: 'CDS-CL-003',
+    clientName: 'OmniPay Cloud Systems',
+    employeeId: 'CDS-EMP-003',
+    employeeName: 'Tanya Verghese',
+    roleName: 'Senior Product Designer',
+    assignedDate: '2026-05-02',
+    workAssigned: 'Checkout Component Tokens & Responsive Dashboard UI',
+    amount: 95000,
+    amountPaid: 95000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Design tokens exported into Tailwind config and approved by client.',
+    lastNoteUpdate: '2026-05-28 14:00',
+    createdAt: '2026-05-02T09:00:00Z',
+    updatedAt: '2026-05-28T14:00:00Z',
+  },
+];
+
+const CDS_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
+  {
+    id: 'CDS-EPAY-001',
+    brand: 'Codestro',
+    assignmentId: 'CDS-ASN-001',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    employeeId: 'CDS-EMP-001',
+    employeeName: 'Rohan Malhotra',
+    paymentDate: '2026-07-20',
+    amountPaid: 160000,
+    paymentMode: 'GST Invoice',
+    referenceUtr: 'EPAY-NEFT-CDS-991',
+    notes: 'HLS player and video streaming milestone clearance.',
+    createdAt: '2026-07-20T10:00:00Z',
+    updatedAt: '2026-07-20T10:00:00Z',
+  },
+  {
+    id: 'CDS-EPAY-002',
+    brand: 'Codestro',
+    assignmentId: 'CDS-ASN-002',
+    projectId: 'CDS - NEXAFLOW AI LOGISTICS - AI COPILOT & INTELLIGENT WORKFLOWS - 1',
+    employeeId: 'CDS-EMP-002',
+    employeeName: 'Aanya Sengupta',
+    paymentDate: '2026-08-15',
+    amountPaid: 120000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-IMPS-CDS-442',
+    notes: 'AI pipeline milestone compensation.',
+    createdAt: '2026-08-15T12:00:00Z',
+    updatedAt: '2026-08-15T12:00:00Z',
+  },
+  {
+    id: 'CDS-EPAY-003',
+    brand: 'Codestro',
+    assignmentId: 'CDS-ASN-003',
+    projectId: 'CDS - OMNIPAY CLOUD SYSTEMS - SCALABLE GRAPHQL & NODE.JS APIS - 1',
+    employeeId: 'CDS-EMP-003',
+    employeeName: 'Tanya Verghese',
+    paymentDate: '2026-06-30',
+    amountPaid: 95000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-UPI-CDS-881',
+    notes: 'UI design tokens milestone payout.',
+    createdAt: '2026-06-30T14:00:00Z',
+    updatedAt: '2026-06-30T14:00:00Z',
+  },
+];
+
+const CDS_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  {
+    id: 'CDS-EXPCAT-001',
+    brand: 'Codestro',
+    name: 'Cloud & AI GPU Compute',
+    description: 'Lambda Labs, RunPod, AWS GPU instances, and cloud training environments.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2025-06-01T00:00:00Z',
+  },
+  {
+    id: 'CDS-EXPCAT-002',
+    brand: 'Codestro',
+    name: 'SaaS Tooling & Licenses',
+    description: 'Vercel Enterprise, GitHub Copilot, Linear, Figma, and developer SaaS seats.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2025-06-01T00:00:00Z',
+  },
+];
+
+const CDS_EXPENSES: Expense[] = [
+  {
+    id: 'CDS-EXP-001',
+    brand: 'Codestro',
+    projectId: 'CDS - NEXAFLOW AI LOGISTICS - AI COPILOT & INTELLIGENT WORKFLOWS - 1',
+    clientId: 'CDS-CL-002',
+    clientName: 'NexaFlow AI Logistics',
+    expenseCategoryId: 'CDS-EXPCAT-001',
+    expenseCategoryName: 'Cloud & AI GPU Compute',
+    vendor: 'Lambda Labs Compute',
+    description: 'Dedicated A100 GPU cluster for embedding and fine-tuning route embeddings.',
+    amount: 32000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 32000,
+    expenseDate: '2026-08-12',
+    paymentStatus: 'Paid',
+    notes: 'Billed to NexaFlow AI project budget.',
+    createdAt: '2026-08-12T10:00:00Z',
+    updatedAt: '2026-08-12T10:00:00Z',
+  },
+  {
+    id: 'CDS-EXP-002',
+    brand: 'Codestro',
+    projectId: 'NA',
+    clientId: 'NA',
+    clientName: 'NA',
+    expenseCategoryId: 'CDS-EXPCAT-002',
+    expenseCategoryName: 'SaaS Tooling & Licenses',
+    vendor: 'Vercel Inc & GitHub Enterprise',
+    description: 'Team deployment seats, preview build pipelines, and enterprise CI/CD runners.',
+    amount: 18500,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 18500,
+    expenseDate: '2026-09-01',
+    paymentStatus: 'Paid',
+    notes: 'Monthly engineering stack tooling.',
+    createdAt: '2026-09-01T09:00:00Z',
+    updatedAt: '2026-09-01T09:00:00Z',
+  },
+];
+
+const CDS_GST_INVOICES: GstInvoice[] = [
+  {
+    id: 'CDS-GST-001',
+    brand: 'Codestro',
+    paymentId: 'CDS-PAY-001',
+    projectId: 'CDS - ALPHASTREAM MEDIA CORP - NEXT.JS ENTERPRISE SAAS PLATFORM - 1',
+    clientId: 'CDS-CL-001',
+    clientName: 'AlphaStream Media Corp',
+    paymentDate: '2026-07-05',
+    amountReceived: 220000,
+    currency: 'INR',
+    amountINR: 220000,
+    gstAmountINR: 39600,
+    invoiceNumber: 'INV-CDS-2026-001',
+    uploadedToGstPortal: 'Yes',
+    gstPortalUploadDate: '2026-07-10',
+    notes: 'Uploaded under Codestro GST registration.',
+    createdAt: '2026-07-05T10:00:00Z',
+    updatedAt: '2026-07-10T12:00:00Z',
+  },
+  {
+    id: 'CDS-GST-002',
+    brand: 'Codestro',
+    paymentId: 'CDS-PAY-005',
+    projectId: 'CDS - OMNIPAY CLOUD SYSTEMS - SCALABLE GRAPHQL & NODE.JS APIS - 1',
+    clientId: 'CDS-CL-003',
+    clientName: 'OmniPay Cloud Systems',
+    paymentDate: '2026-06-15',
+    amountReceived: 480000,
+    currency: 'INR',
+    amountINR: 480000,
+    gstAmountINR: 86400,
+    invoiceNumber: 'INV-CDS-2026-002',
+    uploadedToGstPortal: 'Yes',
+    gstPortalUploadDate: '2026-06-20',
+    notes: 'Full payment GST invoice settled.',
+    createdAt: '2026-06-15T10:00:00Z',
+    updatedAt: '2026-06-20T14:00:00Z',
+  },
+];
+
+// ============================================================================
+// 3. BRAND 3: FX LAUNCH PAD (Prefix: FXL) — FinTech, Forex & Algo Trading Tech
+// ============================================================================
+const FXL_CLIENTS: Client[] = [
+  {
+    id: 'FXL-CL-001',
+    brand: 'FX Launch Pad',
+    name: 'ApexTrader Prop Capital Dubai',
+    contactPerson: 'Tariq Al-Mansoor',
+    phone: '+971 4 391 2233',
+    email: 'tariq@apextradercapital.ae',
+    city: 'Dubai',
+    country: 'United Arab Emirates',
+    preferredCurrency: 'USD',
+    clientSince: '2025-05-12',
+    status: 'Active',
+    notes: 'Prop trading firm multi-step challenge portal, automated risk limits, and trader dashboard.',
+    createdAt: '2025-05-12T10:00:00Z',
+    updatedAt: '2026-09-05T12:00:00Z',
+  },
+  {
+    id: 'FXL-CL-002',
+    brand: 'FX Launch Pad',
+    name: 'BlueWave FX Global Cyprus',
+    contactPerson: 'Dimitrios Kouris',
+    phone: '+357 25 812 400',
+    email: 'dimitrios@bluewavefx.com',
+    city: 'Limassol',
+    country: 'Cyprus',
+    preferredCurrency: 'EUR',
+    clientSince: '2025-09-20',
+    status: 'Active',
+    notes: 'CySEC regulated brokerage institutional landing, automated KYC verification pipeline.',
+    createdAt: '2025-09-20T11:00:00Z',
+    updatedAt: '2026-09-18T15:30:00Z',
+  },
+  {
+    id: 'FXL-CL-003',
+    brand: 'FX Launch Pad',
+    name: 'QuantumPip Trading Labs',
+    contactPerson: 'Kabir Mehta',
+    phone: '+91 99887 66554',
+    email: 'kabir@quantumpip.in',
+    city: 'Mumbai',
+    country: 'India',
+    gstNumber: '27AABCQ9911D1Z4',
+    preferredCurrency: 'INR',
+    clientSince: '2026-01-10',
+    status: 'Active',
+    notes: 'HFT algorithmic scalping bots on MetaTrader 5 and Telegram signals bot.',
+    createdAt: '2026-01-10T09:00:00Z',
+    updatedAt: '2026-08-15T14:00:00Z',
+  },
+  {
+    id: 'FXL-CL-004',
+    brand: 'FX Launch Pad',
+    name: 'Zenith Algo Strategies',
+    contactPerson: 'Liam Van Der Berg',
+    phone: '+31 20 504 1122',
+    email: 'liam@zenithalgo.nl',
+    city: 'Amsterdam',
+    country: 'Netherlands',
+    preferredCurrency: 'EUR',
+    clientSince: '2026-03-01',
+    status: 'Prospect',
+    notes: 'Prop firm EA automation, liquidity bridge integrations, and tick data backtesting.',
+    createdAt: '2026-03-01T10:00:00Z',
+    updatedAt: '2026-08-10T16:00:00Z',
+  },
+];
+
+const FXL_CATEGORIES: ServiceCategory[] = [
+  {
+    id: 'FXL-CAT-001',
+    brand: 'FX Launch Pad',
+    name: 'Prop Firm Infrastructure & CRM',
+    description: 'Two-phase evaluation portals, daily drawdown monitors, MT5 manager bridges, and payout processing.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-CAT-002',
+    brand: 'FX Launch Pad',
+    name: 'MT4/MT5 & cTrader Algo Bots',
+    description: 'Custom Expert Advisors (EAs), low-latency hedging algorithms, tick news scalpers, and copy-trading systems.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-CAT-003',
+    brand: 'FX Launch Pad',
+    name: 'FinTech Broker Landing & KYC',
+    description: 'Conversion-optimized forex broker web portals, SumSub/Persona identity verification, and multi-currency wallets.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-CAT-004',
+    brand: 'FX Launch Pad',
+    name: 'Trading Community Growth & PPC',
+    description: 'Targeted Google/Meta financial lead acquisition, Telegram community funnels, and trading contest viral engines.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  },
+];
+
+const FXL_SERVICES: Service[] = [
+  {
+    id: 'FXL-SRV-001',
+    brand: 'FX Launch Pad',
+    name: 'Prop Firm Challenge & Risk Portal',
+    categoryId: 'FXL-CAT-001',
+    description: 'Automated equity drawdown protection, Phase 1 & 2 metric dashboards, and certificate generation.',
+    status: 'Active',
+    createdAt: '2025-05-15T00:00:00Z',
+    updatedAt: '2026-01-15T00:00:00Z',
+  },
+  {
+    id: 'FXL-SRV-002',
+    brand: 'FX Launch Pad',
+    name: 'Custom MT5 Automated Trading EA',
+    categoryId: 'FXL-CAT-002',
+    description: 'C++ & MQL5 automated algorithmic trading robot with risk parameter safety locks and backtesting reports.',
+    status: 'Active',
+    createdAt: '2025-06-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-SRV-003',
+    brand: 'FX Launch Pad',
+    name: 'Broker CRM & Instant KYC Engine',
+    categoryId: 'FXL-CAT-003',
+    description: 'Regulated broker portal with fast passport/utility document verification, crypto deposits, and affiliate tracking.',
+    status: 'Active',
+    createdAt: '2025-06-15T00:00:00Z',
+    updatedAt: '2026-02-15T00:00:00Z',
+  },
+  {
+    id: 'FXL-SRV-004',
+    brand: 'FX Launch Pad',
+    name: 'Forex Lead-Gen & Telegram Community Scale',
+    categoryId: 'FXL-CAT-004',
+    description: 'Paid trader acquisition funnels, VIP signal bot integration, and multi-channel influencer campaigns.',
+    status: 'Active',
+    createdAt: '2025-07-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+];
+
+const FXL_PROJECTS: Project[] = [
+  {
+    id: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    brand: 'FX Launch Pad',
+    clientId: 'FXL-CL-001',
+    clientName: 'ApexTrader Prop Capital Dubai',
+    serviceId: 'FXL-SRV-001',
+    proposalDate: '2026-06-10',
+    contractDate: '2026-06-25',
+    startDate: '2026-07-01',
+    committedDays: 60,
+    committedEndDate: '2026-08-30',
+    actualEndDate: '',
+    status: 'In Progress',
+    paymentMode: 'Crypto',
+    currency: 'USD',
+    contract: 12000,
+    exchangeRate: 84.5,
+    contractValue: 1014000,
+    totalReceived: 507000,
+    balance: 507000,
+    projectManager: 'Sameer Saxena',
+    notes: 'Real-time equity monitor connected to MT5 server in London LD4 datacenter. Phase 2 live.',
+    paymentPhases: [
+      {
+        id: 'phase-fxl-1-1',
+        name: 'Phase 1 - MT5 Gateway Bridge & Challenge Engine',
+        percentage: 50,
+        amount: 6000,
+        amountINR: 507000,
+        dueDate: '2026-07-05',
+        status: 'Received',
+        notes: 'Mobilization payment cleared via USDT on TRON network.',
+      },
+      {
+        id: 'phase-fxl-1-2',
+        name: 'Phase 2 - Trader Dashboard & Automated Payouts',
+        percentage: 50,
+        amount: 6000,
+        amountINR: 507000,
+        dueDate: '2026-08-30',
+        status: 'Pending',
+        notes: 'Final sign-off and production handover.',
+      },
+    ],
+    createdAt: '2026-07-01T09:00:00Z',
+    updatedAt: '2026-09-12T15:00:00Z',
+  },
+  {
+    id: 'FXL - BLUEWAVE FX GLOBAL CYPRUS - BROKER CRM & INSTANT KYC ENGINE - 1',
+    brand: 'FX Launch Pad',
+    clientId: 'FXL-CL-002',
+    clientName: 'BlueWave FX Global Cyprus',
+    serviceId: 'FXL-SRV-003',
+    proposalDate: '2026-07-15',
+    contractDate: '2026-07-30',
+    startDate: '2026-08-10',
+    committedDays: 50,
+    committedEndDate: '2026-09-30',
+    actualEndDate: '',
+    status: 'In Progress',
+    paymentMode: 'Non GST Online',
+    currency: 'EUR',
+    contract: 9500,
+    exchangeRate: 92.0,
+    contractValue: 874000,
+    totalReceived: 437000,
+    balance: 437000,
+    projectManager: 'Sameer Saxena',
+    notes: 'SumSub identity verification webhooks and SEPA banking deposit portal implemented.',
+    paymentPhases: [
+      {
+        id: 'phase-fxl-2-1',
+        name: 'Phase 1 - Broker Client Zone & KYC Webhooks',
+        percentage: 50,
+        amount: 4750,
+        amountINR: 437000,
+        dueDate: '2026-08-15',
+        status: 'Received',
+        notes: 'SEPA bank transfer credited.',
+      },
+      {
+        id: 'phase-fxl-2-2',
+        name: 'Phase 2 - Payment Gateway & Multi-Asset Wallet',
+        percentage: 50,
+        amount: 4750,
+        amountINR: 437000,
+        dueDate: '2026-09-30',
+        status: 'Pending',
+        notes: 'Final UAT testing on staging broker server.',
+      },
+    ],
+    createdAt: '2026-08-10T10:00:00Z',
+    updatedAt: '2026-09-20T11:45:00Z',
+  },
+  {
+    id: 'FXL - QUANTUMPIP TRADING LABS - CUSTOM MT5 AUTOMATED TRADING EA - 1',
+    brand: 'FX Launch Pad',
+    clientId: 'FXL-CL-003',
+    clientName: 'QuantumPip Trading Labs',
+    serviceId: 'FXL-SRV-002',
+    proposalDate: '2026-05-10',
+    contractDate: '2026-05-20',
+    startDate: '2026-06-01',
+    committedDays: 40,
+    committedEndDate: '2026-07-10',
+    actualEndDate: '2026-07-08',
+    status: 'Completed',
+    paymentMode: 'GST Invoice',
+    currency: 'INR',
+    contract: 450000,
+    exchangeRate: 1,
+    contractValue: 450000,
+    totalReceived: 450000,
+    balance: 0,
+    projectManager: 'Kabir Singhal',
+    notes: 'MQL5 High-frequency scalping robot delivered with 1.8 Profit Factor over 3-year tick backtest.',
+    paymentPhases: [
+      {
+        id: 'phase-fxl-3-1',
+        name: 'Phase 1 - Algorithm Strategy & Strategy Tester Run',
+        percentage: 50,
+        amount: 225000,
+        amountINR: 225000,
+        dueDate: '2026-06-05',
+        status: 'Received',
+        notes: 'Backtesting deliverable approved.',
+      },
+      {
+        id: 'phase-fxl-3-2',
+        name: 'Phase 2 - VPS Deployment & Live Forward Test',
+        percentage: 50,
+        amount: 225000,
+        amountINR: 225000,
+        dueDate: '2026-07-08',
+        status: 'Received',
+        notes: 'Final settlement cleared after 30-day forward paper testing.',
+      },
+    ],
+    createdAt: '2026-06-01T09:00:00Z',
+    updatedAt: '2026-07-12T16:00:00Z',
+  },
+];
+
+const FXL_PAYMENTS: Payment[] = [
+  {
+    id: 'FXL-PAY-001',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    clientId: 'FXL-CL-001',
+    clientName: 'ApexTrader Prop Capital Dubai',
+    paymentMode: 'Crypto',
+    paymentDate: '2026-07-05',
+    dueDate: '2026-07-05',
+    amountReceived: 6000,
+    currency: 'USD',
+    exchangeRate: 84.5,
+    amountINR: 507000,
+    referenceUtr: 'TXID-USDT-TRC20-992144',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'USDT TRC20 remittance confirmed by treasury.',
+    createdAt: '2026-07-05T10:00:00Z',
+    updatedAt: '2026-07-05T10:00:00Z',
+    amount: 507000,
+    receivedAmount: 507000,
+    outstandingAmount: 0,
+    paymentMethod: 'Crypto',
+  },
+  {
+    id: 'FXL-PAY-002',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    clientId: 'FXL-CL-001',
+    clientName: 'ApexTrader Prop Capital Dubai',
+    paymentMode: 'Crypto',
+    paymentDate: '2026-08-30',
+    dueDate: '2026-08-30',
+    amountReceived: 6000,
+    currency: 'USD',
+    exchangeRate: 84.5,
+    amountINR: 507000,
+    referenceUtr: 'INV-FXL-2026-002',
+    paymentStatus: 'Pending',
+    daysOverdue: calculateDaysOverdue('2026-08-30', 'Pending'),
+    notes: 'Milestone 2 final challenge portal release invoice pending crypto payment.',
+    createdAt: '2026-08-25T11:00:00Z',
+    updatedAt: '2026-08-25T11:00:00Z',
+    amount: 507000,
+    receivedAmount: 0,
+    outstandingAmount: 507000,
+    paymentMethod: 'Crypto',
+  },
+  {
+    id: 'FXL-PAY-003',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - BLUEWAVE FX GLOBAL CYPRUS - BROKER CRM & INSTANT KYC ENGINE - 1',
+    clientId: 'FXL-CL-002',
+    clientName: 'BlueWave FX Global Cyprus',
+    paymentMode: 'Non GST Online',
+    paymentDate: '2026-08-15',
+    dueDate: '2026-08-15',
+    amountReceived: 4750,
+    currency: 'EUR',
+    exchangeRate: 92.0,
+    amountINR: 437000,
+    referenceUtr: 'SEPA-CY-99281726',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'Cyprus SEPA corporate international remittance received.',
+    createdAt: '2026-08-15T11:30:00Z',
+    updatedAt: '2026-08-15T11:30:00Z',
+    amount: 437000,
+    receivedAmount: 437000,
+    outstandingAmount: 0,
+    paymentMethod: 'Non GST Online',
+  },
+  {
+    id: 'FXL-PAY-004',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - QUANTUMPIP TRADING LABS - CUSTOM MT5 AUTOMATED TRADING EA - 1',
+    clientId: 'FXL-CL-003',
+    clientName: 'QuantumPip Trading Labs',
+    paymentMode: 'GST Invoice',
+    paymentDate: '2026-07-08',
+    dueDate: '2026-07-08',
+    amountReceived: 450000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 450000,
+    referenceUtr: 'UTR-ICIC-FXL-77192',
+    paymentStatus: 'Received',
+    daysOverdue: 0,
+    notes: 'Full payment for MT5 algorithmic trading engine.',
+    createdAt: '2026-07-08T10:00:00Z',
+    updatedAt: '2026-07-08T10:00:00Z',
+    amount: 450000,
+    receivedAmount: 450000,
+    outstandingAmount: 0,
+    paymentMethod: 'GST Invoice',
+  },
+];
+
+const FXL_ROLES: EmployeeRole[] = [
+  {
+    id: 'FXL-ROL-001',
+    brand: 'FX Launch Pad',
+    roleName: 'MQL5 & Algo Trading Specialist',
+    department: 'Quantitative Engineering',
+    status: 'Active',
+    description: 'MetaTrader 5 Expert Advisors, C++ quantitative execution, FIX protocol, and low-latency algorithmic trading.',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-ROL-002',
+    brand: 'FX Launch Pad',
+    roleName: 'FinTech Backend Architect',
+    department: 'Broker Platform Systems',
+    status: 'Active',
+    description: 'High-frequency WebSocket bridges, SumSub KYC integrations, multi-currency ledger balance synchronization.',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-ROL-003',
+    brand: 'FX Launch Pad',
+    roleName: 'Financial Risk & Compliance Analyst',
+    department: 'Prop Firm Risk Operations',
+    status: 'Active',
+    description: 'Drawdown violation detection algorithms, CySEC/FCA reporting standards, and liquidity bridge auditing.',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+];
+
+const FXL_EMPLOYEES: Employee[] = [
+  {
+    id: 'FXL-EMP-001',
+    brand: 'FX Launch Pad',
+    name: 'Sameer Saxena',
+    roleId: 'FXL-ROL-001',
+    email: 'sameer.s@fxlaunchpad.com',
+    status: 'Active',
+    joiningDate: '2025-05-15',
+    costOfEmployee: 120000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Quantitative developer with 7+ years developing automated trading systems on MT4/MT5 and cTrader.',
+    joinedDate: '2025-05-15',
+    salary: 120000,
+    monthlyCost: 120000,
+    phone: '+91 99102 33445',
+    assignedProjectsCount: 2,
+    createdAt: '2025-05-15T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 'FXL-EMP-002',
+    brand: 'FX Launch Pad',
+    name: 'Kabir Singhal',
+    roleId: 'FXL-ROL-002',
+    email: 'kabir.s@fxlaunchpad.com',
+    status: 'Active',
+    joiningDate: '2025-06-01',
+    costOfEmployee: 110000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Engineers low-latency bridges connecting MetaTrader servers with web client CRM portals.',
+    joinedDate: '2025-06-01',
+    salary: 110000,
+    monthlyCost: 110000,
+    phone: '+91 98203 11992',
+    assignedProjectsCount: 2,
+    createdAt: '2025-06-01T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 'FXL-EMP-003',
+    brand: 'FX Launch Pad',
+    name: 'Pooja Nair',
+    roleId: 'FXL-ROL-003',
+    email: 'pooja.n@fxlaunchpad.com',
+    status: 'Active',
+    joiningDate: '2025-08-01',
+    costOfEmployee: 85000,
+    employeeType: 'Salary Basis',
+    comesUnderTds: 'Yes',
+    notes: 'Specializes in prop firm challenge risk models and trading contest leaderboard telemetry.',
+    joinedDate: '2025-08-01',
+    salary: 85000,
+    monthlyCost: 85000,
+    phone: '+91 97401 88220',
+    assignedProjectsCount: 1,
+    createdAt: '2025-08-01T09:00:00Z',
+    updatedAt: '2026-09-01T10:00:00Z',
+  },
+];
+
+const FXL_ASSIGNMENTS: Assignment[] = [
+  {
+    id: 'FXL-ASN-001',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    clientId: 'FXL-CL-001',
+    clientName: 'ApexTrader Prop Capital Dubai',
+    employeeId: 'FXL-EMP-001',
+    employeeName: 'Sameer Saxena',
+    roleName: 'MQL5 & Algo Trading Specialist',
+    assignedDate: '2026-07-02',
+    workAssigned: 'MT5 Manager API WebSocket Bridge & Real-time Drawdown Monitor',
+    amount: 240000,
+    amountPaid: 140000,
+    paymentStatus: 'Partially Paid',
+    employeeNotes: 'Engineered sub-50ms drawdown alert triggers and auto account suspension hooks.',
+    lastNoteUpdate: '2026-07-28 18:00',
+    createdAt: '2026-07-02T10:00:00Z',
+    updatedAt: '2026-07-28T18:00:00Z',
+  },
+  {
+    id: 'FXL-ASN-002',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - BLUEWAVE FX GLOBAL CYPRUS - BROKER CRM & INSTANT KYC ENGINE - 1',
+    clientId: 'FXL-CL-002',
+    clientName: 'BlueWave FX Global Cyprus',
+    employeeId: 'FXL-EMP-002',
+    employeeName: 'Kabir Singhal',
+    roleName: 'FinTech Backend Architect',
+    assignedDate: '2026-08-12',
+    workAssigned: 'SumSub KYC Webhook & Instant Trader Onboarding Flow',
+    amount: 190000,
+    amountPaid: 190000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'KYC automated verification workflow passed CySEC compliance audit.',
+    lastNoteUpdate: '2026-09-10 14:30',
+    createdAt: '2026-08-12T11:00:00Z',
+    updatedAt: '2026-09-10T14:30:00Z',
+  },
+  {
+    id: 'FXL-ASN-003',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - QUANTUMPIP TRADING LABS - CUSTOM MT5 AUTOMATED TRADING EA - 1',
+    clientId: 'FXL-CL-003',
+    clientName: 'QuantumPip Trading Labs',
+    employeeId: 'FXL-EMP-001',
+    employeeName: 'Sameer Saxena',
+    roleName: 'MQL5 & Algo Trading Specialist',
+    assignedDate: '2026-06-02',
+    workAssigned: 'MQL5 EA Grid Optimization & Low-Latency Trailing Stop Algorithm',
+    amount: 150000,
+    amountPaid: 150000,
+    paymentStatus: 'Paid',
+    employeeNotes: 'Optimized execution speed with zero slippage in backtests.',
+    lastNoteUpdate: '2026-06-28 17:00',
+    createdAt: '2026-06-02T09:30:00Z',
+    updatedAt: '2026-06-28T17:00:00Z',
+  },
+];
+
+const FXL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [
+  {
+    id: 'FXL-EPAY-001',
+    brand: 'FX Launch Pad',
+    assignmentId: 'FXL-ASN-001',
+    projectId: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    employeeId: 'FXL-EMP-001',
+    employeeName: 'Sameer Saxena',
+    paymentDate: '2026-08-10',
+    amountPaid: 140000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-UPI-FXL-1192',
+    notes: 'Drawdown monitor milestone clearance.',
+    createdAt: '2026-08-10T11:00:00Z',
+    updatedAt: '2026-08-10T11:00:00Z',
+  },
+  {
+    id: 'FXL-EPAY-002',
+    brand: 'FX Launch Pad',
+    assignmentId: 'FXL-ASN-002',
+    projectId: 'FXL - BLUEWAVE FX GLOBAL CYPRUS - BROKER CRM & INSTANT KYC ENGINE - 1',
+    employeeId: 'FXL-EMP-002',
+    employeeName: 'Kabir Singhal',
+    paymentDate: '2026-07-25',
+    amountPaid: 190000,
+    paymentMode: 'GST Invoice',
+    referenceUtr: 'EPAY-NEFT-FXL-4412',
+    notes: 'KYC engine deliverable cleared.',
+    createdAt: '2026-07-25T14:00:00Z',
+    updatedAt: '2026-07-25T14:00:00Z',
+  },
+  {
+    id: 'FXL-EPAY-003',
+    brand: 'FX Launch Pad',
+    assignmentId: 'FXL-ASN-003',
+    projectId: 'FXL - QUANTUMPIP TRADING LABS - CUSTOM MT5 AUTOMATED TRADING EA - 1',
+    employeeId: 'FXL-EMP-001',
+    employeeName: 'Sameer Saxena',
+    paymentDate: '2026-09-05',
+    amountPaid: 150000,
+    paymentMode: 'Non GST Online',
+    referenceUtr: 'EPAY-IMPS-FXL-9901',
+    notes: 'EA code handover and client sign-off settlement.',
+    createdAt: '2026-09-05T12:00:00Z',
+    updatedAt: '2026-09-05T12:00:00Z',
+  },
+];
+
+const FXL_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  {
+    id: 'FXL-EXPCAT-001',
+    brand: 'FX Launch Pad',
+    name: 'VPS & Ultra-Low Latency Hosting',
+    description: 'Dedicated Windows Server VPS in Equinix LD4 (London) & NY4 (New York) cross-connects.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-EXPCAT-002',
+    brand: 'FX Launch Pad',
+    name: 'Forex Data Feeds & Liquidity APIs',
+    description: 'Tick data subscriptions, LMAX / OneZero liquidity bridges, and economic calendar feeds.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+  {
+    id: 'FXL-EXPCAT-003',
+    brand: 'FX Launch Pad',
+    name: 'Trading Community Marketing & Ads',
+    description: 'Meta Ads, financial Telegram channel promotions, and trader acquisition campaigns.',
+    status: 'Active',
+    createdAt: '2025-05-01T00:00:00Z',
+    updatedAt: '2025-05-01T00:00:00Z',
+  },
+];
+
+const FXL_EXPENSES: Expense[] = [
+  {
+    id: 'FXL-EXP-001',
+    brand: 'FX Launch Pad',
+    projectId: 'FXL - APEXTRADER PROP CAPITAL DUBAI - PROP FIRM CHALLENGE & RISK PORTAL - 1',
+    clientId: 'FXL-CL-001',
+    clientName: 'ApexTrader Prop Capital Dubai',
+    expenseCategoryId: 'FXL-EXPCAT-001',
+    expenseCategoryName: 'VPS & Ultra-Low Latency Hosting',
+    vendor: 'BeeksFX / Equinix London LD4',
+    description: 'Dedicated high-frequency VPS cross-connected to MetaQuotes data servers.',
+    amount: 42000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 42000,
+    expenseDate: '2026-08-10',
+    paymentStatus: 'Paid',
+    notes: 'Billed to ApexTrader infrastructure budget.',
+    createdAt: '2026-08-10T10:00:00Z',
+    updatedAt: '2026-08-10T10:00:00Z',
+  },
+  {
+    id: 'FXL-EXP-002',
+    brand: 'FX Launch Pad',
+    projectId: 'NA',
+    clientId: 'NA',
+    clientName: 'NA',
+    expenseCategoryId: 'FXL-EXPCAT-002',
+    expenseCategoryName: 'Forex Data Feeds & Liquidity APIs',
+    vendor: 'Tick Data LLC',
+    description: 'Institutional real-time tick historical archive for automated strategy validation.',
+    amount: 38000,
+    currency: 'INR',
+    exchangeRate: 1,
+    amountINR: 38000,
+    expenseDate: '2026-09-01',
+    paymentStatus: 'Paid',
+    notes: 'Quarterly tick data subscription.',
+    createdAt: '2026-09-01T11:00:00Z',
+    updatedAt: '2026-09-01T11:00:00Z',
+  },
+];
+
+const FXL_GST_INVOICES: GstInvoice[] = [
+  {
+    id: 'FXL-GST-001',
+    brand: 'FX Launch Pad',
+    paymentId: 'FXL-PAY-004',
+    projectId: 'FXL - QUANTUMPIP TRADING LABS - CUSTOM MT5 AUTOMATED TRADING EA - 1',
+    clientId: 'FXL-CL-003',
+    clientName: 'QuantumPip Trading Labs',
+    paymentDate: '2026-07-08',
+    amountReceived: 450000,
+    currency: 'INR',
+    amountINR: 450000,
+    gstAmountINR: 81000,
+    invoiceNumber: 'INV-FXL-2026-001',
+    uploadedToGstPortal: 'Yes',
+    gstPortalUploadDate: '2026-07-12',
+    notes: 'GST invoice for QuantumPip trading bot project.',
+    createdAt: '2026-07-08T10:00:00Z',
+    updatedAt: '2026-07-12T14:00:00Z',
+  },
+];
+
+// Combine all three brands into master initial datasets
+const INITIAL_CLIENTS: Client[] = [...DDI_CLIENTS, ...CDS_CLIENTS, ...FXL_CLIENTS];
+const INITIAL_CATEGORIES: ServiceCategory[] = [...DDI_CATEGORIES, ...CDS_CATEGORIES, ...FXL_CATEGORIES];
+const INITIAL_SERVICES: Service[] = [...DDI_SERVICES, ...CDS_SERVICES, ...FXL_SERVICES];
+const INITIAL_PROJECTS: Project[] = [...DDI_PROJECTS, ...CDS_PROJECTS, ...FXL_PROJECTS];
+const INITIAL_PAYMENTS: Payment[] = [...DDI_PAYMENTS, ...CDS_PAYMENTS, ...FXL_PAYMENTS];
+const INITIAL_ROLES: EmployeeRole[] = [...DDI_ROLES, ...CDS_ROLES, ...FXL_ROLES];
+const INITIAL_EMPLOYEES: Employee[] = [...DDI_EMPLOYEES, ...CDS_EMPLOYEES, ...FXL_EMPLOYEES];
+const INITIAL_ASSIGNMENTS: Assignment[] = [...DDI_ASSIGNMENTS, ...CDS_ASSIGNMENTS, ...FXL_ASSIGNMENTS];
+const INITIAL_EMPLOYEE_PAYMENTS: EmployeePayment[] = [...DDI_EMPLOYEE_PAYMENTS, ...CDS_EMPLOYEE_PAYMENTS, ...FXL_EMPLOYEE_PAYMENTS];
+const INITIAL_EXPENSE_CATEGORIES: ExpenseCategory[] = [...DDI_EXPENSE_CATEGORIES, ...CDS_EXPENSE_CATEGORIES, ...FXL_EXPENSE_CATEGORIES];
+const INITIAL_EXPENSES: Expense[] = [...DDI_EXPENSES, ...CDS_EXPENSES, ...FXL_EXPENSES];
+const INITIAL_GST_INVOICES: GstInvoice[] = [...DDI_GST_INVOICES, ...CDS_GST_INVOICES, ...FXL_GST_INVOICES];
+
 const DEFAULT_AUTH_USER: AuthUser = {
   id: 'USR-001',
-  name: 'Admin Desk (Device Doctor India)',
-  email: 'devicedoctorindia.in@gmail.com',
+  name: 'Admin Desk',
+  email: 'admin@devicedoctor.in',
   role: 'Super Administrator',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&h=160&q=80',
 };
@@ -1612,15 +2287,13 @@ export const normalizePaymentMode = (mode: unknown): PaymentMode => {
 };
 
 class StorageService {
-  private isSyncingGstInvoices = false;
-
   private notifyListeners() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ddi_crm_store_updated'));
     }
   }
 
-  // --- Initializer ---
+  // --- Initializer & Multi-Brand Data Migrator ---
   public init() {
     if (typeof window === 'undefined') return;
 
@@ -1661,213 +2334,46 @@ class StorageService {
       localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
     }
 
-    // Migrate existing records in localStorage to ensure strictly the 4 exact payment modes
-    const MIGRATION_KEY = 'ddi_payment_modes_v4_migrated';
-    if (!localStorage.getItem(MIGRATION_KEY)) {
+    // Multi-Brand Migration: Ensure every stored entity has a brand, and seed Codestro & FX Launch Pad
+    const MULTI_BRAND_SEED_KEY = 'ddi_multi_brand_seed_v4';
+    if (!localStorage.getItem(MULTI_BRAND_SEED_KEY)) {
       try {
-        const rawPayments = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-        if (rawPayments) {
-          const list: Payment[] = JSON.parse(rawPayments);
-          const updated = list.map((p) => ({
-            ...p,
-            paymentMode: normalizePaymentMode(p.paymentMode),
-            paymentMethod: normalizePaymentMode(p.paymentMethod),
+        const seedTable = <T extends { id: string; brand?: BrandName }>(
+          key: string,
+          initialList: T[]
+        ) => {
+          const raw = localStorage.getItem(key);
+          const current: T[] = raw ? JSON.parse(raw) : [];
+          // 1. Tag existing items without brand with 'Device Doctor India'
+          const tagged: any[] = current.map((item) => ({
+            ...item,
+            brand: item.brand || 'Device Doctor India',
           }));
-          localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
-        }
-
-        const rawProjects = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-        if (rawProjects) {
-          const list: Project[] = JSON.parse(rawProjects);
-          const updated = list.map((p) => ({
-            ...p,
-            paymentMode: normalizePaymentMode(p.paymentMode),
-          }));
-          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
-        }
-
-        const rawEmployeePayments = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
-        if (rawEmployeePayments) {
-          const list: EmployeePayment[] = JSON.parse(rawEmployeePayments);
-          const updated = list.map((p) => ({
-            ...p,
-            paymentMode: normalizePaymentMode(p.paymentMode),
-          }));
-          localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(updated));
-        }
-        localStorage.setItem(MIGRATION_KEY, 'true');
-      } catch {
-        // ignore migration errors
-      }
-    }
-
-    // Ensure Saumya Khandelwal sample data is seeded
-    const SAUMYA_MIGRATION_KEY = 'ddi_saumya_seed_v2';
-    if (!localStorage.getItem(SAUMYA_MIGRATION_KEY)) {
-      try {
-        const rawEmps = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
-        if (rawEmps) {
-          const emps: Employee[] = JSON.parse(rawEmps);
-          if (!emps.some((e) => e.name.toLowerCase().includes('saumya'))) {
-            const saumyaEmp = INITIAL_EMPLOYEES.find((e) => e.id === 'DDI-EMP-007');
-            if (saumyaEmp) emps.push(saumyaEmp);
-            localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(emps));
-          }
-        }
-        const rawAsns = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
-        if (rawAsns) {
-          const asns: Assignment[] = JSON.parse(rawAsns);
-          if (!asns.some((a) => a.employeeId === 'DDI-EMP-007')) {
-            const saumyaAsns = INITIAL_ASSIGNMENTS.filter((a) => a.employeeId === 'DDI-EMP-007');
-            asns.push(...saumyaAsns);
-            localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(asns));
-          }
-        }
-        const rawEpays = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
-        if (rawEpays) {
-          const epays: EmployeePayment[] = JSON.parse(rawEpays);
-          if (!epays.some((ep) => ep.employeeId === 'DDI-EMP-007')) {
-            const saumyaEpays = INITIAL_EMPLOYEE_PAYMENTS.filter((ep) => ep.employeeId === 'DDI-EMP-007');
-            epays.push(...saumyaEpays);
-            localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(epays));
-          }
-        }
-        localStorage.setItem(SAUMYA_MIGRATION_KEY, 'true');
-      } catch {
-        // ignore
-      }
-    }
-
-    // Ensure all stored projects have proposalDocument, contractDocument, and paymentPhases
-    const PROJECT_DOCS_PHASES_MIGRATION_KEY = 'ddi_project_docs_phases_v2';
-    if (!localStorage.getItem(PROJECT_DOCS_PHASES_MIGRATION_KEY)) {
-      try {
-        const rawProjects = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-        if (rawProjects) {
-          const list: Project[] = JSON.parse(rawProjects);
-          const updated = list.map((p) => {
-            const initialMatch = INITIAL_PROJECTS.find((ip) => ip.id === p.id);
-            const proposalDoc = p.proposalDocument || initialMatch?.proposalDocument || {
-              id: `doc-prop-${p.id.slice(-6)}`,
-              name: `${(p.clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}_Project_Proposal.pdf`,
-              size: 2450000,
-              type: 'application/pdf',
-              uploadedAt: p.proposalDate || p.createdAt || new Date().toISOString(),
-              externalUrl: 'https://drive.google.com/file/d/sample-proposal/view',
-              notes: p.proposalDocumentNotes || 'Detailed scope of work, technical architecture, and milestones.',
-            };
-            const contractDoc = p.contractDocument || initialMatch?.contractDocument || {
-              id: `doc-cont-${p.id.slice(-6)}`,
-              name: `${(p.clientName || 'Client').replace(/[^a-zA-Z0-9]/g, '_')}_Executed_Contract_Signed.pdf`,
-              size: 3820000,
-              type: 'application/pdf',
-              uploadedAt: p.contractDate || p.createdAt || new Date().toISOString(),
-              externalUrl: 'https://drive.google.com/file/d/sample-contract-signed/view',
-              notes: p.contractDocumentNotes || 'Signed agreement with standard SLA and delivery warranty.',
-            };
-
-            let phases = p.paymentPhases;
-            if (!phases || phases.length === 0) {
-              if (initialMatch?.paymentPhases && initialMatch.paymentPhases.length > 0) {
-                phases = initialMatch.paymentPhases;
-              } else {
-                const contractVal = Number(p.contract) || 100000;
-                const rate = Number(p.exchangeRate) || 1;
-                const p1Amt = Math.round(contractVal * 0.4);
-                const p2Amt = Math.round(contractVal * 0.3);
-                const p3Amt = contractVal - p1Amt - p2Amt;
-                phases = [
-                  {
-                    id: `phase-${p.id}-1`,
-                    name: 'Phase 1 - Advance / Project Kickoff',
-                    percentage: 40,
-                    amount: p1Amt,
-                    amountINR: Math.round(p1Amt * rate),
-                    dueDate: p.startDate || new Date().toISOString().slice(0, 10),
-                    status: (p.totalReceived || 0) >= Math.round(p1Amt * rate) ? 'Received' : 'Invoiced',
-                    notes: 'Advance mobilization payment upon contract execution.',
-                  },
-                  {
-                    id: `phase-${p.id}-2`,
-                    name: 'Phase 2 - Development Milestone & UAT',
-                    percentage: 30,
-                    amount: p2Amt,
-                    amountINR: Math.round(p2Amt * rate),
-                    dueDate: p.committedEndDate || new Date().toISOString().slice(0, 10),
-                    status: (p.totalReceived || 0) >= Math.round((p1Amt + p2Amt) * rate) ? 'Received' : 'Pending',
-                    notes: 'Sprint deliverable completion and core module sign-off.',
-                  },
-                  {
-                    id: `phase-${p.id}-3`,
-                    name: 'Phase 3 - Final Delivery & Production Handover',
-                    percentage: 30,
-                    amount: p3Amt,
-                    amountINR: Math.round(p3Amt * rate),
-                    dueDate: p.committedEndDate || new Date().toISOString().slice(0, 10),
-                    status: p.status === 'Completed' || (p.balance === 0 && (p.contractValue || 0) > 0) ? 'Received' : 'Pending',
-                    notes: 'Final settlement upon deployment and client acceptance.',
-                  },
-                ];
-              }
+          // 2. Add any seed items from Codestro or FX Launch Pad that are not in current
+          initialList.forEach((seedItem) => {
+            if (!tagged.some((item) => item.id === seedItem.id)) {
+              tagged.push(seedItem);
             }
-
-            return {
-              ...p,
-              proposalDocument: proposalDoc,
-              proposalDocumentNotes: p.proposalDocumentNotes || proposalDoc.notes,
-              contractDocument: contractDoc,
-              contractDocumentNotes: p.contractDocumentNotes || contractDoc.notes,
-              paymentPhases: phases,
-            };
           });
-          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(updated));
-        }
-        localStorage.setItem(PROJECT_DOCS_PHASES_MIGRATION_KEY, 'true');
-      } catch {
-        // ignore
-      }
-    }
+          localStorage.setItem(key, JSON.stringify(tagged));
+        };
 
-    // Ensure all stored payments and employee payments have paymentProof if available
-    const PAYMENT_PROOFS_MIGRATION_KEY = 'ddi_payment_proofs_v2';
-    if (!localStorage.getItem(PAYMENT_PROOFS_MIGRATION_KEY)) {
-      try {
-        const rawPayments = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-        if (rawPayments) {
-          const list: Payment[] = JSON.parse(rawPayments);
-          const updated = list.map((p) => {
-            const initialMatch = INITIAL_PAYMENTS.find((ip) => ip.id === p.id);
-            if (!p.paymentProof && initialMatch?.paymentProof) {
-              return {
-                ...p,
-                paymentProof: initialMatch.paymentProof,
-                paymentProofNotes: p.paymentProofNotes || initialMatch.paymentProofNotes,
-              };
-            }
-            return p;
-          });
-          localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
-        }
+        seedTable(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+        seedTable(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+        seedTable(STORAGE_KEYS.SERVICES, INITIAL_SERVICES);
+        seedTable(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS);
+        seedTable(STORAGE_KEYS.PAYMENTS, INITIAL_PAYMENTS);
+        seedTable(STORAGE_KEYS.ROLES, INITIAL_ROLES);
+        seedTable(STORAGE_KEYS.EMPLOYEES, INITIAL_EMPLOYEES);
+        seedTable(STORAGE_KEYS.ASSIGNMENTS, INITIAL_ASSIGNMENTS);
+        seedTable(STORAGE_KEYS.EMPLOYEE_PAYMENTS, INITIAL_EMPLOYEE_PAYMENTS);
+        seedTable(STORAGE_KEYS.EXPENSE_CATEGORIES, INITIAL_EXPENSE_CATEGORIES);
+        seedTable(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+        seedTable(STORAGE_KEYS.GST_INVOICES, INITIAL_GST_INVOICES);
 
-        const rawEpays = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
-        if (rawEpays) {
-          const list: EmployeePayment[] = JSON.parse(rawEpays);
-          const updated = list.map((ep) => {
-            const initialMatch = INITIAL_EMPLOYEE_PAYMENTS.find((iep) => iep.id === ep.id);
-            if (!ep.paymentProof && initialMatch?.paymentProof) {
-              return {
-                ...ep,
-                paymentProof: initialMatch.paymentProof,
-                paymentProofNotes: ep.paymentProofNotes || initialMatch.paymentProofNotes,
-              };
-            }
-            return ep;
-          });
-          localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(updated));
-        }
-        localStorage.setItem(PAYMENT_PROOFS_MIGRATION_KEY, 'true');
-      } catch {
-        // ignore
+        localStorage.setItem(MULTI_BRAND_SEED_KEY, 'true');
+      } catch (e) {
+        console.warn('Multi-brand seed migration error:', e);
       }
     }
   }
@@ -1886,6 +2392,22 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(INITIAL_EXPENSE_CATEGORIES));
     localStorage.setItem(STORAGE_KEYS.EXPENSES, JSON.stringify(INITIAL_EXPENSES));
     localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(INITIAL_GST_INVOICES));
+    this.notifyListeners();
+  }
+
+  // --- Active Brand Workspace ---
+  public getActiveBrand(): BrandName {
+    if (typeof window === 'undefined') return 'Device Doctor India';
+    const saved = localStorage.getItem(STORAGE_KEYS.BRAND);
+    if (saved === 'Codestro' || saved === 'FX Launch Pad' || saved === 'Device Doctor India') {
+      return saved;
+    }
+    return 'Device Doctor India';
+  }
+
+  public setActiveBrand(brand: BrandName) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEYS.BRAND, brand);
     this.notifyListeners();
   }
 
@@ -1935,147 +2457,59 @@ class StorageService {
     this.notifyListeners();
   }
 
-  // --- ID Generation ---
-  public generateId(
-    prefix:
-      | 'CL'
-      | 'CAT'
-      | 'SRV'
-      | 'PRJ'
-      | 'PAY'
-      | 'DDI-PAY'
-      | 'ROL'
-      | 'EMP'
-      | 'DDI-EMP'
-      | 'ASN'
-      | 'DDI-ASN'
-      | 'EPAY'
-      | 'DDI-EPAY'
-      | 'EXPCAT'
-      | 'DDI-EXPCAT'
-      | 'EXP'
-      | 'DDI-EXP'
-      | 'GST'
-      | 'DDI-GST'
-  ): string {
-    if (prefix === 'DDI-GST' || prefix === 'GST') {
-      let invoices: GstInvoice[] = [];
-      try {
-        const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.GST_INVOICES) : null;
-        invoices = raw ? JSON.parse(raw) : INITIAL_GST_INVOICES;
-      } catch {
-        invoices = INITIAL_GST_INVOICES;
-      }
-      const numbers = invoices.map((item) => {
-        const parts = (item.id || '').split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-GST-${String(max + 1).padStart(3, '0')}`;
-    }
+  // --- Dynamic Brand-Aware ID Generation ---
+  public generateId(type: string, brand?: BrandName): string {
+    const currentBrand = brand || this.getActiveBrand();
+    const prefix = getBrandPrefix(currentBrand); // 'DDI' | 'CDS' | 'FXL'
 
-    if (prefix === 'DDI-EXP' || prefix === 'EXP') {
-      const exps = this.getExpenses();
-      const numbers = exps.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-EXP-${String(max + 1).padStart(3, '0')}`;
-    }
+    // Clean up prefix if already present in type
+    const cleanType = type.replace(/^(DDI|CDS|FXL)-/, '');
 
-    if (prefix === 'DDI-EXPCAT' || prefix === 'EXPCAT') {
-      const cats = this.getExpenseCategories();
-      const numbers = cats.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-EXPCAT-${String(max + 1).padStart(3, '0')}`;
-    }
-
-    if (prefix === 'DDI-EPAY' || prefix === 'EPAY') {
-      const epays = this.getEmployeePayments();
-      const numbers = epays.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-EPAY-${String(max + 1).padStart(3, '0')}`;
-    }
-
-    if (prefix === 'DDI-ASN' || prefix === 'ASN') {
-      const assignments = this.getAssignments();
-      const numbers = assignments.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-ASN-${String(max + 1).padStart(3, '0')}`;
-    }
-
-    if (prefix === 'DDI-PAY' || prefix === 'PAY') {
-      const payments = this.getPayments();
-      const numbers = payments.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-PAY-${String(max + 1).padStart(3, '0')}`;
-    }
-
-    if (prefix === 'DDI-EMP' || prefix === 'EMP') {
-      const employees = this.getEmployees();
-      const numbers = employees.map((item) => {
-        const parts = item.id.split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        return isNaN(num) ? 0 : num;
-      });
-      const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-      return `DDI-EMP-${String(max + 1).padStart(3, '0')}`;
-    }
-
-    let list: Array<{ id: string }> = [];
-    switch (prefix) {
+    let list: Array<{ id: string; brand?: BrandName }> = [];
+    switch (cleanType) {
       case 'CL': list = this.getClients(); break;
       case 'CAT': list = this.getCategories(); break;
       case 'SRV': list = this.getServices(); break;
       case 'PRJ': list = this.getProjects(); break;
+      case 'PAY': list = this.getPayments(); break;
       case 'ROL': list = this.getRoles(); break;
+      case 'EMP': list = this.getEmployees(); break;
+      case 'ASN': list = this.getAssignments(); break;
+      case 'EPAY': list = this.getEmployeePayments(); break;
+      case 'EXPCAT': list = this.getExpenseCategories(); break;
+      case 'EXP': list = this.getExpenses(); break;
+      case 'GST': list = this.getGstInvoices(); break;
+      default: list = [];
     }
 
-    const numbers = list.map((item) => {
-      const parts = item.id.split('-');
-      const num = parseInt(parts[1], 10);
+    // Filter items matching the requested brand or starting with the brand prefix
+    const brandItems = list.filter(
+      (item) => item.brand === currentBrand || (item.id && item.id.startsWith(prefix))
+    );
+
+    const numbers = brandItems.map((item) => {
+      const parts = (item.id || '').split('-');
+      const lastPart = parts[parts.length - 1];
+      const num = parseInt(lastPart, 10);
       return isNaN(num) ? 0 : num;
     });
 
     const max = numbers.length > 0 ? Math.max(...numbers) : 0;
     const nextNum = max + 1;
-    return `${prefix}-${String(nextNum).padStart(3, '0')}`;
+    return `${prefix}-${cleanType}-${String(nextNum).padStart(3, '0')}`;
   }
 
-  // --- Smart Dynamic Project ID Generator (Format: DDI - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE]) ---
+  // --- Smart Dynamic Project ID Generator (Format: [PREFIX] - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE]) ---
   public generateSmartProjectId(
     clientName: string,
     serviceName: string,
     clientId?: string,
     serviceId?: string,
-    currentProjectId?: string
+    currentProjectId?: string,
+    brand?: BrandName
   ): string {
+    const currentBrand = brand || this.getActiveBrand();
+    const prefix = getBrandPrefix(currentBrand);
     const cleanClient = (clientName || 'CLIENT').trim().toUpperCase();
     const cleanService = (serviceName || 'SERVICE').trim().toUpperCase();
     const projects = this.getProjects();
@@ -2083,7 +2517,7 @@ class StorageService {
     const matchingProjects = projects.filter((p) => {
       if (currentProjectId && p.id === currentProjectId) return false;
       const matchById = clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
-      const matchByPattern = p.id.startsWith(`DDI - ${cleanClient} - ${cleanService} - `);
+      const matchByPattern = p.id.startsWith(`${prefix} - ${cleanClient} - ${cleanService} - `);
       return matchById || matchByPattern;
     });
 
@@ -2098,7 +2532,7 @@ class StorageService {
     }
 
     const nextSeq = maxSeq > 0 ? maxSeq + 1 : (matchingProjects.length + 1);
-    return `DDI - ${cleanClient} - ${cleanService} - ${nextSeq}`;
+    return `${prefix} - ${cleanClient} - ${cleanService} - ${nextSeq}`;
   }
 
   // --- CLIENTS ---
@@ -2114,6 +2548,8 @@ class StorageService {
 
   public saveClient(client: Client): { success: boolean; error?: string } {
     const clients = this.getClients();
+    const activeBrand = client.brand || this.getActiveBrand();
+    client.brand = activeBrand;
 
     if (client.gstNumber && client.gstNumber.trim().length > 0) {
       const cleanGST = client.gstNumber.trim().toUpperCase();
@@ -2142,7 +2578,7 @@ class StorageService {
       };
     } else {
       if (!client.id) {
-        client.id = this.generateId('CL');
+        client.id = this.generateId('CL', activeBrand);
       }
       client.createdAt = now;
       client.updatedAt = now;
@@ -2160,7 +2596,7 @@ class StorageService {
     if (linkedProjects.length > 0) {
       return {
         allowed: false,
-        reason: `Cannot delete client because they have ${linkedProjects.length} linked Project(s).`,
+        reason: `Cannot delete client because they have ${linkedProjects.length} linked Project record(s). Mark client as Inactive instead to preserve historical records.`,
         linkedCount: linkedProjects.length,
       };
     }
@@ -2199,12 +2635,17 @@ class StorageService {
 
   public saveCategory(category: ServiceCategory): { success: boolean; error?: string } {
     const categories = this.getCategories();
+    const activeBrand = category.brand || this.getActiveBrand();
+    category.brand = activeBrand;
 
     const duplicate = categories.find(
-      (c) => c.id !== category.id && c.name.trim().toLowerCase() === category.name.trim().toLowerCase()
+      (c) =>
+        c.id !== category.id &&
+        (c.brand === activeBrand || !c.brand) &&
+        c.name.trim().toLowerCase() === category.name.trim().toLowerCase()
     );
     if (duplicate) {
-      return { success: false, error: `Category name "${category.name}" already exists. Category names must be strictly unique.` };
+      return { success: false, error: `Category name "${category.name}" already exists for brand ${activeBrand}. Category names must be unique within a brand.` };
     }
 
     const existingIndex = categories.findIndex((c) => c.id === category.id);
@@ -2219,7 +2660,7 @@ class StorageService {
       };
     } else {
       if (!category.id) {
-        category.id = this.generateId('CAT');
+        category.id = this.generateId('CAT', activeBrand);
       }
       category.name = category.name.trim();
       category.createdAt = now;
@@ -2264,7 +2705,7 @@ class StorageService {
     this.notifyListeners();
   }
 
-  // --- SERVICES (Strictly 5 fields: id, name, categoryId, description, status) ---
+  // --- SERVICES ---
   public getServices(): Service[] {
     this.init();
     try {
@@ -2277,6 +2718,8 @@ class StorageService {
 
   public saveService(service: Service): { success: boolean; error?: string } {
     const services = this.getServices();
+    const activeBrand = service.brand || this.getActiveBrand();
+    service.brand = activeBrand;
 
     if (!service.name || service.name.trim().length === 0) {
       return { success: false, error: 'Service name is required.' };
@@ -2290,6 +2733,7 @@ class StorageService {
 
     const cleanService: Service = {
       id: service.id,
+      brand: activeBrand,
       name: service.name.trim(),
       categoryId: service.categoryId,
       description: service.description || '',
@@ -2305,7 +2749,7 @@ class StorageService {
       };
     } else {
       if (!cleanService.id) {
-        cleanService.id = this.generateId('SRV');
+        cleanService.id = this.generateId('SRV', activeBrand);
       }
       cleanService.createdAt = now;
       services.push(cleanService);
@@ -2353,88 +2797,56 @@ class StorageService {
     this.init();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.PROJECTS);
-      const list: Project[] = raw ? JSON.parse(raw) : INITIAL_PROJECTS;
-      return list.map((p) => ({
-        ...p,
-        paymentMode: normalizePaymentMode(p.paymentMode),
-      }));
+      return raw ? JSON.parse(raw) : INITIAL_PROJECTS;
     } catch {
       return INITIAL_PROJECTS;
     }
   }
 
-  public syncProjectFinancials(projectId: string) {
-    if (!projectId) return;
-    const payments = this.getPayments().filter(
-      (p) => p.projectId === projectId && p.paymentStatus === 'Received'
-    );
-    const totalReceived = payments.reduce(
-      (acc, p) => acc + (p.amountINR ?? (Number(p.amountReceived || 0) * Number(p.exchangeRate || 1))),
-      0
-    );
-    const projects = this.getProjects();
-    const pIndex = projects.findIndex((p) => p.id === projectId);
-    if (pIndex >= 0) {
-      const contractVal = projects[pIndex].contractValue || 0;
-      projects[pIndex].totalReceived = totalReceived;
-      projects[pIndex].balance = Math.max(0, contractVal - totalReceived);
-      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
-      this.notifyListeners();
-    }
-  }
-
   public saveProject(project: Project): { success: boolean; error?: string } {
     const projects = this.getProjects();
-    const existingIndex = projects.findIndex((p) => p.id === project.id);
-    const now = new Date().toISOString();
+    const activeBrand = project.brand || this.getActiveBrand();
+    project.brand = activeBrand;
 
-    // Auto-fill client name from Client if available
+    if (!project.clientId) {
+      return { success: false, error: 'A Client must be selected.' };
+    }
+    if (!project.serviceId) {
+      return { success: false, error: 'A Service must be selected.' };
+    }
+
     const client = this.getClients().find((c) => c.id === project.clientId);
     if (client) {
       project.clientName = client.name;
     }
+
     const service = this.getServices().find((s) => s.id === project.serviceId);
 
-    // Auto-calculate Committed End Date: Project Start Date + Committed Days
-    if (project.startDate && project.committedDays !== undefined) {
-      const d = new Date(project.startDate);
-      if (!isNaN(d.getTime())) {
-        d.setDate(d.getDate() + (Number(project.committedDays) || 0));
-        project.committedEndDate = d.toISOString().slice(0, 10);
-      }
-    }
+    const now = new Date().toISOString();
+    const existingIndex = projects.findIndex((p) => p.id === project.id);
 
-    // Auto-calculate Contract Value in INR: Contract * Exchange Rate
-    const contractAmount = Number(project.contract) || 0;
-    const rate = Number(project.exchangeRate) || 1;
-    project.contractValue = Math.round(contractAmount * rate);
-    project.paymentMode = normalizePaymentMode(project.paymentMode || 'GST Invoice');
+    // Dynamic balance calculation
+    const contractVal = Number(project.contractValue) || 0;
+    const received = Number(project.totalReceived) || 0;
+    project.balance = Math.max(0, contractVal - received);
 
     if (existingIndex >= 0) {
-      const existingProject = projects[existingIndex];
-      const payments = this.getPayments().filter(
-        (p) => p.projectId === project.id && p.paymentStatus === 'Received'
-      );
-      const totalRec = payments.reduce((acc, p) => acc + (p.amountINR || 0), 0);
-      project.totalReceived = totalRec;
-      project.balance = Math.max(0, project.contractValue - totalRec);
-
       projects[existingIndex] = {
-        ...existingProject,
+        ...projects[existingIndex],
         ...project,
         updatedAt: now,
       };
     } else {
-      if (!project.id || project.id.startsWith('PRJ-')) {
+      if (!project.id) {
         project.id = this.generateSmartProjectId(
-          client?.name || 'CLIENT',
+          project.clientName || 'CLIENT',
           service?.name || 'SERVICE',
           project.clientId,
-          project.serviceId
+          project.serviceId,
+          undefined,
+          activeBrand
         );
       }
-      project.totalReceived = 0;
-      project.balance = project.contractValue;
       project.createdAt = now;
       project.updatedAt = now;
       projects.unshift(project);
@@ -2445,35 +2857,31 @@ class StorageService {
     return { success: true };
   }
 
-  public canDeleteProject(projectId: string): { allowed: boolean; reason?: string; linkedCount: number; blockType?: 'payments' | 'assignments' | 'expenses' } {
-    const payments = this.getPayments().filter((p) => p.projectId === projectId);
-    const assignments = this.getAssignments().filter((a) => a.projectId === projectId);
-    const expenses = this.getExpenses().filter((e) => e.projectId === projectId);
-
-    if (payments.length > 0) {
+  public canDeleteProject(projectId: string): {
+    allowed: boolean;
+    reason?: string;
+    linkedCount: number;
+    blockType?: 'payments' | 'assignments';
+  } {
+    const assignments = this.getAssignments();
+    const linkedAssignments = assignments.filter((a) => a.projectId === projectId);
+    if (linkedAssignments.length > 0) {
       return {
         allowed: false,
-        reason: `Cannot delete project because ${payments.length} Payment record(s) are attached to it. You can mark this project as Cancelled instead.`,
-        linkedCount: payments.length,
-        blockType: 'payments',
-      };
-    }
-
-    if (assignments.length > 0) {
-      return {
-        allowed: false,
-        reason: `Cannot delete project because ${assignments.length} Employee Assignment(s) are linked to it. You can mark this project as Cancelled instead.`,
-        linkedCount: assignments.length,
+        reason: `Cannot delete project because it has ${linkedAssignments.length} linked Employee Assignment(s).`,
+        linkedCount: linkedAssignments.length,
         blockType: 'assignments',
       };
     }
 
-    if (expenses.length > 0) {
+    const payments = this.getPayments();
+    const linkedPayments = payments.filter((p) => p.projectId === projectId);
+    if (linkedPayments.length > 0) {
       return {
         allowed: false,
-        reason: `Cannot delete project because ${expenses.length} Expense record(s) are linked to it. You can mark this project as Cancelled instead.`,
-        linkedCount: expenses.length,
-        blockType: 'expenses',
+        reason: `Cannot delete project because it has ${linkedPayments.length} linked Payment record(s).`,
+        linkedCount: linkedPayments.length,
+        blockType: 'payments',
       };
     }
 
@@ -2504,11 +2912,7 @@ class StorageService {
     this.init();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-      const list: Payment[] = raw ? JSON.parse(raw) : INITIAL_PAYMENTS;
-      return list.map((p) => ({
-        ...p,
-        paymentMode: normalizePaymentMode(p.paymentMode),
-      }));
+      return raw ? JSON.parse(raw) : INITIAL_PAYMENTS;
     } catch {
       return INITIAL_PAYMENTS;
     }
@@ -2516,62 +2920,26 @@ class StorageService {
 
   public savePayment(payment: Payment): { success: boolean; error?: string } {
     const payments = this.getPayments();
-    const projects = this.getProjects();
-    const project = projects.find((p) => p.id === payment.projectId);
+    const activeBrand = payment.brand || this.getActiveBrand();
+    payment.brand = activeBrand;
 
-    if (!payment.projectId || !project) {
-      return { success: false, error: 'Please select a valid Project from the dropdown.' };
+    // Check unique UTR
+    if (payment.referenceUtr && payment.referenceUtr.trim()) {
+      const cleanUtr = payment.referenceUtr.trim().toUpperCase();
+      const dup = payments.find(
+        (p) => p.id !== payment.id && p.referenceUtr?.trim().toUpperCase() === cleanUtr
+      );
+      if (dup) {
+        return { success: false, error: `Reference UTR "${payment.referenceUtr}" is already recorded in Payment ${dup.id}.` };
+      }
+      payment.referenceUtr = cleanUtr;
     }
 
-    payment.paymentMode = normalizePaymentMode(payment.paymentMode);
-
-    // Auto-fill Client ID and Client Name from Project
-    payment.clientId = project.clientId;
-    payment.clientName = project.clientName || this.getClients().find((c) => c.id === project.clientId)?.name || '';
-
-    // Calculate Amount INR
-    const amountReceived = Number(payment.amountReceived) || 0;
-    const exchangeRate = Number(payment.exchangeRate) || 1;
-    payment.amountINR = Math.round(amountReceived * exchangeRate);
-    payment.amount = payment.amountINR;
-    payment.receivedAmount = payment.paymentStatus === 'Received' ? payment.amountINR : 0;
-    payment.outstandingAmount = payment.paymentStatus === 'Received' ? 0 : payment.amountINR;
-
-    // Calculate Days Overdue: If status is 'Pending' and Today > Due Date, diff in days; else 0
-    payment.daysOverdue = calculateDaysOverdue(payment.dueDate, payment.paymentStatus);
-
-    // Enforce unique Reference / UTR
-    if (!payment.referenceUtr || !payment.referenceUtr.trim()) {
-      return { success: false, error: 'Reference / UTR is required.' };
-    }
-    const cleanUtr = payment.referenceUtr.trim();
-    const dupUtr = payments.find(
-      (p) => p.id !== payment.id && p.referenceUtr?.trim().toLowerCase() === cleanUtr.toLowerCase()
-    );
-    if (dupUtr) {
-      return {
-        success: false,
-        error: `Reference / UTR "${cleanUtr}" is already in use by Payment ${dupUtr.id}. Reference / UTR must be strictly unique across all payments.`,
-      };
-    }
-    payment.referenceUtr = cleanUtr;
-
-    // Check project balance for 'Received' payments
-    const otherPayments = payments.filter(
-      (p) => p.projectId === payment.projectId && p.id !== payment.id && p.paymentStatus === 'Received'
-    );
-    const previouslyReceived = otherPayments.reduce((acc, p) => acc + (p.amountINR || 0), 0);
-    const remainingBalance = Math.max(0, (project.contractValue || 0) - previouslyReceived);
-
-    if (payment.paymentStatus === 'Received' && payment.amountINR > remainingBalance) {
-      return {
-        success: false,
-        error: `Payment amount of ₹${payment.amountINR.toLocaleString('en-IN')} exceeds the project's remaining balance of ₹${remainingBalance.toLocaleString('en-IN')} (Contract Value: ₹${(project.contractValue || 0).toLocaleString('en-IN')}, Already Received: ₹${previouslyReceived.toLocaleString('en-IN')}).`,
-      };
-    }
-
-    const existingIndex = payments.findIndex((p) => p.id === payment.id);
     const now = new Date().toISOString();
+    const existingIndex = payments.findIndex((p) => p.id === payment.id);
+
+    // Auto-calculate overdue
+    payment.daysOverdue = calculateDaysOverdue(payment.dueDate, payment.paymentStatus);
 
     if (existingIndex >= 0) {
       payments[existingIndex] = {
@@ -2581,7 +2949,7 @@ class StorageService {
       };
     } else {
       if (!payment.id) {
-        payment.id = this.generateId('DDI-PAY');
+        payment.id = this.generateId('PAY', activeBrand);
       }
       payment.createdAt = now;
       payment.updatedAt = now;
@@ -2589,22 +2957,49 @@ class StorageService {
     }
 
     localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-    this.syncProjectFinancials(payment.projectId);
+
+    // Update Project received & balance
+    if (payment.projectId) {
+      this.recalculateProjectFinancials(payment.projectId);
+    }
+
     this.notifyListeners();
     return { success: true };
   }
 
   public deletePayment(paymentId: string): { success: boolean; error?: string } {
     const payments = this.getPayments();
-    const targetPayment = payments.find((p) => p.id === paymentId);
-    const projectId = targetPayment?.projectId;
-    const remaining = payments.filter((p) => p.id !== paymentId);
-    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(remaining));
-    if (projectId) {
-      this.syncProjectFinancials(projectId);
+    const target = payments.find((p) => p.id === paymentId);
+    const updated = payments.filter((p) => p.id !== paymentId);
+    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+
+    if (target?.projectId) {
+      this.recalculateProjectFinancials(target.projectId);
     }
+
     this.notifyListeners();
     return { success: true };
+  }
+
+  private recalculateProjectFinancials(projectId: string) {
+    const projects = this.getProjects();
+    const projectIndex = projects.findIndex((p) => p.id === projectId);
+    if (projectIndex === -1) return;
+
+    const payments = this.getPayments().filter(
+      (p) => p.projectId === projectId && p.paymentStatus === 'Received'
+    );
+    const totalReceived = payments.reduce(
+      (sum, p) => sum + (Number(p.amountINR) || Number(p.amountReceived) || 0),
+      0
+    );
+
+    const contractValue = projects[projectIndex].contractValue || 0;
+    projects[projectIndex].totalReceived = totalReceived;
+    projects[projectIndex].balance = Math.max(0, contractValue - totalReceived);
+    projects[projectIndex].updatedAt = new Date().toISOString();
+
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
   }
 
   // --- EMPLOYEE ROLES ---
@@ -2620,11 +3015,17 @@ class StorageService {
 
   public saveRole(role: EmployeeRole): { success: boolean; error?: string } {
     const roles = this.getRoles();
+    const activeBrand = role.brand || this.getActiveBrand();
+    role.brand = activeBrand;
+
     const duplicate = roles.find(
-      (r) => r.id !== role.id && r.roleName.trim().toLowerCase() === role.roleName.trim().toLowerCase()
+      (r) =>
+        r.id !== role.id &&
+        (r.brand === activeBrand || !r.brand) &&
+        r.roleName.trim().toLowerCase() === role.roleName.trim().toLowerCase()
     );
     if (duplicate) {
-      return { success: false, error: `Role name "${role.roleName}" already exists.` };
+      return { success: false, error: `Role name "${role.roleName}" already exists for ${activeBrand}.` };
     }
 
     const existingIndex = roles.findIndex((r) => r.id === role.id);
@@ -2634,14 +3035,12 @@ class StorageService {
       roles[existingIndex] = {
         ...roles[existingIndex],
         ...role,
-        roleName: role.roleName.trim(),
         updatedAt: now,
       };
     } else {
       if (!role.id) {
-        role.id = this.generateId('ROL');
+        role.id = this.generateId('ROL', activeBrand);
       }
-      role.roleName = role.roleName.trim();
       role.createdAt = now;
       role.updatedAt = now;
       roles.push(role);
@@ -2658,7 +3057,7 @@ class StorageService {
     if (linked.length > 0) {
       return {
         allowed: false,
-        reason: `Cannot delete role because ${linked.length} Employee(s) are assigned to this role. You can mark this role as Inactive instead.`,
+        reason: `Cannot delete role because it is assigned to ${linked.length} employee(s).`,
         linkedCount: linked.length,
       };
     }
@@ -2689,47 +3088,16 @@ class StorageService {
 
   public saveEmployee(employee: Employee): { success: boolean; error?: string } {
     const employees = this.getEmployees();
+    const activeBrand = employee.brand || this.getActiveBrand();
+    employee.brand = activeBrand;
 
-    // 1. Validate required name
-    if (!employee.name || !employee.name.trim()) {
-      return { success: false, error: 'Employee Name is required.' };
-    }
-
-    // 2. Validate roleId
-    if (!employee.roleId) {
-      return { success: false, error: 'Please select an Employee Role.' };
-    }
-
-    // 3. Validate and enforce unique email
-    const cleanEmail = (employee.email || '').trim().toLowerCase();
-    if (!cleanEmail) {
-      return { success: false, error: 'Email address is required.' };
-    }
-    const dupEmail = employees.find(
-      (e) => e.id !== employee.id && e.email?.trim().toLowerCase() === cleanEmail
+    // Check unique email
+    const duplicate = employees.find(
+      (e) => e.id !== employee.id && e.email.trim().toLowerCase() === employee.email.trim().toLowerCase()
     );
-    if (dupEmail) {
-      return {
-        success: false,
-        error: `Email "${employee.email.trim()}" is already registered to ${dupEmail.name} (${dupEmail.id}). Email must be strictly unique across all employees.`,
-      };
+    if (duplicate) {
+      return { success: false, error: `Email "${employee.email}" is already used by employee: ${duplicate.name}` };
     }
-    employee.email = cleanEmail;
-
-    // 4. Cost of Employee (INR)
-    const costOfEmployee = Number(employee.costOfEmployee ?? employee.monthlyCost ?? employee.salary) || 0;
-    employee.costOfEmployee = costOfEmployee;
-    employee.salary = costOfEmployee;
-    employee.monthlyCost = costOfEmployee;
-
-    // Fallback defaults
-    if (!employee.status) employee.status = 'Active';
-    if (!employee.employeeType) employee.employeeType = 'Salary Basis';
-    if (!employee.comesUnderTds) employee.comesUnderTds = 'Yes';
-    if (!employee.joiningDate) {
-      employee.joiningDate = employee.joinedDate || new Date().toISOString().slice(0, 10);
-    }
-    employee.joinedDate = employee.joiningDate;
 
     const existingIndex = employees.findIndex((e) => e.id === employee.id);
     const now = new Date().toISOString();
@@ -2738,14 +3106,12 @@ class StorageService {
       employees[existingIndex] = {
         ...employees[existingIndex],
         ...employee,
-        name: employee.name.trim(),
         updatedAt: now,
       };
     } else {
       if (!employee.id) {
-        employee.id = this.generateId('DDI-EMP');
+        employee.id = this.generateId('EMP', activeBrand);
       }
-      employee.name = employee.name.trim();
       employee.createdAt = now;
       employee.updatedAt = now;
       employees.push(employee);
@@ -2757,12 +3123,13 @@ class StorageService {
   }
 
   public canDeleteEmployee(employeeId: string): { allowed: boolean; reason?: string; linkedCount: number } {
-    const assignments = this.getAssignments().filter((a) => a.employeeId === employeeId);
-    if (assignments.length > 0) {
+    const assignments = this.getAssignments();
+    const linked = assignments.filter((a) => a.employeeId === employeeId);
+    if (linked.length > 0) {
       return {
         allowed: false,
-        reason: `Cannot delete employee because ${assignments.length} Project Assignment(s) are allocated to this employee. You can mark this employee as Inactive instead.`,
-        linkedCount: assignments.length,
+        reason: `Cannot delete employee because they have ${linked.length} task assignment(s).`,
+        linkedCount: linked.length,
       };
     }
     return { allowed: true, linkedCount: 0 };
@@ -2784,179 +3151,29 @@ class StorageService {
     this.init();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
-      const list: Assignment[] = raw ? JSON.parse(raw) : INITIAL_ASSIGNMENTS;
-      const epays = this.getEmployeePayments();
-
-      return list.map((a) => {
-        const linkedPayments = epays.filter((p) => p.assignmentId === a.id);
-        if (linkedPayments.length > 0) {
-          const totalPaid = linkedPayments.reduce((s, p) => s + (Number(p.amountPaid) || 0), 0);
-          let status = a.paymentStatus;
-          if (a.paymentStatus !== 'Cancelled' && a.paymentStatus !== 'On Hold') {
-            if (a.amount > 0 && totalPaid >= a.amount) {
-              status = 'Paid';
-            } else if (totalPaid > 0 && totalPaid < a.amount) {
-              status = 'Partially Paid';
-            } else if (totalPaid === 0) {
-              status = 'Pending';
-            }
-          }
-          return {
-            ...a,
-            amountPaid: totalPaid,
-            paymentStatus: status,
-          };
-        }
-        return a;
-      });
+      return raw ? JSON.parse(raw) : INITIAL_ASSIGNMENTS;
     } catch {
       return INITIAL_ASSIGNMENTS;
     }
   }
 
-  public canDeleteAssignment(assignmentId: string): { allowed: boolean; reason?: string; linkedCount: number } {
-    const linked = this.getEmployeePayments().filter((p) => p.assignmentId === assignmentId);
-    if (linked.length > 0) {
-      return {
-        allowed: false,
-        reason: `Assignment ${assignmentId} has ${linked.length} linked Employee Payment record(s). Deletion is blocked to preserve financial transaction logs. You can mark this assignment as Cancelled or On Hold instead.`,
-        linkedCount: linked.length,
-      };
-    }
-    return { allowed: true, linkedCount: 0 };
-  }
-
-  public syncAssignmentWithPayments(assignmentId: string): void {
-    const raw = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
-    const assignments: Assignment[] = raw ? JSON.parse(raw) : INITIAL_ASSIGNMENTS;
-    const epays = this.getEmployeePayments().filter((p) => p.assignmentId === assignmentId);
-    const totalPaid = epays.reduce((s, p) => s + (Number(p.amountPaid) || 0), 0);
-
-    const index = assignments.findIndex((a) => a.id === assignmentId);
-    if (index >= 0) {
-      const target = assignments[index];
-      target.amountPaid = totalPaid;
-      if (target.paymentStatus !== 'Cancelled' && target.paymentStatus !== 'On Hold') {
-        if (target.amount > 0 && totalPaid >= target.amount) {
-          target.paymentStatus = 'Paid';
-        } else if (totalPaid > 0 && totalPaid < target.amount) {
-          target.paymentStatus = 'Partially Paid';
-        } else if (totalPaid === 0) {
-          target.paymentStatus = 'Pending';
-        }
-      }
-      target.updatedAt = new Date().toISOString();
-      assignments[index] = target;
-      localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
-    }
-  }
-
   public saveAssignment(assignment: Assignment): { success: boolean; error?: string } {
     const assignments = this.getAssignments();
-    const projects = this.getProjects();
-    const employees = this.getEmployees();
-    const clients = this.getClients();
-    const roles = this.getRoles();
-
-    // 1. Validate project
-    if (!assignment.projectId) {
-      return { success: false, error: 'Please select a Project from the dropdown.' };
-    }
-    const project = projects.find((p) => p.id === assignment.projectId);
-    if (!project) {
-      return { success: false, error: 'Selected Project not found.' };
-    }
-
-    // 2. Validate employee
-    if (!assignment.employeeId) {
-      return { success: false, error: 'Please select an Employee from the dropdown.' };
-    }
-    const employee = employees.find((e) => e.id === assignment.employeeId);
-    if (!employee) {
-      return { success: false, error: 'Selected Employee not found.' };
-    }
-
-    // 3. Relational Auto-fill & Sync
-    const client = clients.find((c) => c.id === project.clientId);
-    const role = roles.find((r) => r.id === employee.roleId);
-
-    assignment.clientId = project.clientId;
-    assignment.clientName = client?.name || project.clientName || '';
-    assignment.employeeName = employee.name;
-    assignment.roleName = role?.roleName || '';
-
-    // 4. Validate work assigned
-    if (!assignment.workAssigned || !assignment.workAssigned.trim()) {
-      return { success: false, error: 'Work / Module Assigned description is required.' };
-    }
-    assignment.workAssigned = assignment.workAssigned.trim();
-
-    // 5. Validate amounts
-    const amount = Number(assignment.amount) || 0;
-    const amountPaid = Number(assignment.amountPaid) || 0;
-    if (amount < 0) {
-      return { success: false, error: 'Amount cannot be negative.' };
-    }
-    if (amountPaid < 0) {
-      return { success: false, error: 'Amount Paid cannot be negative.' };
-    }
-    if (amountPaid > amount) {
-      return {
-        success: false,
-        error: `Amount Paid (₹${amountPaid.toLocaleString('en-IN')}) cannot exceed total allocated Amount (₹${amount.toLocaleString('en-IN')}).`,
-      };
-    }
-    assignment.amount = amount;
-    assignment.amountPaid = amountPaid;
-
-    // 6. Assigned Date default
-    if (!assignment.assignedDate) {
-      assignment.assignedDate = new Date().toISOString().slice(0, 10);
-    }
-
-    // 7. Payment status default or auto-suggest
-    if (!assignment.paymentStatus) {
-      if (amountPaid === amount && amount > 0) {
-        assignment.paymentStatus = 'Paid';
-      } else if (amountPaid > 0) {
-        assignment.paymentStatus = 'Partially Paid';
-      } else {
-        assignment.paymentStatus = 'Pending';
-      }
-    }
+    const activeBrand = assignment.brand || this.getActiveBrand();
+    assignment.brand = activeBrand;
 
     const existingIndex = assignments.findIndex((a) => a.id === assignment.id);
     const now = new Date().toISOString();
-    const formattedNow = new Date().toLocaleString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
 
     if (existingIndex >= 0) {
-      const existing = assignments[existingIndex];
-      const notesChanged = (existing.employeeNotes || '').trim() !== (assignment.employeeNotes || '').trim();
-      if (notesChanged) {
-        assignment.lastNoteUpdate = formattedNow;
-      } else {
-        assignment.lastNoteUpdate = existing.lastNoteUpdate || (assignment.employeeNotes ? formattedNow : '');
-      }
-
       assignments[existingIndex] = {
-        ...existing,
+        ...assignments[existingIndex],
         ...assignment,
         updatedAt: now,
       };
     } else {
       if (!assignment.id) {
-        assignment.id = this.generateId('DDI-ASN');
-      }
-      if (assignment.employeeNotes && assignment.employeeNotes.trim()) {
-        assignment.lastNoteUpdate = formattedNow;
-      } else {
-        assignment.lastNoteUpdate = '';
+        assignment.id = this.generateId('ASN', activeBrand);
       }
       assignment.createdAt = now;
       assignment.updatedAt = now;
@@ -2968,12 +3185,24 @@ class StorageService {
     return { success: true };
   }
 
-  public deleteAssignment(assignmentId: string): { success: boolean; error?: string } {
+  public canDeleteAssignment(assignmentId: string): { allowed: boolean; reason?: string; linkedCount: number } {
+    const epays = this.getEmployeePayments();
+    const linked = epays.filter((ep) => ep.assignmentId === assignmentId);
+    if (linked.length > 0) {
+      return {
+        allowed: false,
+        reason: `Cannot delete assignment because it has ${linked.length} linked payout records.`,
+        linkedCount: linked.length,
+      };
+    }
+    return { allowed: true, linkedCount: 0 };
+  }
+
+  public deleteAssignment(assignmentId: string): { success: boolean; error?: string; linkedCount?: number } {
     const check = this.canDeleteAssignment(assignmentId);
     if (!check.allowed) {
-      return { success: false, error: check.reason };
+      return { success: false, error: check.reason, linkedCount: check.linkedCount };
     }
-
     const assignments = this.getAssignments().filter((a) => a.id !== assignmentId);
     localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
     this.notifyListeners();
@@ -2985,118 +3214,76 @@ class StorageService {
     this.init();
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS);
-      const list: EmployeePayment[] = raw ? JSON.parse(raw) : INITIAL_EMPLOYEE_PAYMENTS;
-      return list.map((p) => ({
-        ...p,
-        paymentMode: normalizePaymentMode(p.paymentMode),
-      }));
+      return raw ? JSON.parse(raw) : INITIAL_EMPLOYEE_PAYMENTS;
     } catch {
       return INITIAL_EMPLOYEE_PAYMENTS;
     }
   }
 
   public saveEmployeePayment(payment: EmployeePayment): { success: boolean; error?: string } {
-    const payments = this.getEmployeePayments();
-    const assignments = this.getAssignments();
+    const epays = this.getEmployeePayments();
+    const activeBrand = payment.brand || this.getActiveBrand();
+    payment.brand = activeBrand;
 
-    // 1. Validate Assignment ID
-    if (!payment.assignmentId) {
-      return { success: false, error: 'Please select an Assignment ID from the dropdown.' };
-    }
-    const assignment = assignments.find((a) => a.id === payment.assignmentId);
-    if (!assignment) {
-      return { success: false, error: `Assignment "${payment.assignmentId}" not found.` };
-    }
-
-    // 2. Auto-fill from Assignment
-    payment.projectId = assignment.projectId;
-    payment.employeeId = assignment.employeeId;
-    payment.employeeName = assignment.employeeName;
-
-    // 3. Payment Date
-    if (!payment.paymentDate) {
-      payment.paymentDate = new Date().toISOString().slice(0, 10);
-    }
-
-    // 4. Validate Amount Paid & Remaining Balance
-    const amountPaid = Number(payment.amountPaid) || 0;
-    if (amountPaid <= 0) {
-      return { success: false, error: 'Amount Paid must be greater than zero.' };
-    }
-
-    // Calculate other payments already made on this assignment
-    const otherPayments = payments.filter((p) => p.assignmentId === payment.assignmentId && p.id !== payment.id);
-    const otherPaymentsTotal = otherPayments.reduce((sum, p) => sum + (Number(p.amountPaid) || 0), 0);
-    const remainingBalance = Math.max(0, (Number(assignment.amount) || 0) - otherPaymentsTotal);
-
-    if (amountPaid > remainingBalance) {
-      return {
-        success: false,
-        error: `Amount Paid (₹${amountPaid.toLocaleString('en-IN')}) cannot exceed the remaining unpaid balance of ₹${remainingBalance.toLocaleString('en-IN')} for assignment ${assignment.id}.`,
-      };
-    }
-    payment.amountPaid = amountPaid;
-
-    // 5. Payment Mode (strictly 4 options, default GST Invoice)
-    payment.paymentMode = normalizePaymentMode(payment.paymentMode || 'GST Invoice');
-
-    // 6. Unique Reference / UTR check across all employee payments if provided
-    if (payment.referenceUtr && payment.referenceUtr.trim()) {
-      const trimmedRef = payment.referenceUtr.trim().toLowerCase();
-      const duplicate = payments.find(
-        (p) => p.id !== payment.id && (p.referenceUtr || '').trim().toLowerCase() === trimmedRef
-      );
-      if (duplicate) {
-        return {
-          success: false,
-          error: `Reference / UTR "${payment.referenceUtr.trim()}" is already recorded on payment ${duplicate.id}. Must be unique.`,
-        };
-      }
-      payment.referenceUtr = payment.referenceUtr.trim();
-    } else {
-      payment.referenceUtr = '';
-    }
-
-    // 7. Auto-generate ID if missing
-    if (!payment.id) {
-      payment.id = this.generateId('DDI-EPAY');
-    }
-
+    const existingIndex = epays.findIndex((p) => p.id === payment.id);
     const now = new Date().toISOString();
-    const existingIndex = payments.findIndex((p) => p.id === payment.id);
+
     if (existingIndex >= 0) {
-      payments[existingIndex] = {
-        ...payments[existingIndex],
+      epays[existingIndex] = {
+        ...epays[existingIndex],
         ...payment,
         updatedAt: now,
       };
     } else {
+      if (!payment.id) {
+        payment.id = this.generateId('EPAY', activeBrand);
+      }
       payment.createdAt = now;
       payment.updatedAt = now;
-      payments.unshift(payment);
+      epays.unshift(payment);
     }
 
-    localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(payments));
+    localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(epays));
 
-    // Live Two-Way Sync: Update the Assignment's amountPaid and paymentStatus
-    this.syncAssignmentWithPayments(payment.assignmentId);
+    // Update Assignment amountPaid
+    if (payment.assignmentId) {
+      const assignments = this.getAssignments();
+      const asnIndex = assignments.findIndex((a) => a.id === payment.assignmentId);
+      if (asnIndex >= 0) {
+        const totalPaid = epays
+          .filter((ep) => ep.assignmentId === payment.assignmentId)
+          .reduce((sum, ep) => sum + (Number(ep.amountPaid) || 0), 0);
+        assignments[asnIndex].amountPaid = totalPaid;
+        if (totalPaid >= assignments[asnIndex].amount) {
+          assignments[asnIndex].paymentStatus = 'Paid';
+        } else if (totalPaid > 0) {
+          assignments[asnIndex].paymentStatus = 'Partially Paid';
+        }
+        localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+      }
+    }
 
     this.notifyListeners();
     return { success: true };
   }
 
   public deleteEmployeePayment(paymentId: string): { success: boolean; error?: string } {
-    const payments = this.getEmployeePayments();
-    const target = payments.find((p) => p.id === paymentId);
-    if (!target) {
-      return { success: false, error: 'Employee payment record not found.' };
-    }
-
-    const updated = payments.filter((p) => p.id !== paymentId);
+    const epays = this.getEmployeePayments();
+    const target = epays.find((p) => p.id === paymentId);
+    const updated = epays.filter((p) => p.id !== paymentId);
     localStorage.setItem(STORAGE_KEYS.EMPLOYEE_PAYMENTS, JSON.stringify(updated));
 
-    // Live Two-Way Sync: Update the Assignment's amountPaid and paymentStatus
-    this.syncAssignmentWithPayments(target.assignmentId);
+    if (target?.assignmentId) {
+      const assignments = this.getAssignments();
+      const asnIndex = assignments.findIndex((a) => a.id === target.assignmentId);
+      if (asnIndex >= 0) {
+        const totalPaid = updated
+          .filter((ep) => ep.assignmentId === target.assignmentId)
+          .reduce((sum, ep) => sum + (Number(ep.amountPaid) || 0), 0);
+        assignments[asnIndex].amountPaid = totalPaid;
+        localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(assignments));
+      }
+    }
 
     this.notifyListeners();
     return { success: true };
@@ -3113,88 +3300,77 @@ class StorageService {
     }
   }
 
-  public canDeleteExpenseCategory(categoryId: string): { allowed: boolean; reason?: string; linkedCount: number } {
-    const expenses = this.getExpenses().filter((e) => e.expenseCategoryId === categoryId);
-    if (expenses.length > 0) {
+  public saveExpenseCategory(cat: ExpenseCategory): { success: boolean; error?: string } {
+    const cats = this.getExpenseCategories();
+    const activeBrand = cat.brand || this.getActiveBrand();
+    cat.brand = activeBrand;
+
+    const dup = cats.find(
+      (c) =>
+        c.id !== cat.id &&
+        (c.brand === activeBrand || !c.brand) &&
+        c.name.trim().toLowerCase() === cat.name.trim().toLowerCase()
+    );
+    if (dup) {
+      return { success: false, error: `Expense Category "${cat.name}" already exists for ${activeBrand}.` };
+    }
+
+    const existingIndex = cats.findIndex((c) => c.id === cat.id);
+    const now = new Date().toISOString();
+
+    if (existingIndex >= 0) {
+      cats[existingIndex] = {
+        ...cats[existingIndex],
+        ...cat,
+        updatedAt: now,
+      };
+    } else {
+      if (!cat.id) {
+        cat.id = this.generateId('EXPCAT', activeBrand);
+      }
+      cat.createdAt = now;
+      cat.updatedAt = now;
+      cats.push(cat);
+    }
+
+    localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
+    this.notifyListeners();
+    return { success: true };
+  }
+
+  public canDeleteExpenseCategory(catId: string): { allowed: boolean; reason?: string; linkedCount: number } {
+    const expenses = this.getExpenses();
+    const linked = expenses.filter((e) => e.expenseCategoryId === catId);
+    if (linked.length > 0) {
       return {
         allowed: false,
-        reason: `Expense Category is currently assigned to ${expenses.length} recorded expense(s). Deletion is prohibited to preserve accounting logs.`,
-        linkedCount: expenses.length,
+        reason: `Cannot delete expense category because ${linked.length} expense record(s) currently use it.`,
+        linkedCount: linked.length,
       };
     }
     return { allowed: true, linkedCount: 0 };
   }
 
-  public saveExpenseCategory(category: ExpenseCategory): { success: boolean; error?: string } {
-    const categories = this.getExpenseCategories();
-
-    if (!category.name || !category.name.trim()) {
-      return { success: false, error: 'Category Name is required.' };
-    }
-    const trimmedName = category.name.trim();
-
-    // Strictly UNIQUE validation (case-insensitive) across all other categories
-    const duplicate = categories.find(
-      (c) => c.id !== category.id && c.name.trim().toLowerCase() === trimmedName.toLowerCase()
-    );
-    if (duplicate) {
-      return {
-        success: false,
-        error: `An Expense Category named "${trimmedName}" already exists. Category names must be strictly unique.`,
-      };
-    }
-
-    category.name = trimmedName;
-    category.status = category.status || 'Active';
-    category.description = category.description ? category.description.trim() : '';
-
-    const now = new Date().toISOString();
-    const existingIndex = categories.findIndex((c) => c.id === category.id);
-    if (existingIndex >= 0) {
-      categories[existingIndex] = {
-        ...categories[existingIndex],
-        ...category,
-        updatedAt: now,
-      };
-    } else {
-      if (!category.id) {
-        category.id = this.generateId('DDI-EXPCAT');
-      }
-      category.createdAt = now;
-      category.updatedAt = now;
-      categories.push(category);
-    }
-
-    localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(categories));
-    this.notifyListeners();
-    return { success: true };
-  }
-
-  public deleteExpenseCategory(categoryId: string): { success: boolean; error?: string } {
-    const check = this.canDeleteExpenseCategory(categoryId);
+  public deleteExpenseCategory(catId: string): { success: boolean; error?: string; linkedCount?: number } {
+    const check = this.canDeleteExpenseCategory(catId);
     if (!check.allowed) {
-      return { success: false, error: check.reason };
+      return { success: false, error: check.reason, linkedCount: check.linkedCount };
     }
-
-    const categories = this.getExpenseCategories().filter((c) => c.id !== categoryId);
-    localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(categories));
+    const cats = this.getExpenseCategories().filter((c) => c.id !== catId);
+    localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
     this.notifyListeners();
     return { success: true };
   }
 
-  public setExpenseCategoryStatus(categoryId: string, status: ExpenseCategoryStatus): { success: boolean } {
-    const categories = this.getExpenseCategories();
-    const index = categories.findIndex((c) => c.id === categoryId);
-    if (index >= 0) {
-      categories[index].status = status;
-      categories[index].updatedAt = new Date().toISOString();
-      localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(categories));
-      this.notifyListeners();
-    }
-    return { success: true };
+  public setExpenseCategoryStatus(catId: string, status: ExpenseCategory['status']) {
+    const cats = this.getExpenseCategories().map((c) =>
+      c.id === catId ? { ...c, status, updatedAt: new Date().toISOString() } : c
+    );
+    localStorage.setItem(STORAGE_KEYS.EXPENSE_CATEGORIES, JSON.stringify(cats));
+    this.notifyListeners();
   }
 
-  // --- OTHER EXPENSES ---
+  // --- EXPENSES ---
   public getExpenses(): Expense[] {
     this.init();
     try {
@@ -3207,64 +3383,12 @@ class StorageService {
 
   public saveExpense(expense: Expense): { success: boolean; error?: string } {
     const expenses = this.getExpenses();
-    const projects = this.getProjects();
-    const categories = this.getExpenseCategories();
+    const activeBrand = expense.brand || this.getActiveBrand();
+    expense.brand = activeBrand;
 
-    // 1. Relational auto-fill for Project & Client
-    if (expense.projectId && expense.projectId !== 'NA') {
-      const project = projects.find((p) => p.id === expense.projectId);
-      if (project) {
-        expense.clientId = project.clientId;
-        expense.clientName = project.clientName;
-      }
-    } else {
-      expense.projectId = 'NA';
-      expense.clientId = 'NA';
-      expense.clientName = 'NA';
-    }
-
-    // 2. Relational auto-fill for Expense Category Name
-    if (expense.expenseCategoryId) {
-      const cat = categories.find((c) => c.id === expense.expenseCategoryId);
-      if (cat) {
-        expense.expenseCategoryName = cat.name;
-      }
-    }
-
-    // 3. Vendor Validation
-    if (!expense.vendor || !expense.vendor.trim()) {
-      return { success: false, error: 'Vendor name is required.' };
-    }
-    expense.vendor = expense.vendor.trim();
-
-    // 4. Financial Calculations
-    const amount = Number(expense.amount) || 0;
-    if (amount < 0) {
-      return { success: false, error: 'Amount cannot be negative.' };
-    }
-    expense.amount = amount;
-
-    const rate = Number(expense.exchangeRate) || 1;
-    if (rate <= 0) {
-      return { success: false, error: 'Exchange rate must be greater than zero.' };
-    }
-    expense.exchangeRate = rate;
-    expense.amountINR = Math.round(amount * rate);
-
-    if (!expense.currency) {
-      expense.currency = 'INR';
-    }
-
-    if (!expense.expenseDate) {
-      expense.expenseDate = new Date().toISOString().slice(0, 10);
-    }
-
-    if (!expense.paymentStatus) {
-      expense.paymentStatus = 'Paid';
-    }
-
-    const now = new Date().toISOString();
     const existingIndex = expenses.findIndex((e) => e.id === expense.id);
+    const now = new Date().toISOString();
+
     if (existingIndex >= 0) {
       expenses[existingIndex] = {
         ...expenses[existingIndex],
@@ -3273,7 +3397,7 @@ class StorageService {
       };
     } else {
       if (!expense.id) {
-        expense.id = this.generateId('DDI-EXP');
+        expense.id = this.generateId('EXP', activeBrand);
       }
       expense.createdAt = now;
       expense.updatedAt = now;
@@ -3292,156 +3416,38 @@ class StorageService {
     return { success: true };
   }
 
-  public getProjectExpenses(projectId: string): Expense[] {
-    if (!projectId || projectId === 'NA') return [];
-    return this.getExpenses().filter((e) => e.projectId === projectId);
-  }
-
-  public getProjectExpensesTotalINR(projectId: string): number {
-    return this.getProjectExpenses(projectId).reduce((sum, e) => sum + (Number(e.amountINR) || 0), 0);
-  }
-
-  // --- GST INVOICES (ZOHO INVOICE TRACKER) ---
+  // --- GST INVOICES ---
   public getGstInvoices(): GstInvoice[] {
     this.init();
-    let stored: GstInvoice[] = [];
     try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.GST_INVOICES) : null;
-      stored = raw ? JSON.parse(raw) : INITIAL_GST_INVOICES;
+      const raw = localStorage.getItem(STORAGE_KEYS.GST_INVOICES);
+      return raw ? JSON.parse(raw) : INITIAL_GST_INVOICES;
     } catch {
-      stored = INITIAL_GST_INVOICES;
-    }
-
-    // Re-entrancy guard to prevent maximum call stack exceeded
-    if (this.isSyncingGstInvoices) {
-      return stored;
-    }
-
-    this.isSyncingGstInvoices = true;
-    try {
-      // Auto sync from Payments where paymentMode === 'GST Invoice'
-      const gstPayments = this.getPayments().filter((p) => p.paymentMode === 'GST Invoice');
-      const storedMap = new Map<string, GstInvoice>(stored.map((g) => [g.paymentId, g]));
-      const clients = this.getClients();
-
-      let hasChanges = false;
-      const syncedList: GstInvoice[] = [];
-
-      // Calculate current max ID sequence number from stored records
-      let maxSeq = 0;
-      for (const item of stored) {
-        const parts = (item.id || '').split('-');
-        const lastPart = parts[parts.length - 1];
-        const num = parseInt(lastPart, 10);
-        if (!isNaN(num) && num > maxSeq) {
-          maxSeq = num;
-        }
-      }
-
-      for (const pay of gstPayments) {
-        const existing = storedMap.get(pay.id);
-        const amountINR = Number(pay.amountINR ?? pay.amount ?? 0);
-        const gstAmountINR = Math.round(amountINR * 0.18);
-        const client = clients.find((c) => c.id === pay.clientId);
-        const clientName = pay.clientName || client?.name || pay.clientId;
-
-        if (existing) {
-          // Keep manual fields, update auto-filled read-only fields from live payment
-          const updated: GstInvoice = {
-            ...existing,
-            projectId: pay.projectId,
-            clientId: pay.clientId,
-            clientName: clientName,
-            paymentDate: pay.paymentDate,
-            amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
-            currency: pay.currency || 'INR',
-            amountINR: amountINR,
-            gstAmountINR: gstAmountINR,
-          };
-          syncedList.push(updated);
-        } else {
-          // Auto-create new GST Invoice record linked to this payment with strictly sequential ID
-          maxSeq++;
-          const newRecord: GstInvoice = {
-            id: `DDI-GST-${String(maxSeq).padStart(3, '0')}`,
-            paymentId: pay.id,
-            projectId: pay.projectId,
-            clientId: pay.clientId,
-            clientName: clientName,
-            paymentDate: pay.paymentDate,
-            amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
-            currency: pay.currency || 'INR',
-            amountINR: amountINR,
-            gstAmountINR: gstAmountINR,
-            invoiceNumber: '',
-            uploadedToGstPortal: 'No',
-            gstPortalUploadDate: '',
-            notes: '',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          syncedList.push(newRecord);
-          storedMap.set(pay.id, newRecord);
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges || syncedList.length !== stored.length) {
-        localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(syncedList));
-      }
-
-      return syncedList;
-    } finally {
-      this.isSyncingGstInvoices = false;
+      return INITIAL_GST_INVOICES;
     }
   }
 
   public saveGstInvoice(invoice: GstInvoice): { success: boolean; error?: string } {
     const invoices = this.getGstInvoices();
-    const payments = this.getPayments();
-    const pay = payments.find((p) => p.id === invoice.paymentId);
+    const activeBrand = invoice.brand || this.getActiveBrand();
+    invoice.brand = activeBrand;
 
-    if (!pay) {
-      return { success: false, error: `Linked payment record "${invoice.paymentId}" was not found.` };
-    }
-
-    const amountINR = Number(pay.amountINR ?? pay.amount ?? 0);
-    const gstAmountINR = Math.round(amountINR * 0.18);
-    const clients = this.getClients();
-    const client = clients.find((c) => c.id === pay.clientId);
-    const clientName = pay.clientName || client?.name || pay.clientId;
-
+    const existingIndex = invoices.findIndex((g) => g.id === invoice.id);
     const now = new Date().toISOString();
-    const existingIndex = invoices.findIndex(
-      (i) => i.id === invoice.id || i.paymentId === invoice.paymentId
-    );
-
-    const updatedRecord: GstInvoice = {
-      id: invoice.id || (existingIndex >= 0 ? invoices[existingIndex].id : this.generateId('DDI-GST')),
-      paymentId: pay.id,
-      projectId: pay.projectId,
-      clientId: pay.clientId,
-      clientName: clientName,
-      paymentDate: pay.paymentDate,
-      amountReceived: Number(pay.amountReceived ?? pay.amount ?? 0),
-      currency: pay.currency || 'INR',
-      amountINR: amountINR,
-      gstAmountINR: gstAmountINR,
-      invoiceNumber: invoice.invoiceNumber ? invoice.invoiceNumber.trim() : '',
-      uploadedToGstPortal: invoice.uploadedToGstPortal || 'No',
-      gstPortalUploadDate:
-        invoice.uploadedToGstPortal === 'Yes'
-          ? invoice.gstPortalUploadDate || now.slice(0, 10)
-          : '',
-      notes: invoice.notes ? invoice.notes.trim() : '',
-      createdAt: existingIndex >= 0 ? invoices[existingIndex].createdAt : now,
-      updatedAt: now,
-    };
 
     if (existingIndex >= 0) {
-      invoices[existingIndex] = updatedRecord;
+      invoices[existingIndex] = {
+        ...invoices[existingIndex],
+        ...invoice,
+        updatedAt: now,
+      };
     } else {
-      invoices.unshift(updatedRecord);
+      if (!invoice.id) {
+        invoice.id = this.generateId('GST', activeBrand);
+      }
+      invoice.createdAt = now;
+      invoice.updatedAt = now;
+      invoices.unshift(invoice);
     }
 
     localStorage.setItem(STORAGE_KEYS.GST_INVOICES, JSON.stringify(invoices));

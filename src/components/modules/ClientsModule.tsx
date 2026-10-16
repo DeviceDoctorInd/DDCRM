@@ -19,7 +19,7 @@ const CURRENCIES: CurrencyCode[] = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'A
 const STATUS_OPTIONS: ClientStatus[] = ['Active', 'Prospect', 'Inactive', 'Blocked'];
 
 export const ClientsModule: React.FC = () => {
-  const { clients, saveClient, deleteClient, getClientProjectsCount } = useCrm();
+  const { clients, saveClient, deleteClient, getClientProjectsCount, activeBrand, brandPrefix } = useCrm();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,13 +102,14 @@ export const ClientsModule: React.FC = () => {
           format: (r) => getClientProjectsCount(r.id),
         },
       ],
-      'DeviceDoctorIndia_Clients'
+      `${brandPrefix}_Clients_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
   const handleOpenAdd = () => {
     setFormError(null);
     setEditingClient({
+      brand: activeBrand,
       name: '',
       contactPerson: '',
       phone: '',
@@ -126,7 +127,7 @@ export const ClientsModule: React.FC = () => {
 
   const handleOpenEdit = (client: Client) => {
     setFormError(null);
-    setEditingClient({ ...client });
+    setEditingClient({ ...client, brand: client.brand || activeBrand });
     setIsModalOpen(true);
   };
 
@@ -148,7 +149,7 @@ export const ClientsModule: React.FC = () => {
       }
     }
 
-    const res = saveClient(editingClient as Client);
+    const res = saveClient({ ...editingClient, brand: editingClient.brand || activeBrand } as Client);
     if (res.success) {
       setIsModalOpen(false);
       setEditingClient(null);

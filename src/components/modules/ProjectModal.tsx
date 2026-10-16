@@ -92,6 +92,7 @@ export const ProjectModal: React.FC = () => {
     saveProject,
     clients,
     services,
+    activeBrand,
   } = useCrm();
 
   const [formData, setFormData] = useState<Partial<Project>>({});
@@ -177,7 +178,9 @@ export const ProjectModal: React.FC = () => {
         matchedClient.name,
         matchedService?.name || 'SERVICE',
         matchedClient.id,
-        currentServiceId
+        currentServiceId,
+        undefined,
+        formData.brand || activeBrand
       );
     }
 
@@ -202,7 +205,9 @@ export const ProjectModal: React.FC = () => {
         matchedClient.name,
         matchedService.name,
         matchedClient.id,
-        matchedService.id
+        matchedService.id,
+        undefined,
+        formData.brand || activeBrand
       );
     }
 
@@ -468,6 +473,7 @@ export const ProjectModal: React.FC = () => {
 
     const payload: Project = {
       id: formData.id || '',
+      brand: formData.brand || activeBrand,
       clientId: formData.clientId,
       clientName: formData.clientName || 'Client',
       serviceId: formData.serviceId,

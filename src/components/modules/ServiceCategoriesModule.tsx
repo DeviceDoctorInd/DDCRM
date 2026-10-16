@@ -21,6 +21,8 @@ export const ServiceCategoriesModule: React.FC = () => {
     deleteCategory,
     getCategoryServicesCount,
     services,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,13 +95,14 @@ export const ServiceCategoriesModule: React.FC = () => {
         },
         { key: 'status', header: 'Status' },
       ],
-      'DeviceDoctorIndia_ServiceCategories'
+      `${brandPrefix}_ServiceCategories_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
   const handleOpenAdd = () => {
     setFormError(null);
     setEditingCategory({
+      brand: activeBrand,
       name: '',
       description: '',
       status: 'Active',
@@ -133,7 +136,7 @@ export const ServiceCategoriesModule: React.FC = () => {
       return;
     }
 
-    const res = saveCategory(editingCategory as ServiceCategory);
+    const res = saveCategory({ ...editingCategory, brand: editingCategory.brand || activeBrand } as ServiceCategory);
     if (res.success) {
       setIsModalOpen(false);
       setEditingCategory(null);

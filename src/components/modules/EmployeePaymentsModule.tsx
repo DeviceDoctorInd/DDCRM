@@ -47,6 +47,8 @@ export const EmployeePaymentsModule: React.FC = () => {
     getAssignmentById,
     getProjectById,
     getEmployeeById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -164,7 +166,7 @@ export const EmployeePaymentsModule: React.FC = () => {
     // Pick first available assignment or first assignment
     const defaultAssignment = assignments.length > 0 ? assignments[0] : undefined;
     const today = new Date().toISOString().slice(0, 10);
-    const newId = storageService.generateId('DDI-EPAY');
+    const newId = storageService.generateId('EPAY', activeBrand);
 
     let defaultAmount = 0;
     if (defaultAssignment) {
@@ -174,6 +176,7 @@ export const EmployeePaymentsModule: React.FC = () => {
 
     setFormData({
       id: newId,
+      brand: activeBrand,
       assignmentId: defaultAssignment?.id || '',
       projectId: defaultAssignment?.projectId || '',
       employeeId: defaultAssignment?.employeeId || '',
@@ -317,7 +320,8 @@ export const EmployeePaymentsModule: React.FC = () => {
     }
 
     const payload: EmployeePayment = {
-      id: formData.id || storageService.generateId('DDI-EPAY'),
+      id: formData.id || storageService.generateId('EPAY', activeBrand),
+      brand: formData.brand || activeBrand,
       assignmentId: formData.assignmentId,
       projectId: assignment.projectId,
       employeeId: assignment.employeeId,
@@ -374,7 +378,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       { key: 'notes', header: 'Notes' },
     ];
 
-    exportToCsv(filteredPayments, columns, 'ddi_employee_payments_ledger');
+    exportToCsv(filteredPayments, columns, `${brandPrefix}_employee_payments_ledger_${new Date().toISOString().slice(0, 10)}`);
   };
 
   // Payment Mode Badge Helper

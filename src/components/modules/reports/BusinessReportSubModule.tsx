@@ -53,7 +53,11 @@ const COLORS = {
 };
 
 export const BusinessReportSubModule: React.FC = () => {
-  const { projects, payments, employeePayments, assignments, expenses } = useCrm();
+  const { projects, payments, employeePayments, assignments, expenses, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
+
+  const reportTitle = isConsolidatedView
+    ? 'CONSOLIDATED GROUP — BUSINESS DASHBOARD'
+    : `${activeBrand.toUpperCase()} — BUSINESS DASHBOARD`;
 
   // Date Range state — Default: Last 6 months (May 2026 to Oct 2026) to capture representative data
   const [fromDate, setFromDate] = useState('2026-05-01');
@@ -356,7 +360,7 @@ export const BusinessReportSubModule: React.FC = () => {
         },
         { key: 'notes', header: 'Notes & Calculation Formula' },
       ],
-      `DeviceDoctorIndia_Business_Dashboard_${fromDate}_to_${toDate}`
+      `${brandPrefix}_Business_Dashboard_${fromDate}_to_${toDate}`
     );
   };
 
@@ -587,7 +591,7 @@ export const BusinessReportSubModule: React.FC = () => {
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>DEVICE DOCTOR — BUSINESS DASHBOARD</span>
+              <span>{reportTitle}</span>
               <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
                 AUDITED P&L LEDGER
               </span>
