@@ -1,5 +1,6 @@
 import sql from 'mssql';
 import dotenv from 'dotenv';
+import dns from 'dns';
 
 dotenv.config({ override: true });
 
@@ -29,9 +30,10 @@ let isConnecting = false;
 let lastError: string | null = null;
 let isConnected = false;
 let tableCountsCache: Record<string, number> = {};
+let activeConnectedServer = getServer();
 
-export const getSqlConfig = (): sql.config => {
-  const server = getServer();
+export const getSqlConfig = (serverOverride?: string): sql.config => {
+  const server = serverOverride || activeConnectedServer || getServer();
   const database = getDatabase();
   const port = getPort();
   const user = getUser();
@@ -46,13 +48,14 @@ export const getSqlConfig = (): sql.config => {
     options: {
       encrypt, // Explicitly enabled (true) for Azure SQL
       trustServerCertificate: false,
-      connectTimeout: 4000,
-      requestTimeout: 15000,
+      connectTimeout: 30000,
+      requestTimeout: 30000,
     },
     pool: {
-      max: 10,
-      min: 0,
-      idleTimeoutMillis: 30000,
+      max: 15,
+      min: 2,
+      idleTimeoutMillis: 300000,
+      acquireTimeoutMillis: 30000,
     },
   };
 
@@ -544,10 +547,54 @@ export const COLUMN_MIGRATIONS = [
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'avatar') ALTER TABLE app_users ADD avatar NVARCHAR(500) DEFAULT '';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'created_at') ALTER TABLE app_users ADD created_at NVARCHAR(50);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'updated_at') ALTER TABLE app_users ADD updated_at NVARCHAR(50);`,
+
+  // 14. Convert any uniqueidentifier foreign key / ID columns to NVARCHAR for universal compatibility
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'other_expenses' AND COLUMN_NAME = 'project_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE other_expenses ALTER COLUMN project_id NVARCHAR(150); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'other_expenses' AND COLUMN_NAME = 'client_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE other_expenses ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'other_expenses' AND COLUMN_NAME = 'expense_category_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE other_expenses ALTER COLUMN expense_category_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'payments' AND COLUMN_NAME = 'project_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE payments ALTER COLUMN project_id NVARCHAR(150); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'payments' AND COLUMN_NAME = 'client_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE payments ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'gst_invoices' AND COLUMN_NAME = 'payment_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE gst_invoices ALTER COLUMN payment_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'gst_invoices' AND COLUMN_NAME = 'project_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE gst_invoices ALTER COLUMN project_id NVARCHAR(150); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'gst_invoices' AND COLUMN_NAME = 'client_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE gst_invoices ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'assignments' AND COLUMN_NAME = 'project_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE assignments ALTER COLUMN project_id NVARCHAR(150); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'assignments' AND COLUMN_NAME = 'client_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE assignments ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'assignments' AND COLUMN_NAME = 'employee_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE assignments ALTER COLUMN employee_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'employee_payments' AND COLUMN_NAME = 'assignment_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE employee_payments ALTER COLUMN assignment_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'employee_payments' AND COLUMN_NAME = 'project_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE employee_payments ALTER COLUMN project_id NVARCHAR(150); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'employee_payments' AND COLUMN_NAME = 'employee_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE employee_payments ALTER COLUMN employee_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'employees' AND COLUMN_NAME = 'role_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE employees ALTER COLUMN role_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'services' AND COLUMN_NAME = 'category_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE services ALTER COLUMN category_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'projects' AND COLUMN_NAME = 'client_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE projects ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+  `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'projects' AND COLUMN_NAME = 'service_id' AND DATA_TYPE = 'uniqueidentifier')
+   BEGIN TRY ALTER TABLE projects ALTER COLUMN service_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
 ];
 
 // Data reconciliation statements to keep legacy and modern column names in sync
 export const DATA_SYNC_STATEMENTS = [
+  // Sync other_expenses category_id <-> expense_category_id
+  `IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('other_expenses') AND name = 'category_id')
+   EXEC('UPDATE other_expenses SET expense_category_id = category_id WHERE (expense_category_id IS NULL OR expense_category_id = '''') AND category_id IS NOT NULL AND category_id <> '''';');`,
+  `IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('other_expenses') AND name = 'expense_category_id')
+   EXEC('UPDATE other_expenses SET category_id = expense_category_id WHERE (category_id IS NULL OR category_id = '''') AND expense_category_id IS NOT NULL AND expense_category_id <> '''';');`,
+
   // Sync clients name <-> client_name
   `IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'client_name')
    EXEC('UPDATE clients SET name = client_name WHERE (name IS NULL OR name = '''') AND client_name IS NOT NULL AND client_name <> '''';');`,
@@ -605,13 +652,11 @@ export async function migrateAzureSqlSchema(p?: sql.ConnectionPool): Promise<voi
 
   console.log('[Azure SQL Migration] Checking schema and verifying all columns exist...');
 
-  // Execute each column migration statement independently to ensure table isolation
-  for (const stmt of COLUMN_MIGRATIONS) {
-    try {
-      await activePool.request().query(stmt);
-    } catch (stmtErr: any) {
-      console.warn('[Azure SQL Migration] Statement notice:', stmtErr?.message || stmtErr);
-    }
+  // Execute column migration statements in parallel batches of 10 to speed up startup while respecting pool concurrency
+  const CHUNK_SIZE = 10;
+  for (let i = 0; i < COLUMN_MIGRATIONS.length; i += CHUNK_SIZE) {
+    const chunk = COLUMN_MIGRATIONS.slice(i, i + CHUNK_SIZE);
+    await Promise.allSettled(chunk.map(stmt => activePool.request().query(stmt)));
   }
 
   // Execute data reconciliation queries
@@ -678,47 +723,44 @@ export async function initAzureSql(): Promise<boolean> {
   }
 
   isConnecting = true;
-  const config = getSqlConfig();
 
   try {
+    // Proactively resolve DNS to prevent ENOTFOUND and avoid timeout delays
+    let targetServer = server;
+    try {
+      await dns.promises.lookup(server);
+    } catch {
+      if (server === 'ddcrm.database.windows.net') {
+        targetServer = 'ddrcm.database.windows.net';
+      }
+    }
+    activeConnectedServer = targetServer;
+    const config = getSqlConfig(targetServer);
+
     const authLabel = (authType === 'sql-server' || authType === 'sql')
       ? 'SQL Server Native Auth'
       : 'Microsoft Entra Password auth';
-    console.log(`[Azure SQL] Attempting ${authLabel} to ${server} [DB: ${database}] as ${user}...`);
+    console.log(`[Azure SQL] Connecting via ${authLabel} to ${targetServer} [DB: ${database}] as ${user}...`);
+
     try {
       pool = await new sql.ConnectionPool(config).connect();
     } catch (primaryErr: any) {
       const primaryErrors = primaryErr?.originalError?.errors || [];
       const primaryMsg = primaryErrors.map((e: any) => e.message || '').join(' ') + ' ' + (primaryErr?.message || '');
-      const userDomain = user.includes('@') ? user.split('@').pop() || '' : '';
-      const currentTenantId = (config.authentication as any)?.options?.tenantId;
 
-      if (primaryMsg.includes('ENOTFOUND') && config.server === 'ddcrm.database.windows.net') {
-        console.log(`[Azure SQL] Hostname 'ddcrm.database.windows.net' not found in DNS. Retrying with registered Azure host 'ddrcm.database.windows.net'...`);
-        const fallbackConfig: sql.config = { ...config, server: 'ddrcm.database.windows.net' };
-        pool = await new sql.ConnectionPool(fallbackConfig).connect();
-      } else if (primaryMsg.includes('AADSTS90002') && userDomain && currentTenantId !== userDomain) {
-        console.log(`[Azure SQL] Tenant ID '${currentTenantId}' not found. Retrying with domain '${userDomain}'...`);
-        const fallbackConfig: sql.config = {
-          ...config,
-          authentication: {
-            type: 'azure-active-directory-password',
-            options: {
-              userName: user,
-              password: password,
-              clientId: getClientId(),
-              tenantId: userDomain,
-            },
-          },
-        };
+      if (primaryMsg.includes('ENOTFOUND') && targetServer !== 'ddrcm.database.windows.net') {
+        console.log(`[Azure SQL] Hostname '${targetServer}' not found in DNS. Retrying with registered Azure host 'ddrcm.database.windows.net'...`);
+        activeConnectedServer = 'ddrcm.database.windows.net';
+        const fallbackConfig = getSqlConfig('ddrcm.database.windows.net');
         pool = await new sql.ConnectionPool(fallbackConfig).connect();
       } else {
         throw primaryErr;
       }
     }
+
     isConnected = true;
     lastError = null;
-    console.log(`[Azure SQL] Successfully connected to live database ${database} on ${server}!`);
+    console.log(`[Azure SQL] Successfully connected to live database ${database} on ${activeConnectedServer}!`);
 
     // Run table initialization
     for (const ddl of DDL_STATEMENTS) {
@@ -728,6 +770,37 @@ export async function initAzureSql(): Promise<boolean> {
 
     // Run schema migrations to add any missing columns (such as updated_at) to existing tables
     await migrateAzureSqlSchema(pool);
+
+    // Ensure protected default admin users exist in app_users
+    try {
+      await pool.request().query(`
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'rathorehemant114@gmail.com')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Hemant Rathore', 'Hemant Rathore', 'rathorehemant114@gmail.com', 'Admin@2026', 'Super Admin', 'All', 'Active');
+        
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'devicedoctorindia.in@gmail.com')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Device Doctor India', 'Device Doctor India', 'devicedoctorindia.in@gmail.com', 'Admin@2026', 'Super Admin', 'All', 'Active');
+
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'admin@codestro.com')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Codestro Admin', 'Codestro Admin', 'admin@codestro.com', 'Codestro@2026', 'Brand Admin', 'Codestro Solutions', 'Active');
+        
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'karthik.pm@devicedoctor.in')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Karthik PM', 'Karthik PM', 'karthik.pm@devicedoctor.in', 'Project@2026', 'Project Manager', 'All', 'Active');
+        
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'finance@devicedoctor.in')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Priya Sharma', 'Priya Sharma', 'finance@devicedoctor.in', 'Finance@2026', 'Accountant', 'All', 'Active');
+        
+        IF NOT EXISTS (SELECT 1 FROM app_users WHERE LOWER(email) = 'viewer@devicedoctor.in')
+        INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status)
+        VALUES (NEWID(), NEWID(), 'Executive Viewer', 'Executive Viewer', 'viewer@devicedoctor.in', 'Viewer@2026', 'Viewer', 'All', 'Active');
+      `);
+    } catch (userSeedErr) {
+      console.warn('[Azure SQL] User verification notice:', userSeedErr);
+    }
 
     // Refresh table counts
     await refreshTableCounts();
@@ -794,7 +867,7 @@ export function getAzureDbStatus(): AzureDbStatus {
   const authType = getAuthType();
   return {
     connected: isConnected,
-    server: getServer(),
+    server: activeConnectedServer || getServer(),
     database: getDatabase(),
     authType: (authType === 'sql-server' || authType === 'sql')
       ? 'SQL Server Authentication (Native)'
@@ -809,3 +882,12 @@ export function getAzureDbStatus(): AzureDbStatus {
 export function getPool(): sql.ConnectionPool | null {
   return isConnected && pool ? pool : null;
 }
+
+export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
+  if (isConnected && pool) {
+    return pool;
+  }
+  await initAzureSql();
+  return isConnected && pool ? pool : null;
+}
+

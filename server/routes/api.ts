@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { getAzureDbStatus, getPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema } from '../db/azureSql';
-import { mockStore } from '../db/mockStore';
+import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema } from '../db/azureSql';
 import sql from 'mssql';
+import crypto from 'crypto';
 import {
   Client,
   ServiceCategory,
@@ -20,7 +20,30 @@ import {
 
 const router = Router();
 
-// Auto-healing query executor: if Azure SQL throws "Invalid column name", automatically runs schema migration and retries
+export function toGuid(str: string | undefined | null): string {
+  if (!str) return crypto.randomUUID();
+  const trimmed = str.trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return trimmed;
+  }
+  const hash = crypto.createHash('md5').update(trimmed).digest('hex');
+  return [
+    hash.substring(0, 8),
+    hash.substring(8, 12),
+    '4' + hash.substring(13, 16),
+    '8' + hash.substring(17, 20),
+    hash.substring(20, 32),
+  ].join('-');
+}
+
+export function toGuidOrNull(str: string | undefined | null): string | null {
+  if (!str) return null;
+  const trimmed = str.trim();
+  if (!trimmed || trimmed === 'NA' || trimmed === 'undefined' || trimmed === 'null' || trimmed === '') return null;
+  return toGuid(trimmed);
+}
+
+// Auto-healing query executor: if Azure SQL throws "Invalid column name" or uniqueidentifier conversion error, automatically runs schema migration and retries
 async function executeSqlWithAutoMigration<T>(
   pool: sql.ConnectionPool,
   queryFn: () => Promise<T>,
@@ -30,8 +53,12 @@ async function executeSqlWithAutoMigration<T>(
     return await queryFn();
   } catch (err: any) {
     const msg = String(err?.message || err);
-    if (msg.includes('Invalid column name') || msg.includes('Invalid object name')) {
-      console.warn(`[Azure SQL Auto-Heal] Schema issue detected: "${msg}". Triggering database schema migration...`);
+    if (
+      msg.includes('Invalid column name') || 
+      msg.includes('Invalid object name') ||
+      msg.includes('uniqueidentifier')
+    ) {
+      console.warn(`[Azure SQL Auto-Heal] Schema or data type issue detected: "${msg}". Triggering database schema migration...`);
       const colMatch = msg.match(/Invalid column name '([^']+)'/i);
       if (colMatch && colMatch[1] && tableName) {
         const colName = colMatch[1];
@@ -52,14 +79,10 @@ async function executeSqlWithAutoMigration<T>(
   }
 }
 
-function handleDbError(res: Response, err: unknown, context: string, fallbackData?: any) {
+function handleDbError(res: Response, err: unknown, context: string) {
   const msg = err instanceof Error ? err.message : String(err);
-  if (fallbackData !== undefined) {
-    console.warn(`[Azure SQL][${context}] Serving graceful fallback data so CRM UI remains functional: ${msg}`);
-    return res.json(fallbackData);
-  }
   console.error(`[Azure SQL][${context}] Error:`, msg);
-  return res.status(503).json({
+  return res.status(500).json({
     success: false,
     error: msg,
     message: `Azure SQL Error during ${context}: ${msg}`,
@@ -68,7 +91,7 @@ function handleDbError(res: Response, err: unknown, context: string, fallbackDat
 
 // --- Status & Diagnostics Route ---
 router.get('/db/status', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (pool) {
     try {
       const counts = await refreshTableCounts();
@@ -76,6 +99,8 @@ router.get('/db/status', async (_req: Request, res: Response) => {
       return res.json({
         status: 'ok',
         ...status,
+        connected: true,
+        isMock: false,
         tableCounts: counts,
       });
     } catch (err) {
@@ -87,14 +112,14 @@ router.get('/db/status', async (_req: Request, res: Response) => {
   return res.json({
     status: 'ok',
     connected: false,
-    isMock: true,
+    isMock: false,
     server: status.server,
     database: status.database,
     authType: status.authType,
     user: status.user,
-    error: status.error || 'Running in high-availability mode.',
+    error: status.error || 'Connecting to live Azure SQL Database...',
     lastChecked: new Date().toISOString(),
-    tableCounts: mockStore.getTableCounts(),
+    tableCounts: {},
   });
 });
 
@@ -109,6 +134,8 @@ router.post('/db/reconnect', async (_req: Request, res: Response) => {
       success: true,
       status: {
         ...status,
+        connected: true,
+        isMock: false,
         tableCounts: counts,
       },
     });
@@ -120,8 +147,8 @@ router.post('/db/reconnect', async (_req: Request, res: Response) => {
     status: {
       ...status,
       connected: false,
-      isMock: true,
-      tableCounts: mockStore.getTableCounts(),
+      isMock: false,
+      tableCounts: {},
     },
   });
 });
@@ -130,21 +157,17 @@ router.post('/db/reconnect', async (_req: Request, res: Response) => {
 router.post('/db/sync-seed', async (_req: Request, res: Response) => {
   return res.json({
     success: true,
-    message: 'Seed synchronization active.',
+    message: 'Live Azure SQL database active.',
   });
 });
 
 // --- Clear Demo Data ---
 router.post('/db/clear-demo', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const { remainingUsers, clearedTables } = mockStore.clearDemo();
-    return res.json({
-      success: true,
-      message: 'Demo data cleared from workspace. Protected admin accounts preserved.',
-      remainingUsers,
-      clearedTables,
-      tableCounts: mockStore.getTableCounts(),
+    return res.status(503).json({
+      success: false,
+      error: 'Azure SQL Database is not connected.',
     });
   }
 
@@ -228,22 +251,11 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Email and password are required.' });
   }
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const user = mockStore.authenticate(email, password);
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'User credentials invalid or account not active.' });
-    }
-    return res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        brand: user.brand,
-        avatar: user.avatar || '',
-      },
+    return res.status(503).json({
+      success: false,
+      error: 'Azure SQL Database connection unavailable. Please wait a moment while the connection initializes.',
     });
   }
 
@@ -257,21 +269,6 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     );
 
     if (q.recordset.length === 0) {
-      // Check fallback mock store if not found in db
-      const fallbackUser = mockStore.authenticate(cleanEmail, password);
-      if (fallbackUser) {
-        return res.json({
-          success: true,
-          user: {
-            id: fallbackUser.id,
-            name: fallbackUser.name,
-            email: fallbackUser.email,
-            role: fallbackUser.role,
-            brand: fallbackUser.brand,
-            avatar: fallbackUser.avatar || '',
-          },
-        });
-      }
       return res.status(401).json({ success: false, error: 'User not found in Azure SQL app_users.' });
     }
 
@@ -296,11 +293,11 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       user: {
-        id: u.id,
-        name: u.name,
+        id: String(u.id),
+        name: u.name || u.full_name || 'User',
         email: u.email,
         role: u.role,
-        brand: u.brand,
+        brand: u.brand || 'All',
         avatar: u.avatar || '',
       },
     });
@@ -311,9 +308,9 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 
 // --- CLIENTS ---
 router.get('/clients', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getClients());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -321,21 +318,21 @@ router.get('/clients', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(name, ISNULL(client_name, '')) as name, 
-               ISNULL(contact_person, '') as contactPerson, 
-               ISNULL(phone, '') as phone, 
-               ISNULL(email, '') as email, 
-               ISNULL(city, '') as city, 
-               ISNULL(country, '') as country,
-               ISNULL(gst_number, '') as gstNumber, 
-               ISNULL(preferred_currency, 'INR') as preferredCurrency, 
-               ISNULL(client_since, '') as clientSince,
-               ISNULL(status, 'Active') as status, 
-               ISNULL(notes, '') as notes, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(contact_person AS NVARCHAR(255)), '') as contactPerson, 
+               ISNULL(CAST(phone AS NVARCHAR(50)), '') as phone, 
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
+               ISNULL(CAST(city AS NVARCHAR(100)), '') as city, 
+               ISNULL(CAST(country AS NVARCHAR(100)), '') as country,
+               ISNULL(CAST(gst_number AS NVARCHAR(50)), '') as gstNumber, 
+               ISNULL(CAST(preferred_currency AS NVARCHAR(20)), 'INR') as preferredCurrency, 
+               ISNULL(CAST(client_since AS NVARCHAR(50)), '') as clientSince,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM clients 
         ORDER BY created_at DESC
       `),
@@ -343,7 +340,7 @@ router.get('/clients', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /clients', mockStore.getClients());
+    return handleDbError(res, err, 'GET /clients');
   }
 });
 
@@ -353,42 +350,45 @@ router.post('/clients', async (req: Request, res: Response) => {
   client.updatedAt = now;
   client.createdAt = client.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveClient(client);
-    return res.json({ success: true, client: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', client.id)
-        .input('brand', client.brand || 'Device Doctor India')
-        .input('name', client.name)
-        .input('contact_person', client.contactPerson || '')
-        .input('phone', client.phone || '')
-        .input('email', client.email || '')
-        .input('city', client.city || '')
-        .input('country', client.country || '')
-        .input('gst_number', client.gstNumber || '')
-        .input('preferred_currency', client.preferredCurrency || 'INR')
-        .input('client_since', client.clientSince || '')
-        .input('status', client.status || 'Active')
-        .input('notes', client.notes || '')
-        .input('created_at', client.createdAt)
-        .input('updated_at', client.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM clients WHERE id = @id)
-            UPDATE clients SET brand=@brand, name=@name, contact_person=@contact_person, phone=@phone, email=@email,
-                               city=@city, country=@country, gst_number=@gst_number, preferred_currency=@preferred_currency,
-                               client_since=@client_since, status=@status, notes=@notes, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO clients (id, brand, name, contact_person, phone, email, city, country, gst_number, preferred_currency, client_since, status, notes, created_at, updated_at)
-            VALUES (@id, @brand, @name, @contact_person, @phone, @email, @city, @country, @gst_number, @preferred_currency, @client_since, @status, @notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(client.id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', client.id || '')
+          .input('brand', client.brand || 'Device Doctor India')
+          .input('name', client.name)
+          .input('contact_person', client.contactPerson || '')
+          .input('phone', client.phone || '')
+          .input('email', client.email || '')
+          .input('city', client.city || '')
+          .input('country', client.country || '')
+          .input('gst_number', client.gstNumber || '')
+          .input('preferred_currency', client.preferredCurrency || 'INR')
+          .input('client_since', client.clientSince || '')
+          .input('status', client.status || 'Active')
+          .input('notes', client.notes || '')
+          .input('created_at', client.createdAt)
+          .input('updated_at', client.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM clients WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE clients SET brand=@brand, name=@name, client_name=@name, contact_person=@contact_person, phone=@phone, email=@email,
+                                 city=@city, country=@country, gst_number=@gst_number, preferred_currency=@preferred_currency,
+                                 client_since=@client_since, status=@status, notes=@notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO clients (id, client_id_code, brand, name, client_name, contact_person, phone, email, city, country, gst_number, preferred_currency, client_since, status, notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @name, @name, @contact_person, @phone, @email, @city, @country, @gst_number, @preferred_currency, @client_since, @status, @notes, @created_at, @updated_at)
+          `),
+      'clients'
     );
-    mockStore.saveClient(client);
     return res.json({ success: true, client });
   } catch (err) {
     return handleDbError(res, err, 'POST /clients');
@@ -397,17 +397,18 @@ router.post('/clients', async (req: Request, res: Response) => {
 
 router.delete('/clients/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteClient(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM clients WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM clients WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'clients'
     );
-    mockStore.deleteClient(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /clients/${id}`);
@@ -416,9 +417,9 @@ router.delete('/clients/:id', async (req: Request, res: Response) => {
 
 // --- SERVICE CATEGORIES ---
 router.get('/categories', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getCategories());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -426,13 +427,13 @@ router.get('/categories', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(name, ISNULL(category_name, '')) as name, 
-               ISNULL(description, '') as description, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM service_categories 
         ORDER BY created_at DESC
       `),
@@ -440,7 +441,7 @@ router.get('/categories', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /categories', mockStore.getCategories());
+    return handleDbError(res, err, 'GET /categories');
   }
 });
 
@@ -450,31 +451,35 @@ router.post('/categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveCategory(cat);
-    return res.json({ success: true, category: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', cat.id)
-        .input('brand', cat.brand || 'Device Doctor India')
-        .input('name', cat.name)
-        .input('description', cat.description || '')
-        .input('status', cat.status || 'Active')
-        .input('created_at', cat.createdAt)
-        .input('updated_at', cat.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM service_categories WHERE id = @id)
-            UPDATE service_categories SET brand=@brand, name=@name, description=@description, status=@status, updated_at=@updated_at WHERE id=@id
-          ELSE
-            INSERT INTO service_categories (id, brand, name, description, status, created_at, updated_at)
-            VALUES (@id, @brand, @name, @description, @status, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(cat.id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', cat.id || '')
+          .input('brand', cat.brand || 'Device Doctor India')
+          .input('name', cat.name)
+          .input('description', cat.description || '')
+          .input('status', cat.status || 'Active')
+          .input('created_at', cat.createdAt)
+          .input('updated_at', cat.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM service_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE service_categories SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO service_categories (id, category_id_code, brand, name, category_name, description, status, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @name, @name, @description, @status, @created_at, @updated_at)
+          `),
+      'service_categories'
     );
-    mockStore.saveCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
     return handleDbError(res, err, 'POST /categories');
@@ -483,17 +488,18 @@ router.post('/categories', async (req: Request, res: Response) => {
 
 router.delete('/categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteCategory(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM service_categories WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM service_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'service_categories'
     );
-    mockStore.deleteCategory(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /categories/${id}`);
@@ -502,9 +508,9 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
 
 // --- SERVICES ---
 router.get('/services', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getServices());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -512,14 +518,14 @@ router.get('/services', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(name, ISNULL(service_name, '')) as name, 
-               ISNULL(category_id, '') as categoryId, 
-               ISNULL(description, '') as description, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(category_id AS NVARCHAR(100)), '') as categoryId, 
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM services 
         ORDER BY created_at DESC
       `),
@@ -527,7 +533,7 @@ router.get('/services', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /services', mockStore.getServices());
+    return handleDbError(res, err, 'GET /services');
   }
 });
 
@@ -537,32 +543,37 @@ router.post('/services', async (req: Request, res: Response) => {
   srv.updatedAt = now;
   srv.createdAt = srv.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveService(srv);
-    return res.json({ success: true, service: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', srv.id)
-        .input('brand', srv.brand || 'Device Doctor India')
-        .input('name', srv.name)
-        .input('category_id', srv.categoryId || '')
-        .input('description', srv.description || '')
-        .input('status', srv.status || 'Active')
-        .input('created_at', srv.createdAt)
-        .input('updated_at', srv.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM services WHERE id = @id)
-            UPDATE services SET brand=@brand, name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at WHERE id=@id
-          ELSE
-            INSERT INTO services (id, brand, name, category_id, description, status, created_at, updated_at)
-            VALUES (@id, @brand, @name, @category_id, @description, @status, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(srv.id);
+    const catGuid = toGuidOrNull(srv.categoryId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', srv.id || '')
+          .input('brand', srv.brand || 'Device Doctor India')
+          .input('name', srv.name)
+          .input('category_id', catGuid)
+          .input('description', srv.description || '')
+          .input('status', srv.status || 'Active')
+          .input('created_at', srv.createdAt)
+          .input('updated_at', srv.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM services WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE services SET brand=@brand, name=@name, service_name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO services (id, service_id_code, brand, name, service_name, category_id, description, status, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @name, @name, @category_id, @description, @status, @created_at, @updated_at)
+          `),
+      'services'
     );
-    mockStore.saveService(srv);
     return res.json({ success: true, service: srv });
   } catch (err) {
     return handleDbError(res, err, 'POST /services');
@@ -571,17 +582,18 @@ router.post('/services', async (req: Request, res: Response) => {
 
 router.delete('/services/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteService(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM services WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM services WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'services'
     );
-    mockStore.deleteService(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /services/${id}`);
@@ -590,9 +602,9 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
 
 // --- PROJECTS ---
 router.get('/projects', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getProjects());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -600,32 +612,32 @@ router.get('/projects', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(client_id, '') as clientId, 
-               ISNULL(client_name, '') as clientName, 
-               ISNULL(service_id, '') as serviceId,
-               ISNULL(proposal_date, '') as proposalDate, 
-               ISNULL(contract_date, '') as contractDate, 
-               ISNULL(start_date, '') as startDate,
+        SELECT CAST(id AS NVARCHAR(150)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
+               ISNULL(CAST(service_id AS NVARCHAR(100)), '') as serviceId,
+               ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposalDate, 
+               ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contractDate, 
+               ISNULL(CAST(start_date AS NVARCHAR(50)), '') as startDate,
                ISNULL(committed_days, 30) as committedDays, 
-               ISNULL(committed_end_date, '') as committedEndDate,
-               ISNULL(actual_end_date, '') as actualEndDate, 
-               ISNULL(status, 'In Progress') as status, 
-               ISNULL(payment_mode, 'GST Invoice') as paymentMode, 
-               ISNULL(currency, 'INR') as currency,
+               ISNULL(CAST(committed_end_date AS NVARCHAR(50)), '') as committedEndDate,
+               ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actualEndDate, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status, 
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
                ISNULL(contract, 0) as contract, 
                ISNULL(exchange_rate, 1) as exchangeRate, 
                ISNULL(contract_value, 0) as contractValue,
                ISNULL(total_received, 0) as totalReceived, 
                ISNULL(balance, 0) as balance, 
-               ISNULL(project_manager, '') as projectManager,
-               ISNULL(notes, '') as notes, 
-               ISNULL(proposal_document, '') as proposalDocument, 
-               ISNULL(contract_document, '') as contractDocument,
-               ISNULL(payment_phases, '[]') as paymentPhases, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(project_manager AS NVARCHAR(255)), '') as projectManager,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument, 
+               ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contractDocument,
+               ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as paymentPhases, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM projects 
         ORDER BY created_at DESC
       `),
@@ -647,7 +659,7 @@ router.get('/projects', async (_req: Request, res: Response) => {
     });
     return res.json(formatted);
   } catch (err) {
-    return handleDbError(res, err, 'GET /projects', mockStore.getProjects());
+    return handleDbError(res, err, 'GET /projects');
   }
 });
 
@@ -657,58 +669,63 @@ router.post('/projects', async (req: Request, res: Response) => {
   proj.updatedAt = now;
   proj.createdAt = proj.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveProject(proj);
-    return res.json({ success: true, project: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', proj.id)
-        .input('brand', proj.brand || 'Device Doctor India')
-        .input('client_id', proj.clientId || '')
-        .input('client_name', proj.clientName || '')
-        .input('service_id', proj.serviceId || '')
-        .input('proposal_date', proj.proposalDate || '')
-        .input('contract_date', proj.contractDate || '')
-        .input('start_date', proj.startDate || '')
-        .input('committed_days', proj.committedDays || 30)
-        .input('committed_end_date', proj.committedEndDate || '')
-        .input('actual_end_date', proj.actualEndDate || '')
-        .input('status', proj.status || 'In Progress')
-        .input('payment_mode', proj.paymentMode || 'GST Invoice')
-        .input('currency', proj.currency || 'INR')
-        .input('contract', proj.contract || 0)
-        .input('exchange_rate', proj.exchangeRate || 1)
-        .input('contract_value', proj.contractValue || 0)
-        .input('total_received', proj.totalReceived || 0)
-        .input('balance', proj.balance || 0)
-        .input('project_manager', proj.projectManager || '')
-        .input('notes', proj.notes || '')
-        .input('proposal_document', proj.proposalDocument ? JSON.stringify(proj.proposalDocument) : '')
-        .input('contract_document', proj.contractDocument ? JSON.stringify(proj.contractDocument) : '')
-        .input('payment_phases', proj.paymentPhases ? JSON.stringify(proj.paymentPhases) : '[]')
-        .input('created_at', proj.createdAt)
-        .input('updated_at', proj.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM projects WHERE id = @id)
-            UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
-                               proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
-                               committed_days=@committed_days, committed_end_date=@committed_end_date,
-                               actual_end_date=@actual_end_date, status=@status, payment_mode=@payment_mode,
-                               currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
-                               contract_value=@contract_value, total_received=@total_received, balance=@balance,
-                               project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
-                               contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO projects (id, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
-            VALUES (@id, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(proj.id);
+    const clientGuid = toGuidOrNull(proj.clientId);
+    const serviceGuid = toGuidOrNull(proj.serviceId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', proj.id || '')
+          .input('brand', proj.brand || 'Device Doctor India')
+          .input('client_id', clientGuid)
+          .input('client_name', proj.clientName || '')
+          .input('service_id', serviceGuid)
+          .input('proposal_date', proj.proposalDate || '')
+          .input('contract_date', proj.contractDate || '')
+          .input('start_date', proj.startDate || '')
+          .input('committed_days', proj.committedDays || 30)
+          .input('committed_end_date', proj.committedEndDate || '')
+          .input('actual_end_date', proj.actualEndDate || '')
+          .input('status', proj.status || 'In Progress')
+          .input('payment_mode', proj.paymentMode || 'GST Invoice')
+          .input('currency', proj.currency || 'INR')
+          .input('contract', proj.contract || 0)
+          .input('exchange_rate', proj.exchangeRate || 1)
+          .input('contract_value', proj.contractValue || 0)
+          .input('total_received', proj.totalReceived || 0)
+          .input('balance', proj.balance || 0)
+          .input('project_manager', proj.projectManager || '')
+          .input('notes', proj.notes || '')
+          .input('proposal_document', proj.proposalDocument ? JSON.stringify(proj.proposalDocument) : '')
+          .input('contract_document', proj.contractDocument ? JSON.stringify(proj.contractDocument) : '')
+          .input('payment_phases', proj.paymentPhases ? JSON.stringify(proj.paymentPhases) : '[]')
+          .input('created_at', proj.createdAt)
+          .input('updated_at', proj.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM projects WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId)
+              UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
+                                 proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
+                                 committed_days=@committed_days, committed_end_date=@committed_end_date,
+                                 actual_end_date=@actual_end_date, status=@status, payment_mode=@payment_mode,
+                                 currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
+                                 contract_value=@contract_value, total_received=@total_received, balance=@balance,
+                                 project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
+                                 contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
+            ELSE
+              INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
+          `),
+      'projects'
     );
-    mockStore.saveProject(proj);
     return res.json({ success: true, project: proj });
   } catch (err) {
     return handleDbError(res, err, 'POST /projects');
@@ -717,17 +734,18 @@ router.post('/projects', async (req: Request, res: Response) => {
 
 router.delete('/projects/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteProject(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM projects WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM projects WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId'),
+      'projects'
     );
-    mockStore.deleteProject(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /projects/${id}`);
@@ -736,9 +754,9 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
 
 // --- PAYMENTS ---
 router.get('/payments', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getPayments());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -746,26 +764,26 @@ router.get('/payments', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(project_id, '') as projectId, 
-               ISNULL(client_id, '') as clientId, 
-               ISNULL(client_name, '') as clientName,
-               ISNULL(payment_mode, 'GST Invoice') as paymentMode, 
-               ISNULL(payment_date, '') as paymentDate, 
-               ISNULL(due_date, '') as dueDate,
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
+               ISNULL(CAST(due_date AS NVARCHAR(50)), '') as dueDate,
                ISNULL(amount_received, 0) as amountReceived, 
-               ISNULL(currency, 'INR') as currency, 
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
                ISNULL(exchange_rate, 1) as exchangeRate,
                ISNULL(amount_inr, 0) as amountINR, 
-               ISNULL(reference_utr, '') as referenceUtr, 
-               ISNULL(payment_status, 'Received') as paymentStatus,
+               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr, 
+               ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Received') as paymentStatus,
                ISNULL(days_overdue, 0) as daysOverdue, 
-               ISNULL(notes, '') as notes, 
-               ISNULL(payment_proof, '') as paymentProof,
-               ISNULL(payment_proof_notes, '') as paymentProofNotes, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(payment_proof AS NVARCHAR(MAX)), '') as paymentProof,
+               ISNULL(CAST(payment_proof_notes AS NVARCHAR(MAX)), '') as paymentProofNotes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM payments 
         ORDER BY created_at DESC
       `),
@@ -773,7 +791,7 @@ router.get('/payments', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /payments', mockStore.getPayments());
+    return handleDbError(res, err, 'GET /payments');
   }
 });
 
@@ -783,50 +801,55 @@ router.post('/payments', async (req: Request, res: Response) => {
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.savePayment(payment);
-    return res.json({ success: true, payment: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', payment.id)
-        .input('brand', payment.brand || 'Device Doctor India')
-        .input('project_id', payment.projectId || '')
-        .input('client_id', payment.clientId || '')
-        .input('client_name', payment.clientName || '')
-        .input('payment_mode', payment.paymentMode || 'GST Invoice')
-        .input('payment_date', payment.paymentDate || '')
-        .input('due_date', payment.dueDate || '')
-        .input('amount_received', payment.amountReceived || 0)
-        .input('currency', payment.currency || 'INR')
-        .input('exchange_rate', payment.exchangeRate || 1)
-        .input('amount_inr', payment.amountINR || 0)
-        .input('reference_utr', payment.referenceUtr || '')
-        .input('payment_status', payment.paymentStatus || 'Received')
-        .input('days_overdue', payment.daysOverdue || 0)
-        .input('notes', payment.notes || '')
-        .input('payment_proof', payment.paymentProof ? JSON.stringify(payment.paymentProof) : '')
-        .input('payment_proof_notes', payment.paymentProofNotes || '')
-        .input('created_at', payment.createdAt)
-        .input('updated_at', payment.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM payments WHERE id = @id)
-            UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                               payment_mode=@payment_mode, payment_date=@payment_date, due_date=@due_date,
-                               amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
-                               amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
-                               days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
-                               payment_proof_notes=@payment_proof_notes, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO payments (id, brand, project_id, client_id, client_name, payment_mode, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-            VALUES (@id, @brand, @project_id, @client_id, @client_name, @payment_mode, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(payment.id);
+    const projGuid = toGuidOrNull(payment.projectId);
+    const clientGuid = toGuidOrNull(payment.clientId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', payment.id || '')
+          .input('brand', payment.brand || 'Device Doctor India')
+          .input('project_id', projGuid)
+          .input('client_id', clientGuid)
+          .input('client_name', payment.clientName || '')
+          .input('payment_mode', payment.paymentMode || 'GST Invoice')
+          .input('payment_date', payment.paymentDate || '')
+          .input('due_date', payment.dueDate || '')
+          .input('amount_received', payment.amountReceived || 0)
+          .input('currency', payment.currency || 'INR')
+          .input('exchange_rate', payment.exchangeRate || 1)
+          .input('amount_inr', payment.amountINR || 0)
+          .input('reference_utr', payment.referenceUtr || '')
+          .input('payment_status', payment.paymentStatus || 'Received')
+          .input('days_overdue', payment.daysOverdue || 0)
+          .input('notes', payment.notes || '')
+          .input('payment_proof', payment.paymentProof ? JSON.stringify(payment.paymentProof) : '')
+          .input('payment_proof_notes', payment.paymentProofNotes || '')
+          .input('created_at', payment.createdAt)
+          .input('updated_at', payment.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                                 payment_mode=@payment_mode, payment_date=@payment_date, due_date=@due_date,
+                                 amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
+                                 amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
+                                 days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
+                                 payment_proof_notes=@payment_proof_notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+          `),
+      'payments'
     );
-    mockStore.savePayment(payment);
     return res.json({ success: true, payment });
   } catch (err) {
     return handleDbError(res, err, 'POST /payments');
@@ -835,17 +858,18 @@ router.post('/payments', async (req: Request, res: Response) => {
 
 router.delete('/payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deletePayment(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM payments WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'payments'
     );
-    mockStore.deletePayment(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /payments/${id}`);
@@ -854,9 +878,9 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
 
 // --- GST INVOICES ---
 router.get('/gst-invoices', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getGstInvoices());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -864,23 +888,23 @@ router.get('/gst-invoices', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(payment_id, '') as paymentId, 
-               ISNULL(project_id, '') as projectId, 
-               ISNULL(client_id, '') as clientId,
-               ISNULL(client_name, '') as clientName, 
-               ISNULL(payment_date, '') as paymentDate, 
-               ISNULL(amount_received, 0) as amountReceived,
-               ISNULL(currency, 'INR') as currency, 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
+               ISNULL(amount_received, 0) as amountReceived, 
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
                ISNULL(amount_inr, 0) as amountINR, 
                ISNULL(gst_amount_inr, 0) as gstAmountINR, 
-               ISNULL(invoice_number, '') as invoiceNumber,
-               ISNULL(uploaded_to_gst_portal, 'No') as uploadedToGstPortal, 
-               ISNULL(gst_portal_upload_date, '') as gstPortalUploadDate,
-               ISNULL(notes, '') as notes, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal, 
+               ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM gst_invoices 
         ORDER BY created_at DESC
       `),
@@ -888,7 +912,7 @@ router.get('/gst-invoices', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /gst-invoices', mockStore.getGstInvoices());
+    return handleDbError(res, err, 'GET /gst-invoices');
   }
 });
 
@@ -898,46 +922,50 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveGstInvoice(inv);
-    return res.json({ success: true, invoice: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', inv.id)
-        .input('brand', inv.brand || 'Device Doctor India')
-        .input('payment_id', inv.paymentId || '')
-        .input('project_id', inv.projectId || '')
-        .input('client_id', inv.clientId || '')
-        .input('client_name', inv.clientName || '')
-        .input('payment_date', inv.paymentDate || '')
-        .input('amount_received', inv.amountReceived || 0)
-        .input('currency', inv.currency || 'INR')
-        .input('amount_inr', inv.amountINR || 0)
-        .input('gst_amount_inr', inv.gstAmountINR || 0)
-        .input('invoice_number', inv.invoiceNumber || '')
-        .input('uploaded_to_gst_portal', inv.uploadedToGstPortal || 'No')
-        .input('gst_portal_upload_date', inv.gstPortalUploadDate || '')
-        .input('notes', inv.notes || '')
-        .input('created_at', inv.createdAt)
-        .input('updated_at', inv.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id)
-            UPDATE gst_invoices SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
-                                   client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
-                                   currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
-                                   invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
-                                   gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO gst_invoices (id, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
-            VALUES (@id, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(inv.id);
+    const paymentGuid = toGuidOrNull(inv.paymentId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', inv.id || '')
+          .input('brand', inv.brand || 'Device Doctor India')
+          .input('payment_id', paymentGuid)
+          .input('project_id', inv.projectId || '')
+          .input('client_id', inv.clientId || '')
+          .input('client_name', inv.clientName || '')
+          .input('payment_date', inv.paymentDate || '')
+          .input('amount_received', inv.amountReceived || 0)
+          .input('currency', inv.currency || 'INR')
+          .input('amount_inr', inv.amountINR || 0)
+          .input('gst_amount_inr', inv.gstAmountINR || 0)
+          .input('invoice_number', inv.invoiceNumber || '')
+          .input('uploaded_to_gst_portal', inv.uploadedToGstPortal || 'No')
+          .input('gst_portal_upload_date', inv.gstPortalUploadDate || '')
+          .input('notes', inv.notes || '')
+          .input('created_at', inv.createdAt)
+          .input('updated_at', inv.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE gst_invoices SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
+                                     client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
+                                     currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
+                                     invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
+                                     gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO gst_invoices (id, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
+              VALUES (@id, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
+          `),
+      'gst_invoices'
     );
-    mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: inv });
   } catch (err) {
     return handleDbError(res, err, 'POST /gst-invoices');
@@ -946,17 +974,18 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
 
 router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteGstInvoice(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM gst_invoices WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'gst_invoices'
     );
-    mockStore.deleteGstInvoice(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /gst-invoices/${id}`);
@@ -965,9 +994,9 @@ router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEE ROLES ---
 router.get('/roles', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getRoles());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -975,14 +1004,14 @@ router.get('/roles', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(role_name, ISNULL(name, '')) as roleName, 
-               ISNULL(department, '') as department, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(description, '') as description, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(role_name AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as roleName, 
+               ISNULL(CAST(department AS NVARCHAR(255)), '') as department, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM employee_roles 
         ORDER BY created_at DESC
       `),
@@ -990,7 +1019,7 @@ router.get('/roles', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /roles', mockStore.getRoles());
+    return handleDbError(res, err, 'GET /roles');
   }
 });
 
@@ -1000,32 +1029,36 @@ router.post('/roles', async (req: Request, res: Response) => {
   role.updatedAt = now;
   role.createdAt = role.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveRole(role);
-    return res.json({ success: true, role: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', role.id)
-        .input('brand', role.brand || 'Device Doctor India')
-        .input('role_name', role.roleName)
-        .input('department', role.department || '')
-        .input('status', role.status || 'Active')
-        .input('description', role.description || '')
-        .input('created_at', role.createdAt)
-        .input('updated_at', role.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM employee_roles WHERE id = @id)
-            UPDATE employee_roles SET brand=@brand, role_name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at WHERE id=@id
-          ELSE
-            INSERT INTO employee_roles (id, brand, role_name, department, status, description, created_at, updated_at)
-            VALUES (@id, @brand, @role_name, @department, @status, @description, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(role.id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', role.id || '')
+          .input('brand', role.brand || 'Device Doctor India')
+          .input('role_name', role.roleName)
+          .input('department', role.department || '')
+          .input('status', role.status || 'Active')
+          .input('description', role.description || '')
+          .input('created_at', role.createdAt)
+          .input('updated_at', role.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM employee_roles WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE employee_roles SET brand=@brand, role_name=@role_name, name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO employee_roles (id, role_id_code, brand, role_name, name, department, status, description, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @role_name, @role_name, @department, @status, @description, @created_at, @updated_at)
+          `),
+      'employee_roles'
     );
-    mockStore.saveRole(role);
     return res.json({ success: true, role });
   } catch (err) {
     return handleDbError(res, err, 'POST /roles');
@@ -1034,17 +1067,18 @@ router.post('/roles', async (req: Request, res: Response) => {
 
 router.delete('/roles/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteRole(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM employee_roles WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employee_roles WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'employee_roles'
     );
-    mockStore.deleteRole(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /roles/${id}`);
@@ -1053,9 +1087,9 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEES ---
 router.get('/employees', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getEmployees());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1063,19 +1097,19 @@ router.get('/employees', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(name, ISNULL(employee_name, '')) as name, 
-               ISNULL(role_id, '') as roleId, 
-               email, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(joining_date, '') as joiningDate,
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as roleId, 
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(joining_date AS NVARCHAR(50)), '') as joiningDate,
                ISNULL(cost_of_employee, 0) as costOfEmployee, 
-               ISNULL(employee_type, 'Salary Basis') as employeeType, 
-               ISNULL(comes_under_tds, 'No') as comesUnderTds,
-               ISNULL(notes, '') as notes, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(employee_type AS NVARCHAR(50)), 'Salary Basis') as employeeType, 
+               ISNULL(CAST(comes_under_tds AS NVARCHAR(10)), 'No') as comesUnderTds,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM employees 
         ORDER BY created_at DESC
       `),
@@ -1083,7 +1117,7 @@ router.get('/employees', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /employees', mockStore.getEmployees());
+    return handleDbError(res, err, 'GET /employees');
   }
 });
 
@@ -1093,40 +1127,44 @@ router.post('/employees', async (req: Request, res: Response) => {
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveEmployee(emp);
-    return res.json({ success: true, employee: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', emp.id)
-        .input('brand', emp.brand || 'Device Doctor India')
-        .input('name', emp.name)
-        .input('role_id', emp.roleId || '')
-        .input('email', emp.email)
-        .input('status', emp.status || 'Active')
-        .input('joining_date', emp.joiningDate || '')
-        .input('cost_of_employee', emp.costOfEmployee || 0)
-        .input('employee_type', emp.employeeType || 'Salary Basis')
-        .input('comes_under_tds', emp.comesUnderTds || 'No')
-        .input('notes', emp.notes || '')
-        .input('created_at', emp.createdAt)
-        .input('updated_at', emp.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM employees WHERE id = @id)
-            UPDATE employees SET brand=@brand, name=@name, role_id=@role_id, email=@email, status=@status,
-                                joining_date=@joining_date, cost_of_employee=@cost_of_employee,
-                                employee_type=@employee_type, comes_under_tds=@comes_under_tds, notes=@notes, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO employees (id, brand, name, role_id, email, status, joining_date, cost_of_employee, employee_type, comes_under_tds, notes, created_at, updated_at)
-            VALUES (@id, @brand, @name, @role_id, @email, @status, @joining_date, @cost_of_employee, @employee_type, @comes_under_tds, @notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(emp.id);
+    const roleGuid = toGuidOrNull(emp.roleId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', emp.id || '')
+          .input('brand', emp.brand || 'Device Doctor India')
+          .input('name', emp.name)
+          .input('role_id', roleGuid)
+          .input('email', emp.email)
+          .input('status', emp.status || 'Active')
+          .input('joining_date', emp.joiningDate || '')
+          .input('cost_of_employee', emp.costOfEmployee || 0)
+          .input('employee_type', emp.employeeType || 'Salary Basis')
+          .input('comes_under_tds', emp.comesUnderTds || 'No')
+          .input('notes', emp.notes || '')
+          .input('created_at', emp.createdAt)
+          .input('updated_at', emp.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM employees WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE employees SET brand=@brand, name=@name, employee_name=@name, role_id=@role_id, email=@email, status=@status,
+                                  joining_date=@joining_date, cost_of_employee=@cost_of_employee,
+                                  employee_type=@employee_type, comes_under_tds=@comes_under_tds, notes=@notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO employees (id, employee_id_code, brand, name, employee_name, role_id, email, status, joining_date, cost_of_employee, employee_type, comes_under_tds, notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @name, @name, @role_id, @email, @status, @joining_date, @cost_of_employee, @employee_type, @comes_under_tds, @notes, @created_at, @updated_at)
+          `),
+      'employees'
     );
-    mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: emp });
   } catch (err) {
     return handleDbError(res, err, 'POST /employees');
@@ -1135,17 +1173,18 @@ router.post('/employees', async (req: Request, res: Response) => {
 
 router.delete('/employees/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteEmployee(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM employees WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employees WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'employees'
     );
-    mockStore.deleteEmployee(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /employees/${id}`);
@@ -1154,9 +1193,9 @@ router.delete('/employees/:id', async (req: Request, res: Response) => {
 
 // --- ASSIGNMENTS ---
 router.get('/assignments', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getAssignments());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1164,23 +1203,23 @@ router.get('/assignments', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(project_id, '') as projectId, 
-               ISNULL(client_id, '') as clientId, 
-               ISNULL(client_name, '') as clientName,
-               ISNULL(employee_id, '') as employeeId, 
-               ISNULL(employee_name, '') as employeeName, 
-               ISNULL(role_name, '') as roleName,
-               ISNULL(assigned_date, '') as assignedDate, 
-               ISNULL(work_assigned, '') as workAssigned, 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(employee_id AS NVARCHAR(100)), '') as employeeId, 
+               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName, 
+               ISNULL(CAST(role_name AS NVARCHAR(255)), '') as roleName,
+               ISNULL(CAST(assigned_date AS NVARCHAR(50)), '') as assignedDate, 
+               ISNULL(CAST(work_assigned AS NVARCHAR(MAX)), '') as workAssigned, 
                ISNULL(amount, 0) as amount,
                ISNULL(amount_paid, 0) as amountPaid, 
-               ISNULL(payment_status, 'Pending') as paymentStatus, 
-               ISNULL(employee_notes, '') as employeeNotes,
-               ISNULL(last_note_update, '') as lastNoteUpdate, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Pending') as paymentStatus, 
+               ISNULL(CAST(employee_notes AS NVARCHAR(MAX)), '') as employeeNotes,
+               ISNULL(CAST(last_note_update AS NVARCHAR(50)), '') as lastNoteUpdate, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM assignments 
         ORDER BY created_at DESC
       `),
@@ -1188,7 +1227,7 @@ router.get('/assignments', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /assignments', mockStore.getAssignments());
+    return handleDbError(res, err, 'GET /assignments');
   }
 });
 
@@ -1198,46 +1237,52 @@ router.post('/assignments', async (req: Request, res: Response) => {
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveAssignment(asn);
-    return res.json({ success: true, assignment: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', asn.id)
-        .input('brand', asn.brand || 'Device Doctor India')
-        .input('project_id', asn.projectId || '')
-        .input('client_id', asn.clientId || '')
-        .input('client_name', asn.clientName || '')
-        .input('employee_id', asn.employeeId || '')
-        .input('employee_name', asn.employeeName || '')
-        .input('role_name', asn.roleName || '')
-        .input('assigned_date', asn.assignedDate || '')
-        .input('work_assigned', asn.workAssigned || '')
-        .input('amount', asn.amount || 0)
-        .input('amount_paid', asn.amountPaid || 0)
-        .input('payment_status', asn.paymentStatus || 'Pending')
-        .input('employee_notes', asn.employeeNotes || '')
-        .input('last_note_update', asn.lastNoteUpdate || '')
-        .input('created_at', asn.createdAt)
-        .input('updated_at', asn.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM assignments WHERE id = @id)
-            UPDATE assignments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                   employee_id=@employee_id, employee_name=@employee_name, role_name=@role_name,
-                                   assigned_date=@assigned_date, work_assigned=@work_assigned, amount=@amount,
-                                   amount_paid=@amount_paid, payment_status=@payment_status, employee_notes=@employee_notes,
-                                   last_note_update=@last_note_update, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO assignments (id, brand, project_id, client_id, client_name, employee_id, employee_name, role_name, assigned_date, work_assigned, amount, amount_paid, payment_status, employee_notes, last_note_update, created_at, updated_at)
-            VALUES (@id, @brand, @project_id, @client_id, @client_name, @employee_id, @employee_name, @role_name, @assigned_date, @work_assigned, @amount, @amount_paid, @payment_status, @employee_notes, @last_note_update, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(asn.id);
+    const projGuid = toGuidOrNull(asn.projectId);
+    const clientGuid = toGuidOrNull(asn.clientId);
+    const empGuid = toGuidOrNull(asn.employeeId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', asn.id || '')
+          .input('brand', asn.brand || 'Device Doctor India')
+          .input('project_id', projGuid)
+          .input('client_id', clientGuid)
+          .input('client_name', asn.clientName || '')
+          .input('employee_id', empGuid)
+          .input('employee_name', asn.employeeName || '')
+          .input('role_name', asn.roleName || '')
+          .input('assigned_date', asn.assignedDate || '')
+          .input('work_assigned', asn.workAssigned || '')
+          .input('amount', asn.amount || 0)
+          .input('amount_paid', asn.amountPaid || 0)
+          .input('payment_status', asn.paymentStatus || 'Pending')
+          .input('employee_notes', asn.employeeNotes || '')
+          .input('last_note_update', asn.lastNoteUpdate || '')
+          .input('created_at', asn.createdAt)
+          .input('updated_at', asn.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM assignments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE assignments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                                     employee_id=@employee_id, employee_name=@employee_name, role_name=@role_name,
+                                     assigned_date=@assigned_date, work_assigned=@work_assigned, work_module_assigned=@work_assigned,
+                                     amount=@amount, amount_paid=@amount_paid, payment_status=@payment_status,
+                                     employee_notes=@employee_notes, last_note_update=@last_note_update, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO assignments (id, assignment_id_code, brand, project_id, client_id, client_name, employee_id, employee_name, role_name, assigned_date, work_assigned, work_module_assigned, amount, amount_paid, payment_status, employee_notes, last_note_update, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @employee_id, @employee_name, @role_name, @assigned_date, @work_assigned, @work_assigned, @amount, @amount_paid, @payment_status, @employee_notes, @last_note_update, @created_at, @updated_at)
+          `),
+      'assignments'
     );
-    mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: asn });
   } catch (err) {
     return handleDbError(res, err, 'POST /assignments');
@@ -1246,17 +1291,18 @@ router.post('/assignments', async (req: Request, res: Response) => {
 
 router.delete('/assignments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteAssignment(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM assignments WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM assignments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'assignments'
     );
-    mockStore.deleteAssignment(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /assignments/${id}`);
@@ -1265,9 +1311,9 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEE PAYMENTS ---
 router.get('/employee-payments', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getEmployeePayments());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1275,21 +1321,21 @@ router.get('/employee-payments', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(assignment_id, '') as assignmentId, 
-               ISNULL(project_id, '') as projectId, 
-               ISNULL(employee_id, '') as employeeId,
-               ISNULL(employee_name, '') as employeeName, 
-               ISNULL(payment_date, '') as paymentDate, 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(assignment_id AS NVARCHAR(100)), '') as assignmentId, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(employee_id AS NVARCHAR(100)), '') as employeeId,
+               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName, 
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
                ISNULL(amount_paid, 0) as amountPaid,
-               ISNULL(payment_mode, 'GST Invoice') as paymentMode, 
-               ISNULL(reference_utr, '') as referenceUtr, 
-               ISNULL(notes, '') as notes,
-               ISNULL(payment_proof, '') as paymentProof, 
-               ISNULL(payment_proof_notes, '') as paymentProofNotes,
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(payment_proof AS NVARCHAR(MAX)), '') as paymentProof, 
+               ISNULL(CAST(payment_proof_notes AS NVARCHAR(MAX)), '') as paymentProofNotes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM employee_payments 
         ORDER BY created_at DESC
       `),
@@ -1297,7 +1343,7 @@ router.get('/employee-payments', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /employee-payments', mockStore.getEmployeePayments());
+    return handleDbError(res, err, 'GET /employee-payments');
   }
 });
 
@@ -1307,44 +1353,50 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveEmployeePayment(epay);
-    return res.json({ success: true, payment: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', epay.id)
-        .input('brand', epay.brand || 'Device Doctor India')
-        .input('assignment_id', epay.assignmentId || '')
-        .input('project_id', epay.projectId || '')
-        .input('employee_id', epay.employeeId || '')
-        .input('employee_name', epay.employeeName || '')
-        .input('payment_date', epay.paymentDate || '')
-        .input('amount_paid', epay.amountPaid || 0)
-        .input('payment_mode', epay.paymentMode || 'GST Invoice')
-        .input('reference_utr', epay.referenceUtr || '')
-        .input('notes', epay.notes || '')
-        .input('payment_proof', epay.paymentProof ? JSON.stringify(epay.paymentProof) : '')
-        .input('payment_proof_notes', epay.paymentProofNotes || '')
-        .input('created_at', epay.createdAt)
-        .input('updated_at', epay.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM employee_payments WHERE id = @id)
-            UPDATE employee_payments SET brand=@brand, assignment_id=@assignment_id, project_id=@project_id,
-                                        employee_id=@employee_id, employee_name=@employee_name, payment_date=@payment_date,
-                                        amount_paid=@amount_paid, payment_mode=@payment_mode, reference_utr=@reference_utr,
-                                        notes=@notes, payment_proof=@payment_proof, payment_proof_notes=@payment_proof_notes,
-                                        updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO employee_payments (id, brand, assignment_id, project_id, employee_id, employee_name, payment_date, amount_paid, payment_mode, reference_utr, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-            VALUES (@id, @brand, @assignment_id, @project_id, @employee_id, @employee_name, @payment_date, @amount_paid, @payment_mode, @reference_utr, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(epay.id);
+    const asnGuid = toGuidOrNull(epay.assignmentId);
+    const projGuid = toGuidOrNull(epay.projectId);
+    const empGuid = toGuidOrNull(epay.employeeId);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', epay.id || '')
+          .input('brand', epay.brand || 'Device Doctor India')
+          .input('assignment_id', asnGuid)
+          .input('project_id', projGuid)
+          .input('employee_id', empGuid)
+          .input('employee_name', epay.employeeName || '')
+          .input('payment_date', epay.paymentDate || '')
+          .input('amount_paid', epay.amountPaid || 0)
+          .input('payment_mode', epay.paymentMode || 'GST Invoice')
+          .input('reference_utr', epay.referenceUtr || '')
+          .input('notes', epay.notes || '')
+          .input('payment_proof', epay.paymentProof ? JSON.stringify(epay.paymentProof) : '')
+          .input('payment_proof_notes', epay.paymentProofNotes || '')
+          .input('created_at', epay.createdAt)
+          .input('updated_at', epay.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM employee_payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE employee_payments SET brand=@brand, assignment_id=@assignment_id, project_id=@project_id,
+                                          employee_id=@employee_id, employee_name=@employee_name, payment_date=@payment_date,
+                                          amount_paid=@amount_paid, payment_mode=@payment_mode, reference_utr=@reference_utr,
+                                          notes=@notes, payment_proof=@payment_proof, payment_proof_notes=@payment_proof_notes,
+                                          updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO employee_payments (id, emp_payment_id_code, brand, assignment_id, project_id, employee_id, employee_name, payment_date, amount_paid, payment_mode, reference_utr, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @assignment_id, @project_id, @employee_id, @employee_name, @payment_date, @amount_paid, @payment_mode, @reference_utr, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+          `),
+      'employee_payments'
     );
-    mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: epay });
   } catch (err) {
     return handleDbError(res, err, 'POST /employee-payments');
@@ -1353,17 +1405,18 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
 
 router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteEmployeePayment(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM employee_payments WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employee_payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'employee_payments'
     );
-    mockStore.deleteEmployeePayment(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /employee-payments/${id}`);
@@ -1372,9 +1425,9 @@ router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
 
 // --- EXPENSE CATEGORIES ---
 router.get('/expense-categories', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getExpenseCategories());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1382,13 +1435,13 @@ router.get('/expense-categories', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(name, ISNULL(category_name, '')) as name, 
-               ISNULL(description, '') as description, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM expense_categories 
         ORDER BY created_at DESC
       `),
@@ -1396,7 +1449,7 @@ router.get('/expense-categories', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /expense-categories', mockStore.getExpenseCategories());
+    return handleDbError(res, err, 'GET /expense-categories');
   }
 });
 
@@ -1406,31 +1459,36 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveExpenseCategory(cat);
-    return res.json({ success: true, category: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', cat.id)
-        .input('brand', cat.brand || 'Device Doctor India')
-        .input('name', cat.name)
-        .input('description', cat.description || '')
-        .input('status', cat.status || 'Active')
-        .input('created_at', cat.createdAt)
-        .input('updated_at', cat.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM expense_categories WHERE id = @id)
-            UPDATE expense_categories SET brand=@brand, name=@name, description=@description, status=@status, updated_at=@updated_at WHERE id=@id
-          ELSE
-            INSERT INTO expense_categories (id, brand, name, description, status, created_at, updated_at)
-            VALUES (@id, @brand, @name, @description, @status, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(cat.id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', cat.id || '')
+          .input('brand', cat.brand || 'Device Doctor India')
+          .input('name', cat.name)
+          .input('description', cat.description || '')
+          .input('status', cat.status || 'Active')
+          .input('created_at', cat.createdAt)
+          .input('updated_at', cat.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM expense_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE expense_categories 
+              SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO expense_categories (id, exp_category_id_code, brand, name, category_name, description, status, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @name, @name, @description, @status, @created_at, @updated_at)
+          `),
+      'expense_categories'
     );
-    mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
     return handleDbError(res, err, 'POST /expense-categories');
@@ -1439,17 +1497,21 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
 
 router.delete('/expense-categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteExpenseCategory(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM expense_categories WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query('DELETE FROM expense_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'expense_categories'
     );
-    mockStore.deleteExpenseCategory(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /expense-categories/${id}`);
@@ -1458,9 +1520,9 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
 
 // --- OTHER EXPENSES ---
 router.get('/expenses', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getExpenses());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1468,24 +1530,24 @@ router.get('/expenses', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(brand, 'Device Doctor India') as brand, 
-               ISNULL(project_id, '') as projectId, 
-               ISNULL(client_id, '') as clientId, 
-               ISNULL(client_name, '') as clientName,
-               ISNULL(expense_category_id, '') as expenseCategoryId, 
-               ISNULL(expense_category_name, '') as expenseCategoryName,
-               ISNULL(vendor, '') as vendor, 
-               ISNULL(description, '') as description, 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(expense_category_id AS NVARCHAR(100)), '') as expenseCategoryId, 
+               ISNULL(CAST(expense_category_name AS NVARCHAR(255)), '') as expenseCategoryName,
+               ISNULL(CAST(vendor AS NVARCHAR(255)), '') as vendor, 
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
                ISNULL(amount, 0) as amount, 
-               ISNULL(currency, 'INR') as currency, 
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
                ISNULL(exchange_rate, 1) as exchangeRate,
-               ISNULL(amount_inr, 0) as amountINR, 
-               ISNULL(expense_date, '') as expenseDate, 
-               ISNULL(payment_status, 'Paid') as paymentStatus,
-               ISNULL(notes, '') as notes, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt
+               ISNULL(TRY_CAST(amount_inr AS FLOAT), 0) as amountINR, 
+               ISNULL(CAST(expense_date AS NVARCHAR(50)), '') as expenseDate, 
+               ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Paid') as paymentStatus,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM other_expenses 
         ORDER BY created_at DESC
       `),
@@ -1493,7 +1555,7 @@ router.get('/expenses', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /expenses', mockStore.getExpenses());
+    return handleDbError(res, err, 'GET /expenses');
   }
 });
 
@@ -1503,47 +1565,67 @@ router.post('/expenses', async (req: Request, res: Response) => {
   exp.updatedAt = now;
   exp.createdAt = exp.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveExpense(exp);
-    return res.json({ success: true, expense: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', exp.id)
-        .input('brand', exp.brand || 'Device Doctor India')
-        .input('project_id', exp.projectId || '')
-        .input('client_id', exp.clientId || '')
-        .input('client_name', exp.clientName || '')
-        .input('expense_category_id', exp.expenseCategoryId || '')
-        .input('expense_category_name', exp.expenseCategoryName || '')
-        .input('vendor', exp.vendor || '')
-        .input('description', exp.description || '')
-        .input('amount', exp.amount || 0)
-        .input('currency', exp.currency || 'INR')
-        .input('exchange_rate', exp.exchangeRate || 1)
-        .input('amount_inr', exp.amountINR || 0)
-        .input('expense_date', exp.expenseDate || '')
-        .input('payment_status', exp.paymentStatus || 'Paid')
-        .input('notes', exp.notes || '')
-        .input('created_at', exp.createdAt)
-        .input('updated_at', exp.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM other_expenses WHERE id = @id)
-            UPDATE other_expenses SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                      expense_category_id=@expense_category_id, expense_category_name=@expense_category_name,
-                                      vendor=@vendor, description=@description, amount=@amount, currency=@currency,
-                                      exchange_rate=@exchange_rate, amount_inr=@amount_inr, expense_date=@expense_date,
-                                      payment_status=@payment_status, notes=@notes, updated_at=@updated_at
-            WHERE id = @id
-          ELSE
-            INSERT INTO other_expenses (id, brand, project_id, client_id, client_name, expense_category_id, expense_category_name, vendor, description, amount, currency, exchange_rate, amount_inr, expense_date, payment_status, notes, created_at, updated_at)
-            VALUES (@id, @brand, @project_id, @client_id, @client_name, @expense_category_id, @expense_category_name, @vendor, @description, @amount, @currency, @exchange_rate, @amount_inr, @expense_date, @payment_status, @notes, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(exp.id);
+    const projGuid = toGuidOrNull(exp.projectId);
+    const isNaProject = (!exp.projectId || exp.projectId === 'NA' || exp.projectId.toUpperCase() === 'NA' || !projGuid) ? 1 : 0;
+    const catGuid = toGuid(exp.expenseCategoryId || exp.expenseCategoryName || 'General');
+    const catName = exp.expenseCategoryName || 'General Expense';
+    const expenseDate = exp.expenseDate ? exp.expenseDate.slice(0, 10) : now.slice(0, 10);
+    const amountVal = Number(exp.amount) || 0;
+    const rateVal = Number(exp.exchangeRate) || 1;
+    const inrVal = Number(exp.amountINR) || (amountVal * rateVal);
+
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', exp.id || '')
+          .input('brand', exp.brand || 'Device Doctor India')
+          .input('project_id', isNaProject ? null : projGuid)
+          .input('is_na_project', isNaProject)
+          .input('client_id', exp.clientId || '')
+          .input('client_name', exp.clientName || '')
+          .input('cat_id', catGuid)
+          .input('cat_name', catName)
+          .input('vendor', exp.vendor || '')
+          .input('description', exp.description || '')
+          .input('amount', amountVal)
+          .input('currency', exp.currency || 'INR')
+          .input('exchange_rate', rateVal)
+          .input('amount_inr', String(inrVal))
+          .input('expense_date', expenseDate)
+          .input('payment_status', exp.paymentStatus || 'Paid')
+          .input('notes', exp.notes || '')
+          .input('created_at', exp.createdAt)
+          .input('updated_at', exp.updatedAt)
+          .query(`
+            -- Ensure expense_categories record exists to satisfy foreign key constraint
+            IF NOT EXISTS (SELECT 1 FROM expense_categories WHERE id = @cat_id)
+            BEGIN
+              INSERT INTO expense_categories (id, exp_category_id_code, brand, name, category_name, description, status, created_at, updated_at)
+              VALUES (@cat_id, @cat_name, @brand, @cat_name, @cat_name, 'Auto-provisioned category', 'Active', @created_at, @updated_at);
+            END;
+
+            IF EXISTS (SELECT 1 FROM other_expenses WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE other_expenses 
+              SET brand=@brand, project_id=@project_id, is_na_project=@is_na_project, client_id=@client_id, client_name=@client_name,
+                  expense_category_id=@cat_id, expense_category_name=@cat_name, vendor=@vendor, description=@description,
+                  amount=@amount, currency=@currency, exchange_rate=@exchange_rate, amount_inr=@amount_inr,
+                  expense_date=@expense_date, payment_status=@payment_status, notes=@notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO other_expenses (id, expense_id_code, brand, project_id, is_na_project, client_id, client_name, expense_category_id, expense_category_name, vendor, description, amount, currency, exchange_rate, amount_inr, expense_date, payment_status, notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @project_id, @is_na_project, @client_id, @client_name, @cat_id, @cat_name, @vendor, @description, @amount, @currency, @exchange_rate, @amount_inr, @expense_date, @payment_status, @notes, @created_at, @updated_at)
+          `),
+      'other_expenses'
     );
-    mockStore.saveExpense(exp);
     return res.json({ success: true, expense: exp });
   } catch (err) {
     return handleDbError(res, err, 'POST /expenses');
@@ -1552,17 +1634,21 @@ router.post('/expenses', async (req: Request, res: Response) => {
 
 router.delete('/expenses/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteExpense(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM other_expenses WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query('DELETE FROM other_expenses WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'other_expenses'
     );
-    mockStore.deleteExpense(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /expenses/${id}`);
@@ -1571,9 +1657,9 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
 
 // --- APP USERS (Admin & User Management) ---
 router.get('/users', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getUsers());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1581,15 +1667,15 @@ router.get('/users', async (_req: Request, res: Response) => {
       pool,
       () =>
         pool.request().query(`
-        SELECT id, 
-               ISNULL(name, ISNULL(full_name, ISNULL(username, 'User'))) as name, 
-               email, 
-               role, 
-               ISNULL(brand, 'All') as brand, 
-               ISNULL(status, 'Active') as status, 
-               ISNULL(avatar, '') as avatar, 
-               ISNULL(created_at, '') as createdAt, 
-               ISNULL(updated_at, ISNULL(created_at, '')) as updatedAt 
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(full_name AS NVARCHAR(255)), 'User')) as name, 
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
+               ISNULL(CAST(role AS NVARCHAR(50)), 'Super Admin') as role, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'All') as brand, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(avatar AS NVARCHAR(MAX)), '') as avatar, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM app_users 
         ORDER BY created_at ASC
       `),
@@ -1597,7 +1683,7 @@ router.get('/users', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /users', mockStore.getUsers());
+    return handleDbError(res, err, 'GET /users');
   }
 });
 
@@ -1607,34 +1693,43 @@ router.post('/users', async (req: Request, res: Response) => {
   user.updatedAt = now;
   user.createdAt = user.createdAt || now;
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveUser(user);
-    return res.json({ success: true, user: saved });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('id', user.id)
-        .input('name', user.name)
-        .input('email', user.email.toLowerCase())
-        .input('password_hash', user.password || 'Admin@2026')
-        .input('role', user.role)
-        .input('brand', user.brand || 'All')
-        .input('status', user.status || 'Active')
-        .input('avatar', user.avatar || '')
-        .input('created_at', user.createdAt)
-        .input('updated_at', user.updatedAt)
-        .query(`
-          IF EXISTS (SELECT 1 FROM app_users WHERE id = @id)
-            UPDATE app_users SET name = @name, email = @email, password_hash = @password_hash, role = @role, brand = @brand, status = @status, avatar = @avatar, updated_at = @updated_at WHERE id = @id
-          ELSE
-            INSERT INTO app_users (id, name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-            VALUES (@id, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at)
-        `)
+    const guidId = toGuid(user.id);
+    const userEmail = (user.email || '').toLowerCase().trim();
+    const userName = user.name || user.email || 'User';
+
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', user.id || '')
+          .input('name', userName)
+          .input('email', userEmail)
+          .input('password_hash', user.password || 'Admin@2026')
+          .input('role', user.role || 'Viewer')
+          .input('brand', user.brand || 'All')
+          .input('status', user.status || 'Active')
+          .input('avatar', user.avatar || '')
+          .input('created_at', user.createdAt)
+          .input('updated_at', user.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email)
+              UPDATE app_users 
+              SET name = @name, full_name = @name, email = @email, password_hash = @password_hash, 
+                  role = @role, brand = @brand, status = @status, avatar = @avatar, updated_at = @updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email
+            ELSE
+              INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
+              VALUES (@id, NEWID(), @name, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at)
+          `),
+      'app_users'
     );
-    mockStore.saveUser(user);
     return res.json({ success: true, user });
   } catch (err) {
     return handleDbError(res, err, 'POST /users');
@@ -1643,17 +1738,21 @@ router.post('/users', async (req: Request, res: Response) => {
 
 router.delete('/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    const ok = mockStore.deleteUser(id);
-    return res.json({ success: ok, id });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request().input('id', id).query('DELETE FROM app_users WHERE id = @id')
+    const guidId = toGuid(id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query('DELETE FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      'app_users'
     );
-    mockStore.deleteUser(id);
     return res.json({ success: true, id });
   } catch (err) {
     return handleDbError(res, err, `DELETE /users/${id}`);
@@ -1662,9 +1761,9 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
 
 // --- AUDIT LOG ---
 router.get('/audit', async (_req: Request, res: Response) => {
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getAuditLog());
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {
@@ -1673,7 +1772,7 @@ router.get('/audit', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /audit', mockStore.getAuditLog());
+    return handleDbError(res, err, 'GET /audit');
   }
 });
 
@@ -1681,17 +1780,9 @@ router.post('/audit', async (req: Request, res: Response) => {
   const { brand, module, action, entityId, details, performedBy } = req.body;
   const now = new Date().toISOString();
 
-  const pool = getPool();
+  const pool = await getOrInitPool();
   if (!pool) {
-    mockStore.addAuditLog({
-      brand: brand || 'All',
-      module: module || 'General',
-      action: action || 'LOG',
-      entityId: entityId || '',
-      details: details || '',
-      performedBy: performedBy || 'System',
-    });
-    return res.json({ success: true });
+    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
   }
 
   try {

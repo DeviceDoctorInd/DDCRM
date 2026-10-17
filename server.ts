@@ -22,8 +22,8 @@ async function startServer() {
   // API router
   app.use('/api', apiRouter);
 
-  // Background initialization of Azure SQL Database connection
-  initAzureSql().catch((err) => {
+  // Establish live Azure SQL Database connection pool asynchronously so port 3000 binds immediately
+  initAzureSql().catch((err: any) => {
     console.warn('[Server] Notice: Azure SQL init attempt:', err?.message || err);
   });
 
