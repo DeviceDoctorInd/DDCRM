@@ -1,7 +1,7 @@
 import React from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { BrandSwitcher } from '../common/BrandSwitcher';
-import { Menu, Sun, Moon, RotateCcw, Shield, Plus } from 'lucide-react';
+import { Menu, Sun, Moon, RefreshCw, Shield, Plus } from 'lucide-react';
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -12,7 +12,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     activeModule,
     theme,
     toggleTheme,
-    resetData,
+    refreshData,
     authUser,
     openAddProjectModal,
     activeBrand,
@@ -86,18 +86,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           <span>₹ INR Standard</span>
         </div>
 
-        {/* Reset Demo Data button */}
+        {/* Refresh Live SQL Data button */}
         <button
           onClick={() => {
-            if (window.confirm('Reset all CRM data to initial sample dataset for Device Doctor India, Codestro, and FX Launch Pad?')) {
-              resetData();
-            }
+            refreshData();
           }}
           className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title="Reset database to initial sample data for all 3 brands"
+          title="Refresh live CRM data from Azure SQL Database"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Reset Data</span>
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span className="hidden lg:inline">Refresh SQL</span>
         </button>
 
         {/* Light / Dark Mode Toggle */}

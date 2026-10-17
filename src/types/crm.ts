@@ -409,6 +409,14 @@ export type ActiveModule =
   | 'reports'
   | 'users';
 
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  message: string;
+}
+
+export type ReferentialBlockState = ReferentialIntegrityBlock;
+
 export interface ReferentialIntegrityBlock {
   isOpen: boolean;
   title: string;

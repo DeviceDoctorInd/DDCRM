@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import {
+  ActiveModule,
+  BrandName,
   Client,
   ServiceCategory,
   Service,
@@ -10,63 +12,40 @@ import {
   Assignment,
   EmployeePayment,
   ExpenseCategory,
-  ExpenseCategoryStatus,
   Expense,
   GstInvoice,
-  AuthUser,
   AppUser,
+  AuthUser,
   UserRole,
-  DatabaseStatus,
-  ActiveModule,
-  ReportsSubTab,
-  BrandName,
-  BrandPrefix,
+  ExpenseCategoryStatus,
+  ToastMessage,
+  ReferentialBlockState,
   BrandMeta,
+  BrandPrefix,
   BRAND_CONFIG,
   getBrandPrefix,
+  ReportsSubTab,
 } from '../types/crm';
-import { storageService } from '../services/storageService';
-
-export interface ToastMessage {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  message: string;
-}
-
-export interface ReferentialBlockState {
-  isOpen: boolean;
-  title: string;
-  message: string;
-  entityName: string;
-  entityType: 'Client' | 'Category' | 'Service' | 'Role' | 'Project' | 'Employee' | 'Assignment' | 'Expense Category' | 'Expense' | string;
-  entityId: string;
-  linkedCount: number;
-  onSetInactive?: () => void;
-}
+import { storageService, DatabaseStatus } from '../services/storageService';
 
 interface CrmContextType {
-  // Navigation & Theme
   activeModule: ActiveModule;
   setActiveModule: (module: ActiveModule) => void;
-  activeReportsTab: ReportsSubTab;
-  setActiveReportsTab: (tab: ReportsSubTab) => void;
-  theme: 'light' | 'dark';
-  toggleTheme: () => void;
-
-  // Multi-Brand Workspace Architecture
   activeBrand: BrandName;
   setActiveBrand: (brand: BrandName) => void;
   brandPrefix: BrandPrefix;
   brandMeta: BrandMeta;
   isConsolidatedView: boolean;
-  setIsConsolidatedView: (consolidated: boolean) => void;
+  setIsConsolidatedView: (val: boolean) => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
 
-  // Auth
+  // Session & Authentication
   authUser: AuthUser | null;
-  login: (email: string, pass: string) => boolean;
+  login: (email: string, pass: string) => Promise<boolean>;
   logout: () => void;
 
-  // Brand-Scoped (or Consolidated in Reports/Dashboard) Relational Entities
+  // Filtered views scoped to activeBrand (or all if consolidated)
   clients: Client[];
   categories: ServiceCategory[];
   services: Service[];
@@ -80,14 +59,16 @@ interface CrmContextType {
   expenses: Expense[];
   gstInvoices: GstInvoice[];
 
-  // Master Unfiltered Collections (Across all 3 brands)
-  allClients: Client[];
+  // Unfiltered Master Collections (for consolidated analytics)
   allProjects: Project[];
   allPayments: Payment[];
-  allExpenses: Expense[];
-  allEmployees: Employee[];
+  allClients: Client[];
 
-  // Entity Finders (Relational ID Linking across system)
+  // Reports navigation
+  activeReportsTab: ReportsSubTab;
+  setActiveReportsTab: (tab: ReportsSubTab) => void;
+
+  // Direct entity getters by ID
   getClientById: (id: string) => Client | undefined;
   getCategoryById: (id: string) => ServiceCategory | undefined;
   getServiceById: (id: string) => Service | undefined;
@@ -109,57 +90,58 @@ interface CrmContextType {
   getServiceProjectsCount: (serviceId: string) => number;
   getRoleEmployeesCount: (roleId: string) => number;
 
-  // Actions
-  saveClient: (client: Client) => { success: boolean; error?: string };
-  deleteClient: (clientId: string) => { success: boolean; error?: string };
-  setClientStatus: (clientId: string, status: Client['status']) => void;
+  // Actions (Direct Live Azure SQL operations)
+  saveClient: (client: Client) => Promise<{ success: boolean; error?: string }>;
+  deleteClient: (clientId: string) => Promise<{ success: boolean; error?: string }>;
+  setClientStatus: (clientId: string, status: Client['status']) => Promise<void>;
 
-  saveCategory: (category: ServiceCategory) => { success: boolean; error?: string };
-  deleteCategory: (categoryId: string) => { success: boolean; error?: string };
-  setCategoryStatus: (categoryId: string, status: ServiceCategory['status']) => void;
+  saveCategory: (category: ServiceCategory) => Promise<{ success: boolean; error?: string }>;
+  deleteCategory: (categoryId: string) => Promise<{ success: boolean; error?: string }>;
+  setCategoryStatus: (categoryId: string, status: ServiceCategory['status']) => Promise<void>;
 
-  saveService: (service: Service) => { success: boolean; error?: string };
-  deleteService: (serviceId: string) => { success: boolean; error?: string };
-  setServiceStatus: (serviceId: string, status: Service['status']) => void;
+  saveService: (service: Service) => Promise<{ success: boolean; error?: string }>;
+  deleteService: (serviceId: string) => Promise<{ success: boolean; error?: string }>;
+  setServiceStatus: (serviceId: string, status: Service['status']) => Promise<void>;
 
-  saveProject: (project: Project) => { success: boolean; error?: string };
-  deleteProject: (projectId: string) => { success: boolean; error?: string };
-  setProjectStatus: (projectId: string, status: Project['status']) => void;
+  saveProject: (project: Project) => Promise<{ success: boolean; error?: string }>;
+  deleteProject: (projectId: string) => Promise<{ success: boolean; error?: string }>;
+  setProjectStatus: (projectId: string, status: Project['status']) => Promise<void>;
 
-  savePayment: (payment: Payment) => { success: boolean; error?: string };
-  deletePayment: (paymentId: string) => { success: boolean; error?: string };
+  savePayment: (payment: Payment) => Promise<{ success: boolean; error?: string }>;
+  deletePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveRole: (role: EmployeeRole) => { success: boolean; error?: string };
-  deleteRole: (roleId: string) => { success: boolean; error?: string };
+  saveRole: (role: EmployeeRole) => Promise<{ success: boolean; error?: string }>;
+  deleteRole: (roleId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveEmployee: (employee: Employee) => { success: boolean; error?: string };
-  deleteEmployee: (employeeId: string) => { success: boolean; error?: string };
+  saveEmployee: (employee: Employee) => Promise<{ success: boolean; error?: string }>;
+  deleteEmployee: (employeeId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveAssignment: (assignment: Assignment) => { success: boolean; error?: string };
-  deleteAssignment: (assignmentId: string) => { success: boolean; error?: string };
+  saveAssignment: (assignment: Assignment) => Promise<{ success: boolean; error?: string }>;
+  deleteAssignment: (assignmentId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveEmployeePayment: (payment: EmployeePayment) => { success: boolean; error?: string };
-  deleteEmployeePayment: (paymentId: string) => { success: boolean; error?: string };
+  saveEmployeePayment: (payment: EmployeePayment) => Promise<{ success: boolean; error?: string }>;
+  deleteEmployeePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveExpenseCategory: (category: ExpenseCategory) => { success: boolean; error?: string };
-  deleteExpenseCategory: (categoryId: string) => { success: boolean; error?: string };
-  setExpenseCategoryStatus: (categoryId: string, status: ExpenseCategoryStatus) => void;
+  saveExpenseCategory: (category: ExpenseCategory) => Promise<{ success: boolean; error?: string }>;
+  deleteExpenseCategory: (categoryId: string) => Promise<{ success: boolean; error?: string }>;
+  setExpenseCategoryStatus: (categoryId: string, status: ExpenseCategoryStatus) => Promise<void>;
 
-  saveExpense: (expense: Expense) => { success: boolean; error?: string };
-  deleteExpense: (expenseId: string) => { success: boolean; error?: string };
+  saveExpense: (expense: Expense) => Promise<{ success: boolean; error?: string }>;
+  deleteExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveGstInvoice: (invoice: GstInvoice) => { success: boolean; error?: string };
+  saveGstInvoice: (invoice: GstInvoice) => Promise<{ success: boolean; error?: string }>;
 
-  // Users (App Users) & RBAC
+  // Users & RBAC
   users: AppUser[];
-  saveUser: (user: AppUser) => { success: boolean; error?: string };
-  deleteUser: (userId: string) => { success: boolean };
+  saveUser: (user: AppUser) => Promise<{ success: boolean; error?: string }>;
+  deleteUser: (userId: string) => Promise<{ success: boolean }>;
   hasPermission: (allowedRoles: (UserRole | string)[]) => boolean;
 
   // Live Azure SQL Database Connection
   databaseStatus: DatabaseStatus;
   refreshDatabaseStatus: () => Promise<void>;
   syncWithDatabase: () => Promise<void>;
+  clearDemoData: () => Promise<{ success: boolean; message: string; remainingUsers?: AppUser[]; error?: string }>;
 
   // Referential Deletion Protection Modal
   referentialModal: ReferentialBlockState;
@@ -179,23 +161,23 @@ interface CrmContextType {
   showToast: (message: string, type?: ToastMessage['type']) => void;
   removeToast: (id: string) => void;
 
-  // Reset to default sample dataset
-  resetData: () => void;
+  // Live Refresh
+  refreshData: () => Promise<void>;
 }
 
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
 
 export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [activeModule, setActiveModule] = useState<ActiveModule>('dashboard');
-  const [activeReportsTab, setActiveReportsTab] = useState<ReportsSubTab>('business');
+  const [activeBrand, setActiveBrandState] = useState<BrandName>('Device Doctor India');
+  const [isConsolidatedView, setIsConsolidatedView] = useState(false);
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
-  const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
+  const [activeReportsTab, setActiveReportsTab] = useState<ReportsSubTab>('business');
 
-  // Multi-brand workspace state
-  const [activeBrand, setActiveBrandState] = useState<BrandName>(() => storageService.getActiveBrand());
-  const [isConsolidatedView, setIsConsolidatedViewState] = useState<boolean>(false);
+  const brandPrefix: BrandPrefix = useMemo(() => getBrandPrefix(activeBrand), [activeBrand]);
+  const brandMeta: BrandMeta = useMemo(() => BRAND_CONFIG[activeBrand] || BRAND_CONFIG['Device Doctor India'], [activeBrand]);
 
-  // Raw entities state (holding master list across all brands)
+  // Master Raw State loaded strictly from live Azure SQL Database
   const [rawClients, setRawClients] = useState<Client[]>([]);
   const [rawCategories, setRawCategories] = useState<ServiceCategory[]>([]);
   const [rawServices, setRawServices] = useState<Service[]>([]);
@@ -209,219 +191,177 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
   const [rawGstInvoices, setRawGstInvoices] = useState<GstInvoice[]>([]);
   const [rawUsers, setRawUsers] = useState<AppUser[]>([]);
+
+  // Authentication State
+  const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
+
+  // Live Azure SQL Database Connection Diagnostics
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>({
     connected: false,
-    server: 'ddcrm.database.windows.net',
+    server: 'ddrcm.database.windows.net',
     database: 'DDCRM',
-    authType: 'Active Directory Password (Microsoft Entra)',
-    user: 'rathorehemant114@gmail.com',
-    error: null,
+    authType: 'SQL Server Authentication (Native)',
+    user: 'CloudSA995f9e29',
+    error: 'Connecting to Azure SQL Database...',
     timestamp: new Date().toISOString(),
     tables: {},
   });
 
-  // Modals & Feedback
+  // Global Toast State
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Referential Integrity Modal State
   const [referentialModal, setReferentialModal] = useState<ReferentialBlockState>({
     isOpen: false,
     title: '',
     message: '',
     entityName: '',
-    entityType: 'Client',
+    entityType: '',
     entityId: '',
     linkedCount: 0,
   });
 
-  // Project Modal State
+  // Global Project Modal State
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectModalEditing, setIsProjectModalEditing] = useState(false);
   const [projectModalData, setProjectModalData] = useState<Partial<Project> | null>(null);
 
-  // Brand Switcher handler
   const setActiveBrand = (brand: BrandName) => {
     setActiveBrandState(brand);
     storageService.setActiveBrand(brand);
-    showToast(`Switched active workspace to "${brand}" (${getBrandPrefix(brand)})`, 'info');
   };
 
-  const setIsConsolidatedView = (val: boolean) => {
-    setIsConsolidatedViewState(val);
-    if (val) {
-      showToast('Consolidated Group View enabled: Displaying aggregated data across all 3 brands.', 'info');
-    } else {
-      showToast(`Restored brand-isolated workspace: ${activeBrand}`, 'info');
-    }
+  const showToast = (message: string, type: ToastMessage['type'] = 'info') => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
   };
 
-  const brandPrefix = getBrandPrefix(activeBrand);
-  const brandMeta = BRAND_CONFIG[activeBrand] || BRAND_CONFIG['Device Doctor India'];
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
-  // Determine if active view should consolidate (only in Dashboard or Reports when toggled)
-  const shouldConsolidate = isConsolidatedView && (activeModule === 'dashboard' || activeModule === 'reports');
+  const closeReferentialModal = () => {
+    setReferentialModal((prev: ReferentialBlockState) => ({ ...prev, isOpen: false }));
+  };
 
-  // Filtered entity sets for the active workspace
-  const clients = useMemo(() => {
-    if (shouldConsolidate) return rawClients;
-    return rawClients.filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
-  }, [rawClients, shouldConsolidate, activeBrand]);
-
-  const categories = useMemo(() => {
-    if (shouldConsolidate) return rawCategories;
-    return rawCategories.filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
-  }, [rawCategories, shouldConsolidate, activeBrand]);
-
-  const services = useMemo(() => {
-    if (shouldConsolidate) return rawServices;
-    return rawServices.filter((s) => (s.brand || 'Device Doctor India') === activeBrand);
-  }, [rawServices, shouldConsolidate, activeBrand]);
-
-  const projects = useMemo(() => {
-    if (shouldConsolidate) return rawProjects;
-    return rawProjects.filter((p) => (p.brand || 'Device Doctor India') === activeBrand);
-  }, [rawProjects, shouldConsolidate, activeBrand]);
-
-  const payments = useMemo(() => {
-    if (shouldConsolidate) return rawPayments;
-    return rawPayments.filter((p) => (p.brand || 'Device Doctor India') === activeBrand);
-  }, [rawPayments, shouldConsolidate, activeBrand]);
-
-  const roles = useMemo(() => {
-    if (shouldConsolidate) return rawRoles;
-    return rawRoles.filter((r) => (r.brand || 'Device Doctor India') === activeBrand);
-  }, [rawRoles, shouldConsolidate, activeBrand]);
-
-  const employees = useMemo(() => {
-    if (shouldConsolidate) return rawEmployees;
-    return rawEmployees.filter((e) => (e.brand || 'Device Doctor India') === activeBrand);
-  }, [rawEmployees, shouldConsolidate, activeBrand]);
-
-  const assignments = useMemo(() => {
-    if (shouldConsolidate) return rawAssignments;
-    return rawAssignments.filter((a) => (a.brand || 'Device Doctor India') === activeBrand);
-  }, [rawAssignments, shouldConsolidate, activeBrand]);
-
-  const employeePayments = useMemo(() => {
-    if (shouldConsolidate) return rawEmployeePayments;
-    return rawEmployeePayments.filter((ep) => (ep.brand || 'Device Doctor India') === activeBrand);
-  }, [rawEmployeePayments, shouldConsolidate, activeBrand]);
-
-  const expenseCategories = useMemo(() => {
-    if (shouldConsolidate) return rawExpenseCategories;
-    return rawExpenseCategories.filter((ec) => (ec.brand || 'Device Doctor India') === activeBrand);
-  }, [rawExpenseCategories, shouldConsolidate, activeBrand]);
-
-  const expenses = useMemo(() => {
-    if (shouldConsolidate) return rawExpenses;
-    return rawExpenses.filter((e) => (e.brand || 'Device Doctor India') === activeBrand);
-  }, [rawExpenses, shouldConsolidate, activeBrand]);
-
-  const gstInvoices = useMemo(() => {
-    if (shouldConsolidate) return rawGstInvoices;
-    return rawGstInvoices.filter((g) => (g.brand || 'Device Doctor India') === activeBrand);
-  }, [rawGstInvoices, shouldConsolidate, activeBrand]);
-
-  const users = useMemo(() => {
-    if (authUser?.role === 'Super Admin' || authUser?.role === 'Super Administrator' || shouldConsolidate) {
-      return rawUsers;
-    }
-    return rawUsers.filter((u) => u.brand === 'All' || u.brand === activeBrand);
-  }, [rawUsers, authUser, shouldConsolidate, activeBrand]);
-
-  const openAddProjectModal = () => {
-    setIsProjectModalEditing(false);
-    const freshClients = storageService.getClients().filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
-    const freshServices = storageService.getServices().filter((s) => (s.brand || 'Device Doctor India') === activeBrand);
-    const defaultClient = freshClients.length > 0 ? freshClients[0] : undefined;
-    const defaultService = freshServices.length > 0 ? freshServices[0] : undefined;
-    const autoId = storageService.generateSmartProjectId(
-      defaultClient?.name || 'CLIENT',
-      defaultService?.name || 'SERVICE',
-      defaultClient?.id,
-      defaultService?.id,
-      undefined,
-      activeBrand
-    );
-    const today = new Date().toISOString().slice(0, 10);
-    const committedDays = 30;
-    const endD = new Date();
-    endD.setDate(endD.getDate() + committedDays);
-    const endDate = endD.toISOString().slice(0, 10);
-    const currency = defaultClient?.preferredCurrency || 'INR';
-    const rate = currency === 'INR' ? 1 : (currency === 'USD' ? 84.5 : (currency === 'EUR' ? 92 : 1));
-    const contract = 150000;
-
-    setProjectModalData({
-      id: autoId,
-      brand: activeBrand,
-      clientId: defaultClient?.id || '',
-      clientName: defaultClient?.name || '',
-      serviceId: defaultService?.id || '',
-      proposalDate: today,
-      contractDate: today,
-      startDate: today,
-      committedDays,
-      committedEndDate: endDate,
-      actualEndDate: '',
-      status: 'In Progress',
-      paymentMode: 'GST Invoice',
-      currency,
-      contract,
-      exchangeRate: rate,
-      contractValue: Math.round(contract * rate),
-      projectManager: activeBrand === 'Codestro' ? 'Rohan Malhotra' : (activeBrand === 'FX Launch Pad' ? 'Sameer Saxena' : 'Karthik Ramanathan'),
-      notes: '',
+  const openReferentialBlock = (options: Omit<ReferentialBlockState, 'isOpen'>) => {
+    setReferentialModal({
+      ...options,
+      isOpen: true,
     });
-    setIsProjectModalOpen(true);
   };
 
-  const openEditProjectModal = (proj: Project) => {
-    setIsProjectModalEditing(true);
-    setProjectModalData({ ...proj });
-    setIsProjectModalOpen(true);
-  };
+  // --- Strict Live SQL Loader ---
+  const loadAll = async () => {
+    try {
+      storageService.init();
+      setActiveBrandState(storageService.getActiveBrand());
+      const currentTheme = storageService.getTheme();
+      setThemeState(currentTheme);
+      if (currentTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
 
-  const closeProjectModal = () => {
-    setIsProjectModalOpen(false);
-    setIsProjectModalEditing(false);
-    setProjectModalData(null);
-  };
+      setAuthUserState(storageService.getAuthUser());
 
-  const loadAll = () => {
-    storageService.init();
-    setRawClients(storageService.getClients());
-    setRawCategories(storageService.getCategories());
-    setRawServices(storageService.getServices());
-    setRawProjects(storageService.getProjects());
-    setRawPayments(storageService.getPayments());
-    setRawRoles(storageService.getRoles());
-    setRawEmployees(storageService.getEmployees());
-    setRawAssignments(storageService.getAssignments());
-    setRawEmployeePayments(storageService.getEmployeePayments());
-    setRawExpenseCategories(storageService.getExpenseCategories());
-    setRawExpenses(storageService.getExpenses());
-    setRawGstInvoices(storageService.getGstInvoices());
-    setRawUsers(storageService.getAppUsers());
-    setAuthUserState(storageService.getAuthUser());
-    setActiveBrandState(storageService.getActiveBrand());
-    const currentTheme = storageService.getTheme();
-    setThemeState(currentTheme);
-    if (currentTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+      const [
+        clients,
+        categories,
+        services,
+        projects,
+        payments,
+        gstInvoices,
+        roles,
+        employees,
+        assignments,
+        employeePayments,
+        expenseCategories,
+        expenses,
+        users,
+        status,
+      ] = await Promise.all([
+        storageService.fetchClients().catch((err) => {
+          console.warn('[Fetch Clients]', err);
+          return [] as Client[];
+        }),
+        storageService.fetchCategories().catch((err) => {
+          console.warn('[Fetch Categories]', err);
+          return [] as ServiceCategory[];
+        }),
+        storageService.fetchServices().catch((err) => {
+          console.warn('[Fetch Services]', err);
+          return [] as Service[];
+        }),
+        storageService.fetchProjects().catch((err) => {
+          console.warn('[Fetch Projects]', err);
+          return [] as Project[];
+        }),
+        storageService.fetchPayments().catch((err) => {
+          console.warn('[Fetch Payments]', err);
+          return [] as Payment[];
+        }),
+        storageService.fetchGstInvoices().catch((err) => {
+          console.warn('[Fetch GST Invoices]', err);
+          return [] as GstInvoice[];
+        }),
+        storageService.fetchRoles().catch((err) => {
+          console.warn('[Fetch Roles]', err);
+          return [] as EmployeeRole[];
+        }),
+        storageService.fetchEmployees().catch((err) => {
+          console.warn('[Fetch Employees]', err);
+          return [] as Employee[];
+        }),
+        storageService.fetchAssignments().catch((err) => {
+          console.warn('[Fetch Assignments]', err);
+          return [] as Assignment[];
+        }),
+        storageService.fetchEmployeePayments().catch((err) => {
+          console.warn('[Fetch Employee Payments]', err);
+          return [] as EmployeePayment[];
+        }),
+        storageService.fetchExpenseCategories().catch((err) => {
+          console.warn('[Fetch Expense Categories]', err);
+          return [] as ExpenseCategory[];
+        }),
+        storageService.fetchExpenses().catch((err) => {
+          console.warn('[Fetch Expenses]', err);
+          return [] as Expense[];
+        }),
+        storageService.fetchAppUsers().catch((err) => {
+          console.warn('[Fetch Users]', err);
+          return [] as AppUser[];
+        }),
+        storageService.getDatabaseStatus(),
+      ]);
+
+      setRawClients(clients);
+      setRawCategories(categories);
+      setRawServices(services);
+      setRawProjects(projects);
+      setRawPayments(payments);
+      setRawGstInvoices(gstInvoices);
+      setRawRoles(roles);
+      setRawEmployees(employees);
+      setRawAssignments(assignments);
+      setRawEmployeePayments(employeePayments);
+      setRawExpenseCategories(expenseCategories);
+      setRawExpenses(expenses);
+      setRawUsers(users);
+      setDatabaseStatus(status);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(`Azure SQL Connection Notice: ${msg}`, 'warning');
     }
   };
 
   useEffect(() => {
     loadAll();
-
-    // Check Azure SQL database status and sync
-    storageService.getDatabaseStatus().then((status) => {
-      setDatabaseStatus(status);
-    });
-    storageService.syncWithAzureSql().then(() => {
-      storageService.getDatabaseStatus().then(setDatabaseStatus);
-    });
 
     const handleUpdate = () => {
       loadAll();
@@ -439,90 +379,25 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     storageService.setTheme(nextTheme);
   };
 
-  const showToast = (message: string, type: ToastMessage['type'] = 'info') => {
-    const id = `${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, type, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const closeReferentialModal = () => {
-    setReferentialModal((prev) => ({ ...prev, isOpen: false }));
-  };
-
-  const openReferentialBlock = (options: Omit<ReferentialBlockState, 'isOpen'>) => {
-    setReferentialModal({
-      ...options,
-      isOpen: true,
-    });
-  };
-
-  const login = (email: string, pass: string): boolean => {
-    const cleanEmail = email.trim().toLowerCase();
-    const appUsers = storageService.getAppUsers();
-    const matched = appUsers.find((u) => u.email.toLowerCase() === cleanEmail);
-
-    if (matched) {
-      if (matched.status !== 'Active') {
-        showToast('This operator account is currently deactivated.', 'error');
-        return false;
+  const login = async (email: string, pass: string): Promise<boolean> => {
+    const res = await storageService.login(email, pass);
+    if (res.success && res.user) {
+      setAuthUserState(res.user);
+      if (res.user.brand && res.user.brand !== 'All') {
+        setActiveBrand(res.user.brand as BrandName);
       }
-      if (matched.password === pass || pass === 'Admin@2026' || cleanEmail === 'rathorehemant114@gmail.com') {
-        const user: AuthUser = {
-          id: matched.id,
-          name: matched.name,
-          email: matched.email,
-          role: matched.role,
-          brand: matched.brand,
-          avatar: matched.avatar,
-        };
-        storageService.setAuthUser(user);
-        setAuthUserState(user);
-        if (matched.brand && matched.brand !== 'All') {
-          setActiveBrand(matched.brand);
-        }
-        showToast(`Welcome back, ${user.name}! Role: ${user.role}`, 'success');
-        storageService.loginWithAzureSql(email, pass).catch(() => {});
-        return true;
-      }
-    }
-
-    if (cleanEmail === 'rathorehemant114@gmail.com' || cleanEmail === 'devicedoctorindia.in@gmail.com' || pass.length >= 4) {
-      const user: AuthUser = {
-        id: cleanEmail === 'rathorehemant114@gmail.com' ? 'USR-001' : 'USR-002',
-        name: cleanEmail === 'rathorehemant114@gmail.com' ? 'Hemant Rathore (Entra Admin)' : 'Device Doctor Admin',
-        email: cleanEmail,
-        role: 'Super Admin',
-        brand: 'All',
-      };
-      storageService.setAuthUser(user);
-      setAuthUserState(user);
-      showToast('Logged in successfully as Super Administrator.', 'success');
-      storageService.loginWithAzureSql(email, pass).catch(() => {});
+      showToast(`Welcome back, ${res.user.name}! Connected to Azure SQL.`, 'success');
+      await loadAll();
       return true;
     }
-
-    showToast('Invalid credentials. Password must be at least 4 characters.', 'error');
+    showToast(res.error || 'Authentication failed against live Azure SQL app_users.', 'error');
     return false;
   };
 
-  const saveUserAction = (user: AppUser) => {
-    const res = storageService.saveAppUser(user);
-    if (res.success) {
-      showToast(`User account for "${user.name}" saved to database.`, 'success');
-    }
-    return res;
-  };
-
-  const deleteUserAction = (userId: string) => {
-    const res = storageService.deleteAppUser(userId);
-    showToast('User account removed.', 'info');
-    return res;
+  const logout = () => {
+    storageService.setAuthUser(null);
+    setAuthUserState(null);
+    showToast('Logged out securely.', 'info');
   };
 
   const hasPermission = (allowedRoles: (UserRole | string)[]): boolean => {
@@ -532,25 +407,33 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const refreshDatabaseStatus = async () => {
-    const st = await storageService.getDatabaseStatus();
+    const st = await storageService.reconnectDatabase();
     setDatabaseStatus(st);
+    await loadAll();
+    if (st.connected) {
+      showToast('Successfully connected to Azure SQL Database!', 'success');
+    } else {
+      showToast(`Azure SQL Status: ${st.error || 'Connection pending firewall approval'}`, 'warning');
+    }
   };
 
   const syncWithDatabase = async () => {
-    showToast('Connecting to Microsoft Azure SQL Database...', 'info');
-    await storageService.syncWithAzureSql();
-    const st = await storageService.getDatabaseStatus();
-    setDatabaseStatus(st);
-    showToast('Multi-brand CRM data layer synchronized with Azure SQL Database (DDCRM)!', 'success');
+    await refreshDatabaseStatus();
   };
 
-  const logout = () => {
-    storageService.setAuthUser(null);
-    setAuthUserState(null);
-    showToast('Logged out securely.', 'info');
+  const clearDemoData = async () => {
+    showToast('Purging demo data from Azure SQL Database...', 'info');
+    const res = await storageService.clearDemoData();
+    await loadAll();
+    if (res.success) {
+      showToast(res.message, 'success');
+    } else {
+      showToast(`Database clear error: ${res.error || res.message}`, 'error');
+    }
+    return res;
   };
 
-  // Relational entity lookup maps across all master entities
+  // Relational entity lookup maps
   const clientMap = useMemo(() => new Map(rawClients.map((c) => [c.id, c])), [rawClients]);
   const categoryMap = useMemo(() => new Map(rawCategories.map((c) => [c.id, c])), [rawCategories]);
   const serviceMap = useMemo(() => new Map(rawServices.map((s) => [s.id, s])), [rawServices]);
@@ -584,7 +467,72 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return getProjectExpenses(projectId).reduce((sum, e) => sum + (Number(e.amountINR) || 0), 0);
   };
 
-  // Auto-calculated counts within active workspace
+  // Filtered lists scoped to workspace
+  const clients = useMemo(() => {
+    if (isConsolidatedView) return rawClients;
+    return rawClients.filter((c) => c.brand === activeBrand);
+  }, [rawClients, activeBrand, isConsolidatedView]);
+
+  const categories = useMemo(() => {
+    if (isConsolidatedView) return rawCategories;
+    return rawCategories.filter((c) => c.brand === activeBrand);
+  }, [rawCategories, activeBrand, isConsolidatedView]);
+
+  const services = useMemo(() => {
+    if (isConsolidatedView) return rawServices;
+    return rawServices.filter((s) => s.brand === activeBrand);
+  }, [rawServices, activeBrand, isConsolidatedView]);
+
+  const projects = useMemo(() => {
+    if (isConsolidatedView) return rawProjects;
+    return rawProjects.filter((p) => p.brand === activeBrand);
+  }, [rawProjects, activeBrand, isConsolidatedView]);
+
+  const payments = useMemo(() => {
+    if (isConsolidatedView) return rawPayments;
+    return rawPayments.filter((p) => p.brand === activeBrand);
+  }, [rawPayments, activeBrand, isConsolidatedView]);
+
+  const roles = useMemo(() => {
+    if (isConsolidatedView) return rawRoles;
+    return rawRoles.filter((r) => r.brand === activeBrand);
+  }, [rawRoles, activeBrand, isConsolidatedView]);
+
+  const employees = useMemo(() => {
+    if (isConsolidatedView) return rawEmployees;
+    return rawEmployees.filter((e) => e.brand === activeBrand);
+  }, [rawEmployees, activeBrand, isConsolidatedView]);
+
+  const assignments = useMemo(() => {
+    if (isConsolidatedView) return rawAssignments;
+    return rawAssignments.filter((a) => a.brand === activeBrand);
+  }, [rawAssignments, activeBrand, isConsolidatedView]);
+
+  const employeePayments = useMemo(() => {
+    if (isConsolidatedView) return rawEmployeePayments;
+    return rawEmployeePayments.filter((p) => p.brand === activeBrand);
+  }, [rawEmployeePayments, activeBrand, isConsolidatedView]);
+
+  const expenseCategories = useMemo(() => {
+    if (isConsolidatedView) return rawExpenseCategories;
+    return rawExpenseCategories.filter((c) => c.brand === activeBrand);
+  }, [rawExpenseCategories, activeBrand, isConsolidatedView]);
+
+  const expenses = useMemo(() => {
+    if (isConsolidatedView) return rawExpenses;
+    return rawExpenses.filter((e) => e.brand === activeBrand);
+  }, [rawExpenses, activeBrand, isConsolidatedView]);
+
+  const gstInvoices = useMemo(() => {
+    if (isConsolidatedView) return rawGstInvoices;
+    return rawGstInvoices.filter((g) => g.brand === activeBrand);
+  }, [rawGstInvoices, activeBrand, isConsolidatedView]);
+
+  const users = useMemo(() => {
+    if (isConsolidatedView) return rawUsers;
+    return rawUsers.filter((u) => u.brand === 'All' || u.brand === activeBrand);
+  }, [rawUsers, activeBrand, isConsolidatedView]);
+
   const getCategoryServicesCount = (catId: string) => {
     return services.filter((s) => s.categoryId === catId).length;
   };
@@ -601,411 +549,579 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return employees.filter((e) => e.roleId === roleId).length;
   };
 
-  // --- Strict Enforcement Actions with Auto-Brand Tagging ---
-  const saveClientAction = (client: Client) => {
+  // --- Strict Live SQL Entity Actions ---
+  const saveClientAction = async (client: Client) => {
     if (!client.brand) client.brand = activeBrand;
-    const res = storageService.saveClient(client);
+    if (!client.id) {
+      client.id = storageService.generateId('CL', client.brand, rawClients);
+    }
+    const res = await storageService.saveClient(client);
     if (res.success) {
-      showToast(`Client "${client.name}" saved to ${client.brand}.`, 'success');
+      showToast(`Client "${client.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to save client.', 'error');
+      showToast(res.error || 'Failed to save client to Azure SQL.', 'error');
     }
     return res;
   };
 
-  const deleteClientAction = (clientId: string) => {
+  const deleteClientAction = async (clientId: string) => {
     const client = getClientById(clientId);
     const clientName = client?.name || clientId;
-    const check = storageService.canDeleteClient(clientId);
+    const check = storageService.canDeleteClient(clientId, rawProjects);
 
     if (!check.allowed) {
       openReferentialBlock({
         title: 'Referential Integrity Block: Client Has Active Projects',
-        message: `Client "${clientName}" is currently linked to ${check.linkedCount} Project record(s). In order to maintain relational integrity, deleting this client is prohibited.`,
+        message: `Client "${clientName}" is currently linked to ${check.linkedCount} Project record(s) in Azure SQL. Deletion blocked to preserve database integrity.`,
         entityName: clientName,
         entityType: 'Client',
         entityId: clientId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          storageService.setClientStatus(clientId, 'Inactive');
-          showToast(`Client "${clientName}" marked as Inactive.`, 'info');
+        onSetInactive: async () => {
+          await setClientStatus(clientId, 'Inactive');
+          showToast(`Client "${clientName}" marked as Inactive in Azure SQL.`, 'info');
           closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteClient(clientId);
+    const res = await storageService.deleteClient(clientId);
     if (res.success) {
-      showToast(`Client "${clientName}" deleted successfully.`, 'success');
-    }
-    return res;
-  };
-
-  const saveCategoryAction = (category: ServiceCategory) => {
-    if (!category.brand) category.brand = activeBrand;
-    const res = storageService.saveCategory(category);
-    if (res.success) {
-      showToast(`Category "${category.name}" saved to ${category.brand}.`, 'success');
+      showToast(`Client "${clientName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to save category.', 'error');
+      showToast(res.error || 'Failed to delete client from Azure SQL.', 'error');
     }
     return res;
   };
 
-  const deleteCategoryAction = (categoryId: string) => {
+  const setClientStatus = async (clientId: string, status: Client['status']) => {
+    const client = getClientById(clientId);
+    if (!client) return;
+    await saveClientAction({ ...client, status });
+  };
+
+  const saveCategoryAction = async (category: ServiceCategory) => {
+    if (!category.brand) category.brand = activeBrand;
+    if (!category.id) {
+      category.id = storageService.generateId('CAT', category.brand, rawCategories);
+    }
+    const res = await storageService.saveCategory(category);
+    if (res.success) {
+      showToast(`Category "${category.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to save category to Azure SQL.', 'error');
+    }
+    return res;
+  };
+
+  const deleteCategoryAction = async (categoryId: string) => {
     const cat = getCategoryById(categoryId);
     const catName = cat?.name || categoryId;
-    const check = storageService.canDeleteCategory(categoryId);
+    const check = storageService.canDeleteCategory(categoryId, rawServices);
 
     if (!check.allowed) {
       openReferentialBlock({
-        title: 'Referential Integrity Block: Category Has Linked Services',
-        message: `Category "${catName}" is assigned to ${check.linkedCount} active Service(s). To maintain relational data integrity, deleting this category is blocked.`,
+        title: 'Referential Integrity Block: Category Contains Linked Services',
+        message: `Category "${catName}" contains ${check.linkedCount} linked Service item(s). Reassign or delete them first.`,
         entityName: catName,
         entityType: 'Category',
         entityId: categoryId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          storageService.setCategoryStatus(categoryId, 'Inactive');
-          showToast(`Category "${catName}" marked as Inactive.`, 'info');
+        onSetInactive: async () => {
+          await setCategoryStatus(categoryId, 'Inactive');
+          showToast(`Category "${catName}" marked as Inactive in Azure SQL.`, 'info');
           closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteCategory(categoryId);
+    const res = await storageService.deleteCategory(categoryId);
     if (res.success) {
-      showToast(`Category "${catName}" deleted.`, 'success');
+      showToast(`Category "${catName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete category.', 'error');
     }
     return res;
   };
 
-  const saveServiceAction = (service: Service) => {
+  const setCategoryStatus = async (categoryId: string, status: ServiceCategory['status']) => {
+    const cat = getCategoryById(categoryId);
+    if (!cat) return;
+    await saveCategoryAction({ ...cat, status });
+  };
+
+  const saveServiceAction = async (service: Service) => {
     if (!service.brand) service.brand = activeBrand;
-    const res = storageService.saveService(service);
+    if (!service.id) {
+      service.id = storageService.generateId('SRV', service.brand, rawServices);
+    }
+    const res = await storageService.saveService(service);
     if (res.success) {
-      showToast(`Service "${service.name}" saved to ${service.brand}.`, 'success');
+      showToast(`Service "${service.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
       showToast(res.error || 'Failed to save service.', 'error');
     }
     return res;
   };
 
-  const deleteServiceAction = (serviceId: string) => {
+  const deleteServiceAction = async (serviceId: string) => {
     const srv = getServiceById(serviceId);
     const srvName = srv?.name || serviceId;
-    const check = storageService.canDeleteService(serviceId);
+    const check = storageService.canDeleteService(serviceId, rawProjects);
 
     if (!check.allowed) {
       openReferentialBlock({
-        title: 'Referential Integrity Block: Service Has Linked Projects',
-        message: `Service "${srvName}" is actively used by ${check.linkedCount} Project(s). Deletion is prohibited to preserve project audit trails.`,
+        title: 'Referential Integrity Block: Service Used in Active Projects',
+        message: `Service "${srvName}" is referenced in ${check.linkedCount} active Project record(s). Deletion blocked.`,
         entityName: srvName,
         entityType: 'Service',
         entityId: serviceId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          storageService.setServiceStatus(serviceId, 'Inactive');
-          showToast(`Service "${srvName}" marked as Inactive.`, 'info');
+        onSetInactive: async () => {
+          await setServiceStatus(serviceId, 'Inactive');
+          showToast(`Service "${srvName}" marked as Inactive in Azure SQL.`, 'info');
           closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteService(serviceId);
+    const res = await storageService.deleteService(serviceId);
     if (res.success) {
-      showToast(`Service "${srvName}" deleted.`, 'success');
+      showToast(`Service "${srvName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete service.', 'error');
     }
     return res;
   };
 
-  const saveProjectAction = (project: Project) => {
+  const setServiceStatus = async (serviceId: string, status: Service['status']) => {
+    const srv = getServiceById(serviceId);
+    if (!srv) return;
+    await saveServiceAction({ ...srv, status });
+  };
+
+  const saveProjectAction = async (project: Project) => {
     if (!project.brand) project.brand = activeBrand;
-    const res = storageService.saveProject(project);
+    if (!project.id) {
+      const client = getClientById(project.clientId);
+      const service = getServiceById(project.serviceId);
+      project.id = storageService.generateSmartProjectId(
+        client?.name || 'CLIENT',
+        service?.name || 'SERVICE',
+        project.clientId,
+        project.serviceId,
+        undefined,
+        project.brand,
+        rawProjects
+      );
+    }
+    const res = await storageService.saveProject(project);
     if (res.success) {
-      showToast(`Project ${project.id} saved to ${project.brand}.`, 'success');
+      showToast(`Project "${project.id}" saved to Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to save project.', 'error');
     }
     return res;
   };
 
-  const deleteProjectAction = (projectId: string) => {
-    const prj = getProjectById(projectId);
-    const prjName = prj ? `${prj.clientName} (${prj.id})` : projectId;
-    const check = storageService.canDeleteProject(projectId);
+  const deleteProjectAction = async (projectId: string) => {
+    const check = storageService.canDeleteProject(
+      projectId,
+      rawPayments,
+      rawAssignments,
+      rawExpenses,
+      rawGstInvoices
+    );
 
     if (!check.allowed) {
-      const isAssignment = check.blockType === 'assignments';
       openReferentialBlock({
-        title: isAssignment
-          ? 'Referential Integrity Block: Project Has Active Assignments'
-          : 'Referential Integrity Block: Project Has Payments',
-        message:
-          check.reason ||
-          (isAssignment
-            ? `Project "${prjName}" is linked to ${check.linkedCount} Employee Assignment record(s). Deletion is blocked to preserve project assignment history.`
-            : `Project "${prjName}" is linked to ${check.linkedCount} financial Payment record(s). Deletion is blocked to preserve accounting integrity.`),
-        entityName: prjName,
+        title: 'Referential Integrity Block: Project Contains Child Records',
+        message: check.reason || 'This Project contains linked payments, assignments, or invoices.',
+        entityName: projectId,
         entityType: 'Project',
         entityId: projectId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          storageService.setProjectStatus(projectId, 'Cancelled');
-          showToast(`Project "${prjName}" marked as Cancelled.`, 'info');
+        onSetInactive: async () => {
+          await setProjectStatus(projectId, 'Cancelled');
+          showToast(`Project "${projectId}" marked as Cancelled in Azure SQL.`, 'info');
           closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteProject(projectId);
+    const res = await storageService.deleteProject(projectId);
     if (res.success) {
-      showToast(`Project "${prjName}" deleted.`, 'success');
+      showToast(`Project "${projectId}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete project.', 'error');
     }
     return res;
   };
 
-  const savePaymentAction = (payment: Payment) => {
+  const setProjectStatus = async (projectId: string, status: Project['status']) => {
+    const proj = getProjectById(projectId);
+    if (!proj) return;
+    await saveProjectAction({ ...proj, status });
+  };
+
+  const savePaymentAction = async (payment: Payment) => {
     if (!payment.brand) payment.brand = activeBrand;
-    const res = storageService.savePayment(payment);
+    if (!payment.id) {
+      payment.id = storageService.generateId('PAY', payment.brand, rawPayments);
+    }
+    const res = await storageService.savePayment(payment);
     if (res.success) {
-      showToast(`Payment ${payment.id} saved to ${payment.brand}.`, 'success');
+      showToast(`Payment voucher "${payment.id}" recorded in Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to record payment in Azure SQL.', 'error');
     }
     return res;
   };
 
-  const deletePaymentAction = (paymentId: string) => {
-    const res = storageService.deletePayment(paymentId);
+  const deletePaymentAction = async (paymentId: string) => {
+    const res = await storageService.deletePayment(paymentId);
     if (res.success) {
-      showToast(`Payment ${paymentId} deleted.`, 'success');
+      showToast(`Payment "${paymentId}" removed from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to remove payment.', 'error');
     }
     return res;
   };
 
-  const saveRoleAction = (role: EmployeeRole) => {
+  const saveRoleAction = async (role: EmployeeRole) => {
     if (!role.brand) role.brand = activeBrand;
-    const res = storageService.saveRole(role);
+    if (!role.id) {
+      role.id = storageService.generateId('ROL', role.brand, rawRoles);
+    }
+    const res = await storageService.saveRole(role);
     if (res.success) {
-      showToast(`Role "${role.roleName}" saved to ${role.brand}.`, 'success');
+      showToast(`Role "${role.roleName}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
       showToast(res.error || 'Failed to save role.', 'error');
     }
     return res;
   };
 
-  const deleteRoleAction = (roleId: string) => {
+  const deleteRoleAction = async (roleId: string) => {
     const role = getRoleById(roleId);
     const roleName = role?.roleName || roleId;
-    const check = storageService.canDeleteRole(roleId);
+    const check = storageService.canDeleteRole(roleId, rawEmployees);
 
     if (!check.allowed) {
       openReferentialBlock({
         title: 'Referential Integrity Block: Role Assigned to Employees',
-        message: `Role "${roleName}" is assigned to ${check.linkedCount} Employee(s). You cannot delete a role with active employees assigned.`,
+        message: `Role "${roleName}" is held by ${check.linkedCount} active employee(s). Reassign them before deleting this role.`,
         entityName: roleName,
         entityType: 'Role',
         entityId: roleId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          if (role) {
-            storageService.saveRole({ ...role, status: 'Inactive' });
-            showToast(`Role "${roleName}" has been marked as Inactive.`, 'info');
-          }
-          closeReferentialModal();
-        },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteRole(roleId);
+    const res = await storageService.deleteRole(roleId);
     if (res.success) {
-      showToast(`Role "${roleName}" deleted.`, 'success');
-    }
-    return res;
-  };
-
-  const saveEmployeeAction = (employee: Employee) => {
-    if (!employee.brand) employee.brand = activeBrand;
-    const res = storageService.saveEmployee(employee);
-    if (res.success) {
-      showToast(`Employee "${employee.name}" onboarded into ${employee.brand}.`, 'success');
+      showToast(`Role "${roleName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to save employee.', 'error');
+      showToast(res.error || 'Failed to delete role.', 'error');
     }
     return res;
   };
 
-  const deleteEmployeeAction = (empId: string) => {
-    const emp = getEmployeeById(empId);
-    const empName = emp?.name || empId;
-    const check = storageService.canDeleteEmployee(empId);
+  const saveEmployeeAction = async (employee: Employee) => {
+    if (!employee.brand) employee.brand = activeBrand;
+    if (!employee.id) {
+      employee.id = storageService.generateId('EMP', employee.brand, rawEmployees);
+    }
+    const res = await storageService.saveEmployee(employee);
+    if (res.success) {
+      showToast(`Staff profile for "${employee.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to save staff profile.', 'error');
+    }
+    return res;
+  };
+
+  const deleteEmployeeAction = async (employeeId: string) => {
+    const emp = getEmployeeById(employeeId);
+    const empName = emp?.name || employeeId;
+    const check = storageService.canDeleteEmployee(employeeId, rawAssignments, rawEmployeePayments);
 
     if (!check.allowed) {
       openReferentialBlock({
-        title: 'Referential Integrity Block: Employee Has Assignments',
-        message: `Employee "${empName}" is allocated to ${check.linkedCount} Project Assignment(s). Deletion is blocked to preserve assignment history. You can mark this employee as Inactive instead.`,
+        title: 'Referential Integrity Block: Staff Member Has Active History',
+        message: `Employee "${empName}" has ${check.linkedCount} recorded Project Assignment(s) and/or Payout disbursement(s).`,
         entityName: empName,
         entityType: 'Employee',
-        entityId: empId,
+        entityId: employeeId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
+        onSetInactive: async () => {
           if (emp) {
-            storageService.saveEmployee({ ...emp, status: 'Inactive' });
-            showToast(`Employee "${empName}" marked as Inactive.`, 'info');
+            await saveEmployeeAction({ ...emp, status: 'Inactive' });
+            showToast(`Employee "${empName}" marked as Inactive in Azure SQL.`, 'info');
+            closeReferentialModal();
           }
-          closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteEmployee(empId);
+    const res = await storageService.deleteEmployee(employeeId);
     if (res.success) {
-      showToast(`Employee "${empName}" removed.`, 'success');
+      showToast(`Employee "${empName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete employee.', 'error');
     }
     return res;
   };
 
-  const saveAssignmentAction = (assignment: Assignment) => {
+  const saveAssignmentAction = async (assignment: Assignment) => {
     if (!assignment.brand) assignment.brand = activeBrand;
-    const res = storageService.saveAssignment(assignment);
+    if (!assignment.id) {
+      assignment.id = storageService.generateId('ASN', assignment.brand, rawAssignments);
+    }
+    const res = await storageService.saveAssignment(assignment);
     if (res.success) {
-      showToast(`Assignment ${assignment.id} saved to ${assignment.brand}.`, 'success');
+      showToast(`Assignment "${assignment.id}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
       showToast(res.error || 'Failed to save assignment.', 'error');
     }
     return res;
   };
 
-  const deleteAssignmentAction = (assignmentId: string) => {
-    const check = storageService.canDeleteAssignment(assignmentId);
+  const deleteAssignmentAction = async (assignmentId: string) => {
+    const check = storageService.canDeleteAssignment(assignmentId, rawEmployeePayments);
+
     if (!check.allowed) {
       openReferentialBlock({
-        title: 'Referential Integrity Block: Assignment Linked to Employee Payments',
-        message: `Assignment "${assignmentId}" has ${check.linkedCount} linked Employee Payment record(s). Deletion is prohibited to preserve financial transaction logs. You can mark this assignment as Cancelled or On Hold instead.`,
+        title: 'Referential Integrity Block: Assignment Has Payout Disbursements',
+        message: `Assignment "${assignmentId}" has ${check.linkedCount} payout record(s) logged against it. Delete the payout vouchers first.`,
         entityName: assignmentId,
         entityType: 'Assignment',
         entityId: assignmentId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          const asn = getAssignmentById(assignmentId);
-          if (asn) {
-            storageService.saveAssignment({ ...asn, paymentStatus: 'Cancelled' });
-            showToast(`Assignment "${assignmentId}" marked as Cancelled.`, 'info');
-          }
-          closeReferentialModal();
-        },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteAssignment(assignmentId);
+    const res = await storageService.deleteAssignment(assignmentId);
     if (res.success) {
-      showToast(`Assignment ${assignmentId} deleted.`, 'success');
+      showToast(`Assignment "${assignmentId}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete assignment.', 'error');
     }
     return res;
   };
 
-  const saveEmployeePaymentAction = (payment: EmployeePayment) => {
+  const saveEmployeePaymentAction = async (payment: EmployeePayment) => {
     if (!payment.brand) payment.brand = activeBrand;
-    const res = storageService.saveEmployeePayment(payment);
+    if (!payment.id) {
+      payment.id = storageService.generateId('EPAY', payment.brand, rawEmployeePayments);
+    }
+    const res = await storageService.saveEmployeePayment(payment);
     if (res.success) {
-      showToast(`Employee Payment ${payment.id} saved to ${payment.brand}.`, 'success');
+      showToast(`Staff payout "${payment.id}" recorded in Azure SQL.`, 'success');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to save employee payment.', 'error');
+      showToast(res.error || 'Failed to record payout.', 'error');
     }
     return res;
   };
 
-  const deleteEmployeePaymentAction = (paymentId: string) => {
-    const res = storageService.deleteEmployeePayment(paymentId);
+  const deleteEmployeePaymentAction = async (paymentId: string) => {
+    const res = await storageService.deleteEmployeePayment(paymentId);
     if (res.success) {
-      showToast(`Employee Payment ${paymentId} removed.`, 'success');
+      showToast(`Payout "${paymentId}" removed from Azure SQL.`, 'info');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to delete employee payment.', 'error');
+      showToast(res.error || 'Failed to remove payout.', 'error');
     }
     return res;
   };
 
-  const saveExpenseCategoryAction = (category: ExpenseCategory) => {
+  const saveExpenseCategoryAction = async (category: ExpenseCategory) => {
     if (!category.brand) category.brand = activeBrand;
-    const res = storageService.saveExpenseCategory(category);
+    if (!category.id) {
+      category.id = storageService.generateId('EXPCAT', category.brand, rawExpenseCategories);
+    }
+    const res = await storageService.saveExpenseCategory(category);
     if (res.success) {
-      showToast(`Expense Category "${category.name}" saved to ${category.brand}.`, 'success');
+      showToast(`Expense category "${category.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
       showToast(res.error || 'Failed to save expense category.', 'error');
     }
     return res;
   };
 
-  const deleteExpenseCategoryAction = (categoryId: string) => {
+  const deleteExpenseCategoryAction = async (categoryId: string) => {
     const cat = getExpenseCategoryById(categoryId);
     const catName = cat?.name || categoryId;
-    const check = storageService.canDeleteExpenseCategory(categoryId);
+    const check = storageService.canDeleteExpenseCategory(categoryId, rawExpenses);
 
     if (!check.allowed) {
       openReferentialBlock({
-        title: 'Referential Integrity Block: Expense Category in Use',
-        message: `Expense Category "${catName}" is assigned to ${check.linkedCount} expense record(s). Deletion is prohibited to preserve financial expense logs. You can mark this category as Inactive instead.`,
+        title: 'Referential Integrity Block: Expense Category In Use',
+        message: `Category "${catName}" has ${check.linkedCount} expense voucher(s) recorded in Azure SQL.`,
         entityName: catName,
         entityType: 'Expense Category',
         entityId: categoryId,
         linkedCount: check.linkedCount,
-        onSetInactive: () => {
-          if (cat) {
-            storageService.setExpenseCategoryStatus(categoryId, 'Inactive');
-            showToast(`Expense Category "${catName}" marked as Inactive.`, 'info');
-          }
+        onSetInactive: async () => {
+          await setExpenseCategoryStatus(categoryId, 'Inactive');
+          showToast(`Expense Category "${catName}" marked as Inactive in Azure SQL.`, 'info');
           closeReferentialModal();
         },
       });
       return { success: false, error: check.reason };
     }
 
-    const res = storageService.deleteExpenseCategory(categoryId);
+    const res = await storageService.deleteExpenseCategory(categoryId);
     if (res.success) {
-      showToast(`Expense Category "${catName}" deleted.`, 'success');
+      showToast(`Expense category "${catName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete expense category.', 'error');
     }
     return res;
   };
 
-  const saveExpenseAction = (expense: Expense) => {
+  const setExpenseCategoryStatus = async (categoryId: string, status: ExpenseCategoryStatus) => {
+    const cat = getExpenseCategoryById(categoryId);
+    if (!cat) return;
+    await saveExpenseCategoryAction({ ...cat, status });
+  };
+
+  const saveExpenseAction = async (expense: Expense) => {
     if (!expense.brand) expense.brand = activeBrand;
-    const res = storageService.saveExpense(expense);
+    if (!expense.id) {
+      expense.id = storageService.generateId('EXP', expense.brand, rawExpenses);
+    }
+    const res = await storageService.saveExpense(expense);
     if (res.success) {
-      showToast(`Expense record "${expense.id}" saved to ${expense.brand}.`, 'success');
+      showToast(`Expense "${expense.id}" recorded in Azure SQL.`, 'success');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to save expense record.', 'error');
+      showToast(res.error || 'Failed to save expense.', 'error');
     }
     return res;
   };
 
-  const deleteExpenseAction = (expenseId: string) => {
-    const res = storageService.deleteExpense(expenseId);
+  const deleteExpenseAction = async (expenseId: string) => {
+    const res = await storageService.deleteExpense(expenseId);
     if (res.success) {
-      showToast(`Expense record "${expenseId}" deleted.`, 'success');
+      showToast(`Expense "${expenseId}" deleted from Azure SQL.`, 'info');
+      await loadAll();
     } else {
-      showToast(res.error || 'Failed to delete expense record.', 'error');
+      showToast(res.error || 'Failed to delete expense.', 'error');
     }
     return res;
   };
 
-  const saveGstInvoiceAction = (invoice: GstInvoice) => {
+  const saveGstInvoiceAction = async (invoice: GstInvoice) => {
     if (!invoice.brand) invoice.brand = activeBrand;
-    const res = storageService.saveGstInvoice(invoice);
+    if (!invoice.id) {
+      invoice.id = storageService.generateId('GST', invoice.brand, rawGstInvoices);
+    }
+    const res = await storageService.saveGstInvoice(invoice);
     if (res.success) {
-      showToast(`GST Invoice details for "${invoice.invoiceNumber || invoice.id}" updated.`, 'success');
+      showToast(`GST Invoice "${invoice.id}" saved to Azure SQL.`, 'success');
+      await loadAll();
     } else {
       showToast(res.error || 'Failed to save GST invoice.', 'error');
     }
     return res;
   };
 
-  const resetData = () => {
-    storageService.resetToSampleData();
-    showToast('Reset all CRM data to initial multi-brand dataset (Device Doctor India, Codestro, FX Launch Pad).', 'info');
+  const saveUserAction = async (user: AppUser) => {
+    if (!user.brand) user.brand = activeBrand;
+    if (!user.id) {
+      user.id = storageService.generateId('USR', 'Device Doctor India', rawUsers as any);
+    }
+    const res = await storageService.saveAppUser(user);
+    if (res.success) {
+      showToast(`User account for "${user.name}" saved to Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to save user account.', 'error');
+    }
+    return res;
+  };
+
+  const deleteUserAction = async (userId: string) => {
+    const res = await storageService.deleteAppUser(userId);
+    if (res.success) {
+      showToast('User account deleted from Azure SQL.', 'info');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to delete user account.', 'error');
+    }
+    return res;
+  };
+
+  const openAddProjectModal = () => {
+    setIsProjectModalEditing(false);
+    const today = new Date().toISOString().split('T')[0];
+    const committedDays = 30;
+    const end = new Date();
+    end.setDate(end.getDate() + committedDays);
+    const endDate = end.toISOString().split('T')[0];
+    const currency = 'INR';
+    const contract = 100000;
+    const rate = 1;
+
+    setProjectModalData({
+      brand: activeBrand,
+      clientId: rawClients.length > 0 ? rawClients[0].id : '',
+      serviceId: rawServices.length > 0 ? rawServices[0].id : '',
+      proposalDate: today,
+      contractDate: today,
+      startDate: today,
+      committedDays,
+      committedEndDate: endDate,
+      actualEndDate: '',
+      status: 'In Progress',
+      paymentMode: 'GST Invoice',
+      currency,
+      contract,
+      exchangeRate: rate,
+      contractValue: Math.round(contract * rate),
+      projectManager: activeBrand === 'Codestro' ? 'Rohan Malhotra' : (activeBrand === 'FX Launch Pad' ? 'Sameer Saxena' : 'Karthik Ramanathan'),
+      notes: '',
+    });
+    setIsProjectModalOpen(true);
+  };
+
+  const openEditProjectModal = (proj: Project) => {
+    setIsProjectModalEditing(true);
+    setProjectModalData({ ...proj });
+    setIsProjectModalOpen(true);
+  };
+
+  const closeProjectModal = () => {
+    setIsProjectModalOpen(false);
+    setIsProjectModalEditing(false);
+    setProjectModalData(null);
   };
 
   return (
@@ -1013,16 +1129,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         activeModule,
         setActiveModule,
-        activeReportsTab,
-        setActiveReportsTab,
-        theme,
-        toggleTheme,
         activeBrand,
         setActiveBrand,
         brandPrefix,
         brandMeta,
         isConsolidatedView,
         setIsConsolidatedView,
+        theme,
+        toggleTheme,
         authUser,
         login,
         logout,
@@ -1031,6 +1145,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         services,
         projects,
         payments,
+        allProjects: rawProjects,
+        allPayments: rawPayments,
+        allClients: rawClients,
+        activeReportsTab,
+        setActiveReportsTab,
         roles,
         employees,
         assignments,
@@ -1038,11 +1157,6 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         expenseCategories,
         expenses,
         gstInvoices,
-        allClients: rawClients,
-        allProjects: rawProjects,
-        allPayments: rawPayments,
-        allExpenses: rawExpenses,
-        allEmployees: rawEmployees,
         getClientById,
         getCategoryById,
         getServiceById,
@@ -1063,16 +1177,16 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getRoleEmployeesCount,
         saveClient: saveClientAction,
         deleteClient: deleteClientAction,
-        setClientStatus: (id, status) => storageService.setClientStatus(id, status),
+        setClientStatus,
         saveCategory: saveCategoryAction,
         deleteCategory: deleteCategoryAction,
-        setCategoryStatus: (id, status) => storageService.setCategoryStatus(id, status),
+        setCategoryStatus,
         saveService: saveServiceAction,
         deleteService: deleteServiceAction,
-        setServiceStatus: (id, status) => storageService.setServiceStatus(id, status),
+        setServiceStatus,
         saveProject: saveProjectAction,
         deleteProject: deleteProjectAction,
-        setProjectStatus: (id, status) => storageService.setProjectStatus(id, status),
+        setProjectStatus,
         savePayment: savePaymentAction,
         deletePayment: deletePaymentAction,
         saveRole: saveRoleAction,
@@ -1085,7 +1199,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteEmployeePayment: deleteEmployeePaymentAction,
         saveExpenseCategory: saveExpenseCategoryAction,
         deleteExpenseCategory: deleteExpenseCategoryAction,
-        setExpenseCategoryStatus: (id, status) => storageService.setExpenseCategoryStatus(id, status),
+        setExpenseCategoryStatus,
         saveExpense: saveExpenseAction,
         deleteExpense: deleteExpenseAction,
         saveGstInvoice: saveGstInvoiceAction,
@@ -1096,6 +1210,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         databaseStatus,
         refreshDatabaseStatus,
         syncWithDatabase,
+        clearDemoData,
         referentialModal,
         closeReferentialModal,
         openReferentialBlock,
@@ -1108,7 +1223,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toasts,
         showToast,
         removeToast,
-        resetData,
+        refreshData: loadAll,
       }}
     >
       {children}
@@ -1116,7 +1231,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
-export const useCrm = () => {
+export const useCrm = (): CrmContextType => {
   const context = useContext(CrmContext);
   if (!context) {
     throw new Error('useCrm must be used within a CrmProvider');

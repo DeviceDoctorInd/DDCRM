@@ -207,7 +207,7 @@ export const EmployeesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -260,7 +260,7 @@ export const EmployeesModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveEmployee(payload);
+    const res = await saveEmployee(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormError(null);

@@ -116,7 +116,7 @@ export const ServiceCategoriesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCategory) return;
 
@@ -136,7 +136,7 @@ export const ServiceCategoriesModule: React.FC = () => {
       return;
     }
 
-    const res = saveCategory({ ...editingCategory, brand: editingCategory.brand || activeBrand } as ServiceCategory);
+    const res = await saveCategory({ ...editingCategory, brand: editingCategory.brand || activeBrand } as ServiceCategory);
     if (res.success) {
       setIsModalOpen(false);
       setEditingCategory(null);

@@ -371,7 +371,7 @@ export const PaymentsModule: React.FC = () => {
     : 0;
 
   // Form submit
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.projectId) {
       setFormError('Please select a Project ID from the dropdown.');
@@ -435,7 +435,7 @@ export const PaymentsModule: React.FC = () => {
       outstandingAmount: formData.paymentStatus === 'Received' ? 0 : amountINR,
     };
 
-    const res = savePayment(payload);
+    const res = await savePayment(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormData({});

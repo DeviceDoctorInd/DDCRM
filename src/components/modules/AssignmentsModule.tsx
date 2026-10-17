@@ -277,7 +277,7 @@ export const AssignmentsModule: React.FC = () => {
   };
 
   // Save Assignment
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -332,7 +332,7 @@ export const AssignmentsModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveAssignment(payload);
+    const res = await saveAssignment(payload);
     if (!res.success) {
       setFormError(res.error || 'Failed to save assignment.');
       return;

@@ -131,7 +131,7 @@ export const GstInvoicesModule: React.FC = () => {
   };
 
   // Save Modal Form
-  const handleSaveModal = (e: React.FormEvent) => {
+  const handleSaveModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoice) return;
 
@@ -150,7 +150,7 @@ export const GstInvoicesModule: React.FC = () => {
       notes: modalFormData.notes.trim(),
     };
 
-    const res = saveGstInvoice(payload);
+    const res = await saveGstInvoice(payload);
     if (res.success) {
       setIsModalOpen(false);
       setSelectedInvoice(null);

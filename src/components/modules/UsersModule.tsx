@@ -17,6 +17,7 @@ import {
   Layers,
   Info,
   Briefcase,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const UsersModule: React.FC = () => {
@@ -28,6 +29,7 @@ export const UsersModule: React.FC = () => {
     hasPermission,
     databaseStatus,
     syncWithDatabase,
+    clearDemoData,
     refreshDatabaseStatus,
     showToast,
   } = useCrm();
@@ -36,6 +38,7 @@ export const UsersModule: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isClearingDemo, setIsClearingDemo] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
   const [formData, setFormData] = useState<{
@@ -134,6 +137,23 @@ export const UsersModule: React.FC = () => {
     }
   };
 
+  const handleClearDemo = async () => {
+    const confirmed = window.confirm(
+      '⚠️ WARNING: Are you sure you want to remove all demo data?\n\n' +
+      '• This will permanently delete demo clients, projects, invoices, expenses, services, and staff records from Azure SQL Database and server cache.\n' +
+      '• Main admin accounts ("rathorehemant114@gmail.com" & "devicedoctorindia.in@gmail.com") will be strictly protected.\n\n' +
+      'Click OK to proceed with demo data cleanup.'
+    );
+    if (!confirmed) return;
+
+    setIsClearingDemo(true);
+    try {
+      await clearDemoData();
+    } finally {
+      setIsClearingDemo(false);
+    }
+  };
+
   const getRoleBadgeColor = (role: UserRole | string) => {
     switch (role) {
       case 'Super Admin':
@@ -171,20 +191,31 @@ export const UsersModule: React.FC = () => {
               <span className="ml-2 text-emerald-400 font-semibold">● Connected</span>
             ) : (
               <span className="ml-2 text-amber-400 font-semibold" title={databaseStatus.error || undefined}>
-                ○ Offline / Memory Fallback
+                ○ Disconnected (Live Azure SQL Required)
               </span>
             )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
           <button
             onClick={handleSync}
             disabled={isSyncing}
             className="flex-1 md:flex-none px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            title="Synchronize live state with Azure SQL Database"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Syncing...' : 'Sync with Azure SQL'}</span>
+          </button>
+
+          <button
+            onClick={handleClearDemo}
+            disabled={isClearingDemo}
+            className="flex-1 md:flex-none px-3.5 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-xs font-semibold text-rose-200 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
+            title="Purge all demo data from Azure SQL and server cache while preserving main admin accounts"
+          >
+            <Trash2 className={`w-3.5 h-3.5 text-rose-400 ${isClearingDemo ? 'animate-spin' : ''}`} />
+            <span>{isClearingDemo ? 'Clearing...' : 'Remove Demo Data'}</span>
           </button>
 
           {isSuperAdmin && (
@@ -198,6 +229,39 @@ export const UsersModule: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Live Azure SQL Diagnostics / Firewall Banner */}
+      {!databaseStatus.connected && (
+        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                <span>Azure SQL Direct Connection Pending</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-mono">
+                  Strict Live SQL Mode
+                </span>
+              </div>
+              <p className="text-amber-700 dark:text-amber-300 mt-1 leading-relaxed max-w-3xl">
+                {databaseStatus.error || 'Connection to Azure SQL Database could not be established.'}
+              </p>
+              <div className="mt-2 text-[11px] text-amber-800 dark:text-amber-300/90 font-medium">
+                💡 <span className="font-semibold">Quick Fix:</span> In the Azure Portal, open SQL server <span className="font-mono font-semibold">{databaseStatus.server.split('.')[0]}</span> &rarr; <span className="font-semibold">Networking</span> &rarr; Add Firewall rule for the server IP or check <span className="font-semibold">"Allow Azure services and resources to access this server"</span>.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Test Connection</span>
+          </button>
+        </div>
+      )}
 
       {/* Role Privileges Reference Card */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">

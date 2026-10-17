@@ -95,13 +95,13 @@ export const DashboardModule: React.FC = () => {
     projectsCount: number;
     receivedINR: number;
   }[] = (['Device Doctor India', 'Codestro', 'FX Launch Pad'] as BrandName[]).map((b) => {
-    const bProjects = allProjects.filter((p) => (p.brand || 'Device Doctor India') === b);
-    const bClients = allClients.filter((c) => (c.brand || 'Device Doctor India') === b);
-    const bPayments = allPayments.filter(
-      (pay) => (pay.brand || 'Device Doctor India') === b && pay.paymentStatus === 'Received'
+    const bProjects = (allProjects || []).filter((p: Project) => (p.brand || 'Device Doctor India') === b);
+    const bClients = (allClients || []).filter((c: Client) => (c.brand || 'Device Doctor India') === b);
+    const bPayments = (allPayments || []).filter(
+      (pay: Payment) => (pay.brand || 'Device Doctor India') === b && pay.paymentStatus === 'Received'
     );
     const bReceived = bPayments.reduce(
-      (sum, pay) => sum + (pay.amountINR || pay.receivedAmount || pay.amount || 0),
+      (sum: number, pay: Payment) => sum + (pay.amountINR || pay.receivedAmount || pay.amount || 0),
       0
     );
     return {

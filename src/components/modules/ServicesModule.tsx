@@ -139,7 +139,7 @@ export const ServicesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingService) return;
 
@@ -152,7 +152,7 @@ export const ServicesModule: React.FC = () => {
       return;
     }
 
-    const res = saveService({ ...editingService, brand: editingService.brand || activeBrand } as Service);
+    const res = await saveService({ ...editingService, brand: editingService.brand || activeBrand } as Service);
     if (res.success) {
       setIsModalOpen(false);
       setEditingService(null);

@@ -455,7 +455,7 @@ export const ProjectModal: React.FC = () => {
   const contractValueINR = formData.contractValue || 0;
   const isAllocationBalanced = Math.abs(totalPhasePercentage - 100) < 0.1;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.clientId) {
@@ -501,7 +501,7 @@ export const ProjectModal: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveProject(payload);
+    const res = await saveProject(payload);
     if (res.success) {
       closeProjectModal();
     } else {

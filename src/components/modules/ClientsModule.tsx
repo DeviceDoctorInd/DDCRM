@@ -131,7 +131,7 @@ export const ClientsModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
 
@@ -149,7 +149,7 @@ export const ClientsModule: React.FC = () => {
       }
     }
 
-    const res = saveClient({ ...editingClient, brand: editingClient.brand || activeBrand } as Client);
+    const res = await saveClient({ ...editingClient, brand: editingClient.brand || activeBrand } as Client);
     if (res.success) {
       setIsModalOpen(false);
       setEditingClient(null);

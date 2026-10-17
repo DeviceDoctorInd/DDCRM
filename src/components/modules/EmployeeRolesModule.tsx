@@ -119,7 +119,7 @@ export const EmployeeRolesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole) return;
 
@@ -138,7 +138,7 @@ export const EmployeeRolesModule: React.FC = () => {
       return;
     }
 
-    const res = saveRole({ ...editingRole, brand: editingRole.brand || activeBrand } as EmployeeRole);
+    const res = await saveRole({ ...editingRole, brand: editingRole.brand || activeBrand } as EmployeeRole);
     if (res.success) {
       setIsModalOpen(false);
       setEditingRole(null);

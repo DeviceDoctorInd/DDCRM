@@ -276,7 +276,7 @@ export const EmployeePaymentsModule: React.FC = () => {
   };
 
   // Save Employee Payment
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -337,7 +337,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveEmployeePayment(payload);
+    const res = await saveEmployeePayment(payload);
     if (!res.success) {
       setFormError(res.error || 'Failed to record payment.');
       return;

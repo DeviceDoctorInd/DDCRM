@@ -74,18 +74,38 @@ export const LoginScreen: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
                 <span>Azure SQL:</span>
-                <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400">ddcrm.database.windows.net [DDCRM]</span>
+                <span className="font-mono text-[11px] text-blue-600 dark:text-blue-400">
+                  {databaseStatus.server} [{databaseStatus.database}]
+                </span>
               </div>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                Auth: Microsoft Entra Password · User: rathorehemant114@gmail.com
+                Auth: {databaseStatus.authType} · User: {databaseStatus.user}
               </p>
             </div>
           </div>
-          <div className="shrink-0 flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Configured</span>
+          <div className="shrink-0 flex items-center gap-1 text-[11px] font-medium">
+            {databaseStatus.connected ? (
+              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Connected</span>
+              </span>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-semibold" title={databaseStatus.error || undefined}>
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Pending Whitelist</span>
+              </span>
+            )}
           </div>
         </div>
+
+        {!databaseStatus.connected && databaseStatus.error && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200">
+            <p className="font-semibold mb-0.5">⚠️ Direct Azure SQL Firewall Rule Needed:</p>
+            <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-relaxed font-mono">
+              {databaseStatus.error}
+            </p>
+          </div>
+        )}
 
         {/* Login Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-6 sm:p-7">

@@ -121,7 +121,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
   };
 
   // Form Submit Handler
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -152,7 +152,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveExpenseCategory(payload);
+    const res = await saveExpenseCategory(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormData({});
