@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && tsc server.ts --outDir dist --target esnext --module nodenext",
+   "dev": "tsx server.ts",
+    "build": "vite build && tsc server.ts --outDir dist --target esnext --module nodenext --ignoreConfig",
     "start": "node dist/server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
