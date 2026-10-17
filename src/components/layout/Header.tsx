@@ -14,7 +14,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     toggleTheme,
     resetData,
     authUser,
-    authUser,
     openAddProjectModal,
     activeBrand,
     brandMeta,

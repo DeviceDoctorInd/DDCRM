@@ -16,6 +16,7 @@ import {
   Shield,
   Layers,
   Info,
+  Briefcase,
 } from 'lucide-react';
 
 export const UsersModule: React.FC = () => {
@@ -164,8 +165,15 @@ export const UsersModule: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Role-Based Access Control (RBAC) securely backed by Microsoft Azure SQL Database (
-            <span className="font-mono text-cyan-300">ddcrm.database.windows.net / DDCRM</span>) using Active Directory Password Authentication for <span className="font-mono text-cyan-300">rathorehemant114@gmail.com</span>.
+            Role-Based Access Control (RBAC) backed by Microsoft Azure SQL Database (
+            <span className="font-mono text-cyan-300">{databaseStatus.server} / {databaseStatus.database}</span>) using <span className="font-semibold text-slate-200">{databaseStatus.authType}</span> as <span className="font-mono text-cyan-300">{databaseStatus.user}</span>.
+            {databaseStatus.connected ? (
+              <span className="ml-2 text-emerald-400 font-semibold">● Connected</span>
+            ) : (
+              <span className="ml-2 text-amber-400 font-semibold" title={databaseStatus.error || undefined}>
+                ○ Offline / Memory Fallback
+              </span>
+            )}
           </p>
         </div>
 

@@ -1,7 +1,7 @@
 import sql from 'mssql';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 export interface AzureDbStatus {
   connected: boolean;
@@ -14,11 +14,15 @@ export interface AzureDbStatus {
   tableCounts: Record<string, number>;
 }
 
+const AUTH_TYPE = (process.env.AZURE_SQL_AUTHENTICATION || process.env.AZURE_SQL_AUTHENTICATION_TYPE || 'sql-server').toLowerCase();
 const SERVER = process.env.AZURE_SQL_SERVER || 'ddcrm.database.windows.net';
 const DATABASE = process.env.AZURE_SQL_DATABASE || 'DDCRM';
-const USER = process.env.AZURE_SQL_USER || 'rathorehemant114@gmail.com';
-const PASSWORD = process.env.AZURE_SQL_PASSWORD || '';
+const USER = process.env.AZURE_SQL_USER || 'CloudSA995f9e29';
+const PASSWORD = process.env.AZURE_SQL_PASSWORD || 'Hemant@1318';
 const PORT = parseInt(process.env.AZURE_SQL_PORT || '1433', 10);
+const CLIENT_ID = process.env.AZURE_CLIENT_ID || process.env.AZURE_SQL_CLIENT_ID || '';
+const TENANT_ID = process.env.AZURE_TENANT_ID || process.env.AZURE_SQL_TENANT_ID || '';
+const ENCRYPT = process.env.AZURE_SQL_ENCRYPT === 'false' ? false : true;
 
 let pool: sql.ConnectionPool | null = null;
 let isConnecting = false;
@@ -27,20 +31,12 @@ let isConnected = false;
 let tableCountsCache: Record<string, number> = {};
 
 export const getSqlConfig = (): sql.config => {
-  // Microsoft Entra (Azure AD) Password Authentication configuration
-  const config: sql.config = {
+  const baseConfig: sql.config = {
     server: SERVER,
     database: DATABASE,
     port: PORT,
-    authentication: {
-      type: 'azure-active-directory-password',
-      options: {
-        userName: USER,
-        password: PASSWORD,
-      },
-    },
     options: {
-      encrypt: true,
+      encrypt: ENCRYPT, // Explicitly enabled (true) for Azure SQL
       trustServerCertificate: false,
       connectTimeout: 15000,
       requestTimeout: 30000,
@@ -52,7 +48,28 @@ export const getSqlConfig = (): sql.config => {
     },
   };
 
-  return config;
+  if (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql' || AUTH_TYPE === 'default') {
+    // Standard / Native SQL Server Authentication (User & Password)
+    return {
+      ...baseConfig,
+      user: USER,
+      password: PASSWORD,
+    };
+  }
+
+  // Microsoft Entra (Azure AD) Password Authentication
+  return {
+    ...baseConfig,
+    authentication: {
+      type: 'azure-active-directory-password',
+      options: {
+        userName: USER,
+        password: PASSWORD,
+        clientId: CLIENT_ID,
+        tenantId: TENANT_ID,
+      },
+    },
+  };
 };
 
 // Azure SQL DDL to initialize all 14 core tables
@@ -324,13 +341,51 @@ export async function initAzureSql(): Promise<boolean> {
   if (isConnecting) {
     return false;
   }
+  if (!PASSWORD) {
+    lastError = 'AZURE_SQL_PASSWORD not configured. Set AZURE_SQL_PASSWORD in environment to authenticate via Microsoft Entra.';
+    console.log(`[Azure SQL] ${lastError} (User: ${USER}, Server: ${SERVER}, Encrypt: ${ENCRYPT})`);
+    return false;
+  }
 
   isConnecting = true;
   const config = getSqlConfig();
 
   try {
-    console.log(`[Azure SQL] Attempting Microsoft Entra Password auth to ${SERVER} [DB: ${DATABASE}] as ${USER}...`);
-    pool = await new sql.ConnectionPool(config).connect();
+    const authLabel = (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql')
+      ? 'SQL Server Native Auth'
+      : 'Microsoft Entra Password auth';
+    console.log(`[Azure SQL] Attempting ${authLabel} to ${SERVER} [DB: ${DATABASE}] as ${USER}...`);
+    try {
+      pool = await new sql.ConnectionPool(config).connect();
+    } catch (primaryErr: any) {
+      const primaryErrors = primaryErr?.originalError?.errors || [];
+      const primaryMsg = primaryErrors.map((e: any) => e.message || '').join(' ') + ' ' + (primaryErr?.message || '');
+      const userDomain = USER.includes('@') ? USER.split('@').pop() || '' : '';
+      const currentTenantId = (config.authentication as any)?.options?.tenantId;
+
+      if (primaryMsg.includes('ENOTFOUND') && config.server === 'ddcrm.database.windows.net') {
+        console.log(`[Azure SQL] Hostname 'ddcrm.database.windows.net' not found in DNS. Retrying with registered Azure host 'ddrcm.database.windows.net'...`);
+        const fallbackConfig: sql.config = { ...config, server: 'ddrcm.database.windows.net' };
+        pool = await new sql.ConnectionPool(fallbackConfig).connect();
+      } else if (primaryMsg.includes('AADSTS90002') && userDomain && currentTenantId !== userDomain) {
+        console.log(`[Azure SQL] Tenant ID '${currentTenantId}' not found. Retrying with domain '${userDomain}'...`);
+        const fallbackConfig: sql.config = {
+          ...config,
+          authentication: {
+            type: 'azure-active-directory-password',
+            options: {
+              userName: USER,
+              password: PASSWORD,
+              clientId: CLIENT_ID,
+              tenantId: userDomain,
+            },
+          },
+        };
+        pool = await new sql.ConnectionPool(fallbackConfig).connect();
+      } else {
+        throw primaryErr;
+      }
+    }
     isConnected = true;
     lastError = null;
     console.log(`[Azure SQL] Successfully connected to live database ${DATABASE} on ${SERVER}!`);
@@ -345,7 +400,20 @@ export async function initAzureSql(): Promise<boolean> {
     await refreshTableCounts();
     return true;
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
+    const anyErr = err as any;
+    let errorMsg = '';
+    if (Array.isArray(anyErr?.originalError?.errors) && anyErr.originalError.errors.length > 0) {
+      errorMsg = anyErr.originalError.errors
+        .map((e: any) => e.message || e.errorMessage || String(e))
+        .filter(Boolean)
+        .join(' | ');
+    } else if (anyErr?.originalError?.message) {
+      errorMsg = anyErr.originalError.message;
+    } else if (err instanceof Error) {
+      errorMsg = err.message || err.name;
+    } else {
+      errorMsg = String(err);
+    }
     lastError = errorMsg;
     isConnected = false;
     console.warn(`[Azure SQL] Notice: Live Azure connection pending credentials / firewall access (${errorMsg}).`);
@@ -393,7 +461,9 @@ export function getAzureDbStatus(): AzureDbStatus {
     connected: isConnected,
     server: SERVER,
     database: DATABASE,
-    authType: 'Active Directory Password (Microsoft Entra)',
+    authType: (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql')
+      ? 'SQL Server Authentication (Native)'
+      : 'Active Directory Password (Microsoft Entra)',
     user: USER,
     error: lastError,
     lastChecked: new Date().toISOString(),

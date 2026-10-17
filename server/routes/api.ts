@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getAzureDbStatus, getPool, refreshTableCounts } from '../db/azureSql';
+import { getAzureDbStatus, getPool, refreshTableCounts, initAzureSql } from '../db/azureSql';
 import {
   SEED_USERS,
   SEED_CLIENTS,
@@ -69,6 +69,15 @@ router.get('/db/status', async (_req: Request, res: Response) => {
       expenseCategories: memoryExpenseCategories.length,
       expenses: memoryExpenses.length,
     },
+  });
+});
+
+router.post('/db/reconnect', async (_req: Request, res: Response) => {
+  const success = await initAzureSql();
+  const status = getAzureDbStatus();
+  res.json({
+    success,
+    status,
   });
 });
 

@@ -2534,6 +2534,13 @@ class StorageService {
   public async syncWithAzureSql(): Promise<void> {
     if (typeof window === 'undefined') return;
     try {
+      // Reconnect and seed sync to Azure SQL Database
+      try {
+        await this.apiCall('/api/db/reconnect', 'POST');
+        await this.apiCall('/api/db/sync-seed', 'POST');
+      } catch {
+        // Continue with data load
+      }
       const [
         clients,
         categories,

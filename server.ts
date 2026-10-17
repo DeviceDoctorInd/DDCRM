@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
+
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
