@@ -14,15 +14,15 @@ export interface AzureDbStatus {
   tableCounts: Record<string, number>;
 }
 
-const AUTH_TYPE = (process.env.AZURE_SQL_AUTHENTICATION || process.env.AZURE_SQL_AUTHENTICATION_TYPE || 'sql-server').toLowerCase();
-const SERVER = process.env.AZURE_SQL_SERVER || 'ddcrm.database.windows.net';
-const DATABASE = process.env.AZURE_SQL_DATABASE || 'DDCRM';
-const USER = process.env.AZURE_SQL_USER || 'CloudSA995f9e29';
-const PASSWORD = process.env.AZURE_SQL_PASSWORD || 'Hemant@1318';
-const PORT = parseInt(process.env.AZURE_SQL_PORT || '1433', 10);
-const CLIENT_ID = process.env.AZURE_CLIENT_ID || process.env.AZURE_SQL_CLIENT_ID || '';
-const TENANT_ID = process.env.AZURE_TENANT_ID || process.env.AZURE_SQL_TENANT_ID || '';
-const ENCRYPT = process.env.AZURE_SQL_ENCRYPT === 'false' ? false : true;
+const getAuthType = () => (process.env.AZURE_SQL_AUTHENTICATION || process.env.AZURE_SQL_AUTHENTICATION_TYPE || 'sql-server').toLowerCase();
+const getServer = () => process.env.AZURE_SQL_SERVER || 'ddcrm.database.windows.net';
+const getDatabase = () => process.env.AZURE_SQL_DATABASE || 'DDCRM';
+const getUser = () => process.env.AZURE_SQL_USER || 'CloudSA995f9e29';
+const getPassword = () => process.env.AZURE_SQL_PASSWORD || 'Hemant@1318';
+const getPort = () => parseInt(process.env.AZURE_SQL_PORT || '1433', 10);
+const getClientId = () => process.env.AZURE_CLIENT_ID || process.env.AZURE_SQL_CLIENT_ID || '';
+const getTenantId = () => process.env.AZURE_TENANT_ID || process.env.AZURE_SQL_TENANT_ID || '';
+const getEncrypt = () => process.env.AZURE_SQL_ENCRYPT === 'false' ? false : true;
 
 let pool: sql.ConnectionPool | null = null;
 let isConnecting = false;
@@ -31,15 +31,23 @@ let isConnected = false;
 let tableCountsCache: Record<string, number> = {};
 
 export const getSqlConfig = (): sql.config => {
+  const server = getServer();
+  const database = getDatabase();
+  const port = getPort();
+  const user = getUser();
+  const password = getPassword();
+  const authType = getAuthType();
+  const encrypt = getEncrypt();
+
   const baseConfig: sql.config = {
-    server: SERVER,
-    database: DATABASE,
-    port: PORT,
+    server,
+    database,
+    port,
     options: {
-      encrypt: ENCRYPT, // Explicitly enabled (true) for Azure SQL
+      encrypt, // Explicitly enabled (true) for Azure SQL
       trustServerCertificate: false,
-      connectTimeout: 15000,
-      requestTimeout: 30000,
+      connectTimeout: 4000,
+      requestTimeout: 15000,
     },
     pool: {
       max: 10,
@@ -48,12 +56,12 @@ export const getSqlConfig = (): sql.config => {
     },
   };
 
-  if (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql' || AUTH_TYPE === 'default') {
+  if (authType === 'sql-server' || authType === 'sql' || authType === 'default') {
     // Standard / Native SQL Server Authentication (User & Password)
     return {
       ...baseConfig,
-      user: USER,
-      password: PASSWORD,
+      user,
+      password,
     };
   }
 
@@ -63,10 +71,10 @@ export const getSqlConfig = (): sql.config => {
     authentication: {
       type: 'azure-active-directory-password',
       options: {
-        userName: USER,
-        password: PASSWORD,
-        clientId: CLIENT_ID,
-        tenantId: TENANT_ID,
+        userName: user,
+        password,
+        clientId: getClientId(),
+        tenantId: getTenantId(),
       },
     },
   };
@@ -341,9 +349,16 @@ export async function initAzureSql(): Promise<boolean> {
   if (isConnecting) {
     return false;
   }
-  if (!PASSWORD) {
-    lastError = 'AZURE_SQL_PASSWORD not configured. Set AZURE_SQL_PASSWORD in environment to authenticate via Microsoft Entra.';
-    console.log(`[Azure SQL] ${lastError} (User: ${USER}, Server: ${SERVER}, Encrypt: ${ENCRYPT})`);
+  const password = getPassword();
+  const user = getUser();
+  const server = getServer();
+  const database = getDatabase();
+  const authType = getAuthType();
+  const encrypt = getEncrypt();
+
+  if (!password) {
+    lastError = 'AZURE_SQL_PASSWORD not configured. Set AZURE_SQL_PASSWORD in environment.';
+    console.log(`[Azure SQL] ${lastError} (User: ${user}, Server: ${server}, Encrypt: ${encrypt})`);
     return false;
   }
 
@@ -351,16 +366,16 @@ export async function initAzureSql(): Promise<boolean> {
   const config = getSqlConfig();
 
   try {
-    const authLabel = (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql')
+    const authLabel = (authType === 'sql-server' || authType === 'sql')
       ? 'SQL Server Native Auth'
       : 'Microsoft Entra Password auth';
-    console.log(`[Azure SQL] Attempting ${authLabel} to ${SERVER} [DB: ${DATABASE}] as ${USER}...`);
+    console.log(`[Azure SQL] Attempting ${authLabel} to ${server} [DB: ${database}] as ${user}...`);
     try {
       pool = await new sql.ConnectionPool(config).connect();
     } catch (primaryErr: any) {
       const primaryErrors = primaryErr?.originalError?.errors || [];
       const primaryMsg = primaryErrors.map((e: any) => e.message || '').join(' ') + ' ' + (primaryErr?.message || '');
-      const userDomain = USER.includes('@') ? USER.split('@').pop() || '' : '';
+      const userDomain = user.includes('@') ? user.split('@').pop() || '' : '';
       const currentTenantId = (config.authentication as any)?.options?.tenantId;
 
       if (primaryMsg.includes('ENOTFOUND') && config.server === 'ddcrm.database.windows.net') {
@@ -374,9 +389,9 @@ export async function initAzureSql(): Promise<boolean> {
           authentication: {
             type: 'azure-active-directory-password',
             options: {
-              userName: USER,
-              password: PASSWORD,
-              clientId: CLIENT_ID,
+              userName: user,
+              password: password,
+              clientId: getClientId(),
               tenantId: userDomain,
             },
           },
@@ -388,7 +403,7 @@ export async function initAzureSql(): Promise<boolean> {
     }
     isConnected = true;
     lastError = null;
-    console.log(`[Azure SQL] Successfully connected to live database ${DATABASE} on ${SERVER}!`);
+    console.log(`[Azure SQL] Successfully connected to live database ${database} on ${server}!`);
 
     // Run table initialization
     for (const ddl of DDL_STATEMENTS) {
@@ -457,14 +472,15 @@ export async function refreshTableCounts(): Promise<Record<string, number>> {
 }
 
 export function getAzureDbStatus(): AzureDbStatus {
+  const authType = getAuthType();
   return {
     connected: isConnected,
-    server: SERVER,
-    database: DATABASE,
-    authType: (AUTH_TYPE === 'sql-server' || AUTH_TYPE === 'sql')
+    server: getServer(),
+    database: getDatabase(),
+    authType: (authType === 'sql-server' || authType === 'sql')
       ? 'SQL Server Authentication (Native)'
       : 'Active Directory Password (Microsoft Entra)',
-    user: USER,
+    user: getUser(),
     error: lastError,
     lastChecked: new Date().toISOString(),
     tableCounts: tableCountsCache,

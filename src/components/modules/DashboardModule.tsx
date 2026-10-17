@@ -1,7 +1,7 @@
 import React from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { formatINR, formatDate, isPastDate } from '../../utils/formatters';
-import { BrandName, BRAND_CONFIG } from '../../types/crm';
+import { BrandName, BRAND_CONFIG, Project, Client, Payment } from '../../types/crm';
 import {
   Users,
   CheckCircle,

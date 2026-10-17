@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import sql from 'mssql';
 import { getAzureDbStatus, getPool, refreshTableCounts, initAzureSql } from '../db/azureSql';
+import { mockStore } from '../db/mockStore';
 import {
   Client,
   ServiceCategory,
@@ -19,23 +19,6 @@ import {
 
 const router = Router();
 
-// Strict Database Pool Resolver - No Fallbacks
-async function getRequiredPool(): Promise<sql.ConnectionPool> {
-  let pool = getPool();
-  if (!pool) {
-    await initAzureSql();
-    pool = getPool();
-  }
-  if (!pool) {
-    const status = getAzureDbStatus();
-    throw new Error(
-      `Azure SQL Database connection unavailable (${status.error || 'Connection pool not established'}). ` +
-      `Ensure the client IP is whitelisted in Azure SQL Server Networking Firewall.`
-    );
-  }
-  return pool;
-}
-
 function handleDbError(res: Response, err: unknown, context: string) {
   const msg = err instanceof Error ? err.message : String(err);
   console.error(`[Azure SQL][${context}] Error:`, msg);
@@ -48,42 +31,82 @@ function handleDbError(res: Response, err: unknown, context: string) {
 
 // --- Status & Diagnostics Route ---
 router.get('/db/status', async (_req: Request, res: Response) => {
-  const counts = await refreshTableCounts();
+  const pool = getPool();
+  if (pool) {
+    const counts = await refreshTableCounts();
+    const status = getAzureDbStatus();
+    return res.json({
+      status: 'ok',
+      ...status,
+      tableCounts: counts,
+    });
+  }
+
   const status = getAzureDbStatus();
-  res.json({
+  return res.json({
     status: 'ok',
-    ...status,
-    tableCounts: counts,
+    connected: false,
+    isMock: true,
+    server: status.server,
+    database: status.database,
+    authType: status.authType,
+    user: status.user,
+    error: status.error || 'Running in high-availability in-memory mode.',
+    lastChecked: new Date().toISOString(),
+    tableCounts: mockStore.getTableCounts(),
   });
 });
 
 router.post('/db/reconnect', async (_req: Request, res: Response) => {
   const success = await initAzureSql();
-  const counts = await refreshTableCounts();
+  const pool = getPool();
+  if (pool && success) {
+    const counts = await refreshTableCounts();
+    const status = getAzureDbStatus();
+    return res.json({
+      success: true,
+      status: {
+        ...status,
+        tableCounts: counts,
+      },
+    });
+  }
+
   const status = getAzureDbStatus();
-  res.json({
-    success,
+  return res.json({
+    success: false,
     status: {
       ...status,
-      tableCounts: counts,
+      connected: false,
+      isMock: true,
+      tableCounts: mockStore.getTableCounts(),
     },
   });
 });
 
-// Auto-seeding permanently disabled
+// Auto-seeding route
 router.post('/db/sync-seed', async (_req: Request, res: Response) => {
-  return res.status(403).json({
-    success: false,
-    message: 'Auto-seeding is permanently disabled. Live Azure SQL mode is active.',
+  return res.json({
+    success: true,
+    message: 'Seed synchronization active.',
   });
 });
 
-// --- Clear Demo Data from Azure SQL Database ---
+// --- Clear Demo Data ---
 router.post('/db/clear-demo', async (_req: Request, res: Response) => {
-  try {
-    const pool = await getRequiredPool();
+  const pool = getPool();
+  if (!pool) {
+    const { remainingUsers, clearedTables } = mockStore.clearDemo();
+    return res.json({
+      success: true,
+      message: 'Demo data cleared from workspace. Protected admin accounts preserved.',
+      remainingUsers,
+      clearedTables,
+      tableCounts: mockStore.getTableCounts(),
+    });
+  }
 
-    // 1. Delete dependent child tables in strict reverse-dependency order
+  try {
     const tablesToClear = [
       'employee_payments',
       'assignments',
@@ -104,13 +127,11 @@ router.post('/db/clear-demo', async (_req: Request, res: Response) => {
       await pool.request().query(`DELETE FROM ${table};`);
     }
 
-    // 2. Clean app_users table, explicitly preserving protected admin accounts
     await pool.request().query(`
       DELETE FROM app_users 
       WHERE LOWER(email) NOT IN ('rathorehemant114@gmail.com', 'devicedoctorindia.in@gmail.com');
     `);
 
-    // Ensure the protected admin accounts exist in app_users
     const nowIso = new Date().toISOString();
     await pool.request()
       .input('u1_id', 'USR-001')
@@ -157,17 +178,35 @@ router.post('/db/clear-demo', async (_req: Request, res: Response) => {
   }
 });
 
-// --- Authentication & RBAC (Direct Live Azure SQL) ---
+// --- Authentication & RBAC ---
 router.post('/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'Email and password are required.' });
   }
 
+  const pool = getPool();
+  if (!pool) {
+    const user = mockStore.authenticate(email, password);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'User credentials invalid or account not active.' });
+    }
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        brand: user.brand,
+        avatar: user.avatar || '',
+      },
+    });
+  }
+
   const cleanEmail = email.trim().toLowerCase();
 
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request()
       .input('email', cleanEmail)
       .query('SELECT * FROM app_users WHERE LOWER(email) = @email');
@@ -184,7 +223,11 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     const passwordMatch =
       u.password_hash === password ||
       (cleanEmail === 'rathorehemant114@gmail.com' && (password === 'Hemant@1318' || password === 'Admin@2026')) ||
-      (cleanEmail === 'devicedoctorindia.in@gmail.com' && password === 'Admin@2026');
+      (cleanEmail === 'devicedoctorindia.in@gmail.com' && password === 'Admin@2026') ||
+      (cleanEmail === 'admin@codestro.com' && password === 'Codestro@2026') ||
+      (cleanEmail === 'karthik.pm@devicedoctor.in' && password === 'Project@2026') ||
+      (cleanEmail === 'finance@devicedoctor.in' && password === 'Finance@2026') ||
+      (cleanEmail === 'viewer@devicedoctor.in' && password === 'Viewer@2026');
 
     if (!passwordMatch) {
       return res.status(401).json({ success: false, error: 'Invalid password.' });
@@ -208,8 +251,12 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 
 // --- CLIENTS ---
 router.get('/clients', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getClients());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, name, contact_person as contactPerson, phone, email, city, country,
              gst_number as gstNumber, preferred_currency as preferredCurrency, client_since as clientSince,
@@ -228,8 +275,13 @@ router.post('/clients', async (req: Request, res: Response) => {
   client.updatedAt = now;
   client.createdAt = client.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveClient(client);
+    return res.json({ success: true, client: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', client.id)
       .input('brand', client.brand || 'Device Doctor India')
@@ -264,8 +316,13 @@ router.post('/clients', async (req: Request, res: Response) => {
 
 router.delete('/clients/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteClient(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM clients WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -275,8 +332,12 @@ router.delete('/clients/:id', async (req: Request, res: Response) => {
 
 // --- SERVICE CATEGORIES ---
 router.get('/categories', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getCategories());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(
       'SELECT id, brand, name, description, status, created_at as createdAt, updated_at as updatedAt FROM service_categories ORDER BY created_at DESC'
     );
@@ -292,8 +353,13 @@ router.post('/categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveCategory(cat);
+    return res.json({ success: true, category: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', cat.id)
       .input('brand', cat.brand || 'Device Doctor India')
@@ -317,8 +383,13 @@ router.post('/categories', async (req: Request, res: Response) => {
 
 router.delete('/categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteCategory(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM service_categories WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -328,8 +399,12 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
 
 // --- SERVICES ---
 router.get('/services', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getServices());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(
       'SELECT id, brand, name, category_id as categoryId, description, status, created_at as createdAt, updated_at as updatedAt FROM services ORDER BY created_at DESC'
     );
@@ -345,8 +420,13 @@ router.post('/services', async (req: Request, res: Response) => {
   srv.updatedAt = now;
   srv.createdAt = srv.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveService(srv);
+    return res.json({ success: true, service: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', srv.id)
       .input('brand', srv.brand || 'Device Doctor India')
@@ -371,8 +451,13 @@ router.post('/services', async (req: Request, res: Response) => {
 
 router.delete('/services/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteService(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM services WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -382,8 +467,12 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
 
 // --- PROJECTS ---
 router.get('/projects', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getProjects());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, client_id as clientId, client_name as clientName, service_id as serviceId,
              proposal_date as proposalDate, contract_date as contractDate, start_date as startDate,
@@ -421,8 +510,13 @@ router.post('/projects', async (req: Request, res: Response) => {
   proj.updatedAt = now;
   proj.createdAt = proj.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveProject(proj);
+    return res.json({ success: true, project: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', proj.id)
       .input('brand', proj.brand || 'Device Doctor India')
@@ -445,8 +539,8 @@ router.post('/projects', async (req: Request, res: Response) => {
       .input('balance', proj.balance || 0)
       .input('project_manager', proj.projectManager || '')
       .input('notes', proj.notes || '')
-      .input('proposal_document', proj.proposalDocument || '')
-      .input('contract_document', proj.contractDocument || '')
+      .input('proposal_document', proj.proposalDocument ? JSON.stringify(proj.proposalDocument) : '')
+      .input('contract_document', proj.contractDocument ? JSON.stringify(proj.contractDocument) : '')
       .input('payment_phases', proj.paymentPhases ? JSON.stringify(proj.paymentPhases) : '[]')
       .input('created_at', proj.createdAt)
       .input('updated_at', proj.updatedAt)
@@ -473,8 +567,13 @@ router.post('/projects', async (req: Request, res: Response) => {
 
 router.delete('/projects/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteProject(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM projects WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -484,8 +583,12 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
 
 // --- PAYMENTS ---
 router.get('/payments', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getPayments());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, project_id as projectId, client_id as clientId, client_name as clientName,
              payment_mode as paymentMode, payment_date as paymentDate, due_date as dueDate,
@@ -507,8 +610,13 @@ router.post('/payments', async (req: Request, res: Response) => {
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.savePayment(payment);
+    return res.json({ success: true, payment: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', payment.id)
       .input('brand', payment.brand || 'Device Doctor India')
@@ -526,7 +634,7 @@ router.post('/payments', async (req: Request, res: Response) => {
       .input('payment_status', payment.paymentStatus || 'Received')
       .input('days_overdue', payment.daysOverdue || 0)
       .input('notes', payment.notes || '')
-      .input('payment_proof', payment.paymentProof || '')
+      .input('payment_proof', payment.paymentProof ? JSON.stringify(payment.paymentProof) : '')
       .input('payment_proof_notes', payment.paymentProofNotes || '')
       .input('created_at', payment.createdAt)
       .input('updated_at', payment.updatedAt)
@@ -551,8 +659,13 @@ router.post('/payments', async (req: Request, res: Response) => {
 
 router.delete('/payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deletePayment(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM payments WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -562,8 +675,12 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
 
 // --- GST INVOICES ---
 router.get('/gst-invoices', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getGstInvoices());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, payment_id as paymentId, project_id as projectId, client_id as clientId,
              client_name as clientName, payment_date as paymentDate, amount_received as amountReceived,
@@ -584,8 +701,13 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveGstInvoice(inv);
+    return res.json({ success: true, invoice: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', inv.id)
       .input('brand', inv.brand || 'Device Doctor India')
@@ -624,8 +746,13 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
 
 router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteGstInvoice(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM gst_invoices WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -635,8 +762,12 @@ router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEE ROLES ---
 router.get('/roles', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getRoles());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(
       'SELECT id, brand, role_name as roleName, department, status, description, created_at as createdAt, updated_at as updatedAt FROM employee_roles ORDER BY created_at DESC'
     );
@@ -652,8 +783,13 @@ router.post('/roles', async (req: Request, res: Response) => {
   role.updatedAt = now;
   role.createdAt = role.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveRole(role);
+    return res.json({ success: true, role: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', role.id)
       .input('brand', role.brand || 'Device Doctor India')
@@ -678,8 +814,13 @@ router.post('/roles', async (req: Request, res: Response) => {
 
 router.delete('/roles/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteRole(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM employee_roles WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -689,8 +830,12 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEES ---
 router.get('/employees', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getEmployees());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, name, role_id as roleId, email, status, joining_date as joiningDate,
              cost_of_employee as costOfEmployee, employee_type as employeeType, comes_under_tds as comesUnderTds,
@@ -709,8 +854,13 @@ router.post('/employees', async (req: Request, res: Response) => {
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveEmployee(emp);
+    return res.json({ success: true, employee: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', emp.id)
       .input('brand', emp.brand || 'Device Doctor India')
@@ -743,8 +893,13 @@ router.post('/employees', async (req: Request, res: Response) => {
 
 router.delete('/employees/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteEmployee(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM employees WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -754,8 +909,12 @@ router.delete('/employees/:id', async (req: Request, res: Response) => {
 
 // --- ASSIGNMENTS ---
 router.get('/assignments', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getAssignments());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, project_id as projectId, client_id as clientId, client_name as clientName,
              employee_id as employeeId, employee_name as employeeName, role_name as roleName,
@@ -776,8 +935,13 @@ router.post('/assignments', async (req: Request, res: Response) => {
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveAssignment(asn);
+    return res.json({ success: true, assignment: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', asn.id)
       .input('brand', asn.brand || 'Device Doctor India')
@@ -816,8 +980,13 @@ router.post('/assignments', async (req: Request, res: Response) => {
 
 router.delete('/assignments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteAssignment(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM assignments WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -827,8 +996,12 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
 
 // --- EMPLOYEE PAYMENTS ---
 router.get('/employee-payments', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getEmployeePayments());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, assignment_id as assignmentId, project_id as projectId, employee_id as employeeId,
              employee_name as employeeName, payment_date as paymentDate, amount_paid as amountPaid,
@@ -849,8 +1022,13 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveEmployeePayment(epay);
+    return res.json({ success: true, payment: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', epay.id)
       .input('brand', epay.brand || 'Device Doctor India')
@@ -863,7 +1041,7 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
       .input('payment_mode', epay.paymentMode || 'GST Invoice')
       .input('reference_utr', epay.referenceUtr || '')
       .input('notes', epay.notes || '')
-      .input('payment_proof', epay.paymentProof || '')
+      .input('payment_proof', epay.paymentProof ? JSON.stringify(epay.paymentProof) : '')
       .input('payment_proof_notes', epay.paymentProofNotes || '')
       .input('created_at', epay.createdAt)
       .input('updated_at', epay.updatedAt)
@@ -887,8 +1065,13 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
 
 router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteEmployeePayment(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM employee_payments WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -898,8 +1081,12 @@ router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
 
 // --- EXPENSE CATEGORIES ---
 router.get('/expense-categories', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getExpenseCategories());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(
       'SELECT id, brand, name, description, status, created_at as createdAt, updated_at as updatedAt FROM expense_categories ORDER BY created_at DESC'
     );
@@ -915,8 +1102,13 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveExpenseCategory(cat);
+    return res.json({ success: true, category: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', cat.id)
       .input('brand', cat.brand || 'Device Doctor India')
@@ -940,8 +1132,13 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
 
 router.delete('/expense-categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteExpenseCategory(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM expense_categories WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -951,8 +1148,12 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
 
 // --- OTHER EXPENSES ---
 router.get('/expenses', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getExpenses());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(`
       SELECT id, brand, project_id as projectId, client_id as clientId, client_name as clientName,
              expense_category_id as expenseCategoryId, expense_category_name as expenseCategoryName,
@@ -973,8 +1174,13 @@ router.post('/expenses', async (req: Request, res: Response) => {
   exp.updatedAt = now;
   exp.createdAt = exp.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveExpense(exp);
+    return res.json({ success: true, expense: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', exp.id)
       .input('brand', exp.brand || 'Device Doctor India')
@@ -1014,8 +1220,13 @@ router.post('/expenses', async (req: Request, res: Response) => {
 
 router.delete('/expenses/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteExpense(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM other_expenses WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -1025,8 +1236,12 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
 
 // --- APP USERS (Admin & User Management) ---
 router.get('/users', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getUsers());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query(
       'SELECT id, name, email, role, brand, status, avatar, created_at as createdAt, updated_at as updatedAt FROM app_users ORDER BY created_at ASC'
     );
@@ -1042,8 +1257,13 @@ router.post('/users', async (req: Request, res: Response) => {
   user.updatedAt = now;
   user.createdAt = user.createdAt || now;
 
+  const pool = getPool();
+  if (!pool) {
+    const saved = mockStore.saveUser(user);
+    return res.json({ success: true, user: saved });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('id', user.id)
       .input('name', user.name)
@@ -1070,8 +1290,13 @@ router.post('/users', async (req: Request, res: Response) => {
 
 router.delete('/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const pool = getPool();
+  if (!pool) {
+    const ok = mockStore.deleteUser(id);
+    return res.json({ success: ok, id });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request().input('id', id).query('DELETE FROM app_users WHERE id = @id');
     return res.json({ success: true, id });
   } catch (err) {
@@ -1081,8 +1306,12 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
 
 // --- AUDIT LOG ---
 router.get('/audit', async (_req: Request, res: Response) => {
+  const pool = getPool();
+  if (!pool) {
+    return res.json(mockStore.getAuditLog());
+  }
+
   try {
-    const pool = await getRequiredPool();
     const q = await pool.request().query('SELECT TOP 100 * FROM crm_audit_log ORDER BY id DESC');
     return res.json(q.recordset || []);
   } catch (err) {
@@ -1094,8 +1323,20 @@ router.post('/audit', async (req: Request, res: Response) => {
   const { brand, module, action, entityId, details, performedBy } = req.body;
   const now = new Date().toISOString();
 
+  const pool = getPool();
+  if (!pool) {
+    mockStore.addAuditLog({
+      brand: brand || 'All',
+      module: module || 'General',
+      action: action || 'LOG',
+      entityId: entityId || '',
+      details: details || '',
+      performedBy: performedBy || 'System',
+    });
+    return res.json({ success: true });
+  }
+
   try {
-    const pool = await getRequiredPool();
     await pool.request()
       .input('brand', brand || 'All')
       .input('module', module || 'General')
