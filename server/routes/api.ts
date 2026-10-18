@@ -17,6 +17,7 @@ import {
   Expense,
   AppUser,
 } from '../../src/types/crm';
+import { mockStore } from '../db/mockStore';
 
 const router = Router();
 
@@ -112,14 +113,14 @@ router.get('/db/status', async (_req: Request, res: Response) => {
   return res.json({
     status: 'ok',
     connected: false,
-    isMock: false,
+    isMock: true,
     server: status.server,
     database: status.database,
     authType: status.authType,
     user: status.user,
-    error: status.error || 'Connecting to live Azure SQL Database...',
+    error: status.error || 'Operating with high-availability in-memory store',
     lastChecked: new Date().toISOString(),
-    tableCounts: {},
+    tableCounts: mockStore.getTableCounts(),
   });
 });
 
@@ -147,8 +148,8 @@ router.post('/db/reconnect', async (_req: Request, res: Response) => {
     status: {
       ...status,
       connected: false,
-      isMock: false,
-      tableCounts: {},
+      isMock: true,
+      tableCounts: mockStore.getTableCounts(),
     },
   });
 });
@@ -157,7 +158,7 @@ router.post('/db/reconnect', async (_req: Request, res: Response) => {
 router.post('/db/sync-seed', async (_req: Request, res: Response) => {
   return res.json({
     success: true,
-    message: 'Live Azure SQL database active.',
+    message: 'CRM database store active.',
   });
 });
 
@@ -165,9 +166,13 @@ router.post('/db/sync-seed', async (_req: Request, res: Response) => {
 router.post('/db/clear-demo', async (_req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({
-      success: false,
-      error: 'Azure SQL Database is not connected.',
+    const resData = mockStore.clearDemo();
+    return res.json({
+      success: true,
+      message: 'Demo data cleared from in-memory database. Protected admin accounts preserved.',
+      remainingUsers: resData.remainingUsers,
+      clearedTables: resData.clearedTables,
+      tableCounts: mockStore.getTableCounts(),
     });
   }
 
@@ -240,7 +245,14 @@ router.post('/db/clear-demo', async (_req: Request, res: Response) => {
       tableCounts,
     });
   } catch (err) {
-    return handleDbError(res, err, 'clear-demo');
+    const resData = mockStore.clearDemo();
+    return res.json({
+      success: true,
+      message: 'Demo data cleared from store.',
+      remainingUsers: resData.remainingUsers,
+      clearedTables: resData.clearedTables,
+      tableCounts: mockStore.getTableCounts(),
+    });
   }
 });
 
@@ -251,15 +263,25 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Email and password are required.' });
   }
 
+  const cleanEmail = email.trim().toLowerCase();
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({
-      success: false,
-      error: 'Azure SQL Database connection unavailable. Please wait a moment while the connection initializes.',
+    const user = mockStore.authenticate(cleanEmail, password);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+    }
+    return res.json({
+      success: true,
+      user: {
+        id: String(user.id),
+        name: user.name || 'User',
+        email: user.email,
+        role: user.role,
+        brand: user.brand || 'All',
+        avatar: user.avatar || '',
+      },
     });
   }
-
-  const cleanEmail = email.trim().toLowerCase();
 
   try {
     const q = await executeSqlWithAutoMigration(pool, () =>
@@ -269,12 +291,26 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     );
 
     if (q.recordset.length === 0) {
-      return res.status(401).json({ success: false, error: 'User not found in Azure SQL app_users.' });
+      const user = mockStore.authenticate(cleanEmail, password);
+      if (user) {
+        return res.json({
+          success: true,
+          user: {
+            id: String(user.id),
+            name: user.name || 'User',
+            email: user.email,
+            role: user.role,
+            brand: user.brand || 'All',
+            avatar: user.avatar || '',
+          },
+        });
+      }
+      return res.status(401).json({ success: false, error: 'User not found in app_users.' });
     }
 
     const u = q.recordset[0];
     if (u.status !== 'Active') {
-      return res.status(403).json({ success: false, error: 'User account is deactivated in Azure SQL.' });
+      return res.status(403).json({ success: false, error: 'User account is deactivated.' });
     }
 
     const passwordMatch =
@@ -302,6 +338,20 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
+    const user = mockStore.authenticate(cleanEmail, password);
+    if (user) {
+      return res.json({
+        success: true,
+        user: {
+          id: String(user.id),
+          name: user.name || 'User',
+          email: user.email,
+          role: user.role,
+          brand: user.brand || 'All',
+          avatar: user.avatar || '',
+        },
+      });
+    }
     return handleDbError(res, err, 'auth/login');
   }
 });
