@@ -29,6 +29,8 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
+import { BrandSafetyGuardBanner } from '../common/BrandSafetyGuardBanner';
+import { BrandSafetyConfirmModal } from '../common/BrandSafetyConfirmModal';
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   'Proposal',
@@ -97,6 +99,8 @@ export const ProjectModal: React.FC = () => {
 
   const [formData, setFormData] = useState<Partial<Project>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pendingProjectPayload, setPendingProjectPayload] = useState<Project | null>(null);
 
   // Sync form data when modal opens
   useEffect(() => {
@@ -501,11 +505,25 @@ export const ProjectModal: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = await saveProject(payload);
+    // Safety Guard: If creating a new project, show confirmation modal to verify active workspace
+    if (!isProjectModalEditing) {
+      setPendingProjectPayload(payload);
+      setIsConfirmModalOpen(true);
+      return;
+    }
+
+    await executeSaveProject(payload);
+  };
+
+  const executeSaveProject = async (payloadToSave: Project) => {
+    const res = await saveProject(payloadToSave);
     if (res.success) {
+      setIsConfirmModalOpen(false);
+      setPendingProjectPayload(null);
       closeProjectModal();
     } else {
       setFormError(res.error || 'Failed to save project.');
+      setIsConfirmModalOpen(false);
     }
   };
 
@@ -550,6 +568,14 @@ export const ProjectModal: React.FC = () => {
               <span>{formError}</span>
             </div>
           )}
+
+          {/* Active Workspace Safety Guard Banner */}
+          <BrandSafetyGuardBanner
+            entityType="Project"
+            targetBrand={formData.brand || activeBrand}
+            isEditing={isProjectModalEditing}
+            recordId={formData.id}
+          />
 
           {/* SECTION 1: Client & Identification */}
           <div>
@@ -1382,6 +1408,22 @@ export const ProjectModal: React.FC = () => {
           </div>
         </form>
       </div>
+
+      {/* Brand Safety Confirmation Modal */}
+      <BrandSafetyConfirmModal
+        isOpen={isConfirmModalOpen}
+        entityType="Project"
+        entityName={pendingProjectPayload?.id || formData.id || 'New Project Proposal'}
+        targetBrand={pendingProjectPayload?.brand || formData.brand || activeBrand}
+        onConfirm={() => {
+          if (pendingProjectPayload) {
+            executeSaveProject(pendingProjectPayload);
+          }
+        }}
+        onCancel={() => {
+          setIsConfirmModalOpen(false);
+        }}
+      />
     </div>
   );
 };

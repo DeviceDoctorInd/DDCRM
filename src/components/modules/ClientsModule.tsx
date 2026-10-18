@@ -14,6 +14,8 @@ import {
   X,
   FileSpreadsheet,
 } from 'lucide-react';
+import { BrandSafetyGuardBanner } from '../common/BrandSafetyGuardBanner';
+import { BrandSafetyConfirmModal } from '../common/BrandSafetyConfirmModal';
 
 const CURRENCIES: CurrencyCode[] = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'USDT', 'BTC'];
 const STATUS_OPTIONS: ClientStatus[] = ['Active', 'Prospect', 'Inactive', 'Blocked'];
@@ -29,6 +31,8 @@ export const ClientsModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pendingClientSave, setPendingClientSave] = useState<Client | null>(null);
 
   // KPIs
   const totalClients = clients.length;
@@ -149,13 +153,29 @@ export const ClientsModule: React.FC = () => {
       }
     }
 
-    const res = await saveClient({ ...editingClient, brand: editingClient.brand || activeBrand } as Client);
+    const clientToSave = { ...editingClient, brand: editingClient.brand || activeBrand } as Client;
+
+    // Safety Guard: If creating a new client, show confirmation modal to verify active workspace
+    if (!editingClient.id) {
+      setPendingClientSave(clientToSave);
+      setIsConfirmModalOpen(true);
+      return;
+    }
+
+    await executeSaveClient(clientToSave);
+  };
+
+  const executeSaveClient = async (clientToSave: Client) => {
+    const res = await saveClient(clientToSave);
     if (res.success) {
       setIsModalOpen(false);
+      setIsConfirmModalOpen(false);
       setEditingClient(null);
+      setPendingClientSave(null);
       setFormError(null);
     } else {
       setFormError(res.error || 'Failed to save client');
+      setIsConfirmModalOpen(false);
     }
   };
 
@@ -339,6 +359,14 @@ export const ClientsModule: React.FC = () => {
                   {formError}
                 </div>
               )}
+
+              {/* Active Workspace Safety Guard Banner */}
+              <BrandSafetyGuardBanner
+                entityType="Client"
+                targetBrand={editingClient.brand || activeBrand}
+                isEditing={!!editingClient.id}
+                recordId={editingClient.id}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Client Name */}
@@ -543,6 +571,22 @@ export const ClientsModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Brand Safety Confirmation Modal */}
+      <BrandSafetyConfirmModal
+        isOpen={isConfirmModalOpen}
+        entityType="Client"
+        entityName={pendingClientSave?.name || editingClient?.name || ''}
+        targetBrand={pendingClientSave?.brand || editingClient?.brand || activeBrand}
+        onConfirm={() => {
+          if (pendingClientSave) {
+            executeSaveClient(pendingClientSave);
+          }
+        }}
+        onCancel={() => {
+          setIsConfirmModalOpen(false);
+        }}
+      />
     </div>
   );
 };

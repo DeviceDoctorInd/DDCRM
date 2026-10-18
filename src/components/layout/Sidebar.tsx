@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { ActiveModule, ReportsSubTab } from '../../types/crm';
-import { BrandSwitcher } from '../common/BrandSwitcher';
 import {
   LayoutDashboard,
   Users,
@@ -27,6 +26,9 @@ import {
   PieChart,
   UserCog,
   Database,
+  Lock,
+  Code2,
+  Building2,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -62,7 +64,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     users,
     authUser,
     logout,
+    activeBrand,
+    brandPrefix,
+    brandMeta,
   } = useCrm();
+
+  const getBrandIcon = (name: string, className: string = 'w-4 h-4') => {
+    switch (name) {
+      case 'Device Doctor India':
+        return <Wrench className={className} />;
+      case 'Codestro':
+        return <Code2 className={className} />;
+      case 'FX Launch Pad':
+        return <TrendingUp className={className} />;
+      default:
+        return <Building2 className={className} />;
+    }
+  };
 
   const [isReportsExpanded, setIsReportsExpanded] = useState(true);
 
@@ -197,10 +215,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-slate-900 text-slate-200 border-r border-slate-800">
-      {/* Active Brand Workspace Switcher Header */}
+      {/* Session-Locked Brand Workspace Header (Non-clickable, no switcher) */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <BrandSwitcher variant="sidebar" isCollapsed={isCollapsed} />
+        <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
+          <div
+            className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${brandMeta.avatarBg} flex items-center justify-center text-white shadow-sm shrink-0`}
+            title={`Session strictly locked to ${activeBrand}`}
+          >
+            {getBrandIcon(activeBrand, 'w-4 h-4')}
+          </div>
+
+          {!isCollapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-white tracking-tight truncate">
+                  {activeBrand}
+                </span>
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
+                  {brandPrefix}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-slate-400 truncate mt-0.5">
+                <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                <span>Locked Workspace</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile close button */}

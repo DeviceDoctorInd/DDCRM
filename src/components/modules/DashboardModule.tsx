@@ -18,6 +18,7 @@ import {
   Layers,
   Building2,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 
 export const DashboardModule: React.FC = () => {
@@ -32,11 +33,8 @@ export const DashboardModule: React.FC = () => {
     getServiceById,
     setActiveModule,
     activeBrand,
-    setActiveBrand,
     brandPrefix,
     brandMeta,
-    isConsolidatedView,
-    setIsConsolidatedView,
   } = useCrm();
 
   // --- Compute 10 Core KPIs dynamically ---
@@ -120,104 +118,31 @@ export const DashboardModule: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-              {isConsolidatedView ? 'Consolidated Group Executive Dashboard' : `${activeBrand} — Executive Dashboard`}
+              {activeBrand} — Executive Dashboard
             </h1>
-            {!isConsolidatedView && (
-              <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${brandMeta.badgeBg} ${brandMeta.badgeBorder} ${brandMeta.badgeText} border`}>
-                {brandPrefix} Workspace
-              </span>
-            )}
+            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${brandMeta.badgeBg} ${brandMeta.badgeBorder} ${brandMeta.badgeText} border`}>
+              {brandPrefix} Workspace
+            </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isConsolidatedView
-              ? 'Aggregated real-time telemetry across all 3 brands: Device Doctor India, Codestro, and FX Launch Pad.'
-              : `Real-time operations telemetry for ${activeBrand} (${brandMeta.tagline}).`}
+            Real-time operations telemetry for {activeBrand} ({brandMeta.tagline}). Session locked to this brand.
           </p>
         </div>
 
-        {/* Consolidated View Toggle */}
+        {/* Locked Session Workspace Indicator */}
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsConsolidatedView(!isConsolidatedView)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-xs cursor-pointer ${
-              isConsolidatedView
-                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-            <span>{isConsolidatedView ? 'Consolidated Group View: ON' : 'Consolidated Group View'}</span>
-          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none">
+            <Lock className="w-3.5 h-3.5 text-amber-500" />
+            <span>Locked Workspace: {brandPrefix}</span>
+          </div>
         </div>
       </div>
-
-      {/* Brand Group Comparison Cards (Shown when Consolidated View is active) */}
-      {isConsolidatedView && (
-        <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white border border-slate-700 shadow-md">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-700">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                Group Revenue & Brand Distribution (Consolidated)
-              </h3>
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">
-              3 Active Brands
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {brandMetrics.map((b) => {
-              const meta = BRAND_CONFIG[b.brand];
-              return (
-                <div
-                  key={b.brand}
-                  className="p-3.5 rounded-lg bg-slate-800/90 border border-slate-700/80 hover:border-slate-500 transition-all flex flex-col justify-between"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-white">{b.brand}</span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-700 text-cyan-300 border border-slate-600 font-semibold">
-                        {b.prefix}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveBrand(b.brand);
-                        setIsConsolidatedView(false);
-                      }}
-                      className="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-0.5 hover:underline cursor-pointer"
-                    >
-                      <span>Focus</span>
-                      <ArrowUpRight className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="text-[11px] text-slate-400">Collected Revenue (INR)</div>
-                    <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5">
-                      {formatINR(b.receivedINR)}
-                    </div>
-                  </div>
-
-                  <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>{b.projectsCount} projects</span>
-                    <span>{b.clientsCount} accounts</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 10 Summary Cards Grid */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            {isConsolidatedView ? 'Consolidated Group KPIs (10 Metrics)' : `${brandMeta.shortName} Key Performance Indicators (10 Metrics)`}
+            {brandMeta.shortName} Key Performance Indicators (10 Metrics)
           </h2>
         </div>
 
@@ -513,11 +438,6 @@ export const DashboardModule: React.FC = () => {
                           <span className="font-semibold text-xs text-slate-900 dark:text-slate-100">
                             {project.clientName || client?.name}
                           </span>
-                          {isConsolidatedView && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              {project.brand || 'Device Doctor India'}
-                            </span>
-                          )}
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           {service?.name || 'Custom Enterprise Solution'}
@@ -594,11 +514,6 @@ export const DashboardModule: React.FC = () => {
                           <span className="font-mono text-[11px] text-slate-400">
                             {pay.id}
                           </span>
-                          {isConsolidatedView && (
-                            <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              {pay.brand || 'Device Doctor India'}
-                            </span>
-                          )}
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-2">
                           <span>Amount: {formatINR(pay.amountINR || pay.amount || 0)}</span>

@@ -9,6 +9,7 @@ import {
   Code2,
   TrendingUp,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 
 interface BrandSwitcherProps {
@@ -28,6 +29,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
     isConsolidatedView,
     setIsConsolidatedView,
     activeModule,
+    openWorkspaceModal,
   } = useCrm();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -202,6 +204,21 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                 </button>
               </div>
             )}
+
+            {/* Brand Workspace Center / Detailed Selection */}
+            <div className="pt-1.5 mt-1 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  openWorkspaceModal(false);
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 hover:bg-slate-800/80 rounded-lg transition-colors cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Brand Workspace Center...</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -338,6 +355,21 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
               </button>
             </div>
           )}
+
+          {/* Detailed Workspace Switcher Button */}
+          <div className="pt-1.5 mt-1 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                openWorkspaceModal(false);
+              }}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 rounded-lg transition-colors cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Brand Workspace Center...</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

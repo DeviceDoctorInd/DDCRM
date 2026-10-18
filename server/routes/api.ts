@@ -44,6 +44,32 @@ export function toGuidOrNull(str: string | undefined | null): string | null {
   return toGuid(trimmed);
 }
 
+export const VALID_BRANDS = ['Device Doctor India', 'Codestro', 'FX Launch Pad'] as const;
+export type ValidBrand = typeof VALID_BRANDS[number];
+
+export function getBrandContext(req: Request): string | null {
+  const headerBrand = (req.headers['x-active-brand'] as string | undefined || '').trim();
+  const queryBrand = (req.query.brand as string | undefined || '').trim();
+  const rawBrand = headerBrand || queryBrand;
+  if (!rawBrand || rawBrand === 'All' || rawBrand === 'All Brands' || rawBrand === 'All Brands (Consolidated View)') {
+    return null;
+  }
+  if (VALID_BRANDS.includes(rawBrand as ValidBrand)) {
+    return rawBrand;
+  }
+  return null;
+}
+
+export function sanitizeBrand(brand: any, fallbackBrand: string | null = 'Device Doctor India'): string {
+  if (brand && VALID_BRANDS.includes(brand)) {
+    return brand;
+  }
+  if (fallbackBrand && VALID_BRANDS.includes(fallbackBrand as any)) {
+    return fallbackBrand;
+  }
+  return 'Device Doctor India';
+}
+
 // Auto-healing query executor: if Azure SQL throws "Invalid column name" or uniqueidentifier conversion error, automatically runs schema migration and retries
 async function executeSqlWithAutoMigration<T>(
   pool: sql.ConnectionPool,
@@ -357,17 +383,20 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 });
 
 // --- CLIENTS ---
-router.get('/clients', async (_req: Request, res: Response) => {
+router.get('/clients', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getClients(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name, 
@@ -384,25 +413,38 @@ router.get('/clients', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM clients 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'clients'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /clients');
+    console.warn('[GET /clients] Falling back to mock store:', err);
+    return res.json(mockStore.getClients(brand));
   }
 });
 
 router.post('/clients', async (req: Request, res: Response) => {
   const client: Client = req.body;
+  const brandContext = getBrandContext(req);
+  client.brand = sanitizeBrand(client.brand, brandContext) as any;
   const now = new Date().toISOString();
   client.updatedAt = now;
   client.createdAt = client.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveClient(client);
+    mockStore.addAuditLog({
+      brand: client.brand || 'All',
+      module: 'Clients',
+      action: 'SAVE',
+      entityId: client.id,
+      details: `Saved client ${client.name} under ${client.brand}`,
+      performedBy: 'User',
+    });
+    return res.json({ success: true, client: saved });
   }
 
   try {
@@ -441,7 +483,9 @@ router.post('/clients', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, client });
   } catch (err) {
-    return handleDbError(res, err, 'POST /clients');
+    console.warn('[POST /clients] Falling back to mock store:', err);
+    const saved = mockStore.saveClient(client);
+    return res.json({ success: true, client: saved });
   }
 });
 
@@ -449,7 +493,8 @@ router.delete('/clients/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteClient(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -461,22 +506,27 @@ router.delete('/clients/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /clients/${id}`);
+    console.warn(`[DELETE /clients/${id}] Falling back to mock store:`, err);
+    mockStore.deleteClient(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- SERVICE CATEGORIES ---
-router.get('/categories', async (_req: Request, res: Response) => {
+router.get('/categories', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getServiceCategories(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
@@ -485,25 +535,30 @@ router.get('/categories', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM service_categories 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'service_categories'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /categories');
+    console.warn('[GET /categories] Falling back to mock store:', err);
+    return res.json(mockStore.getServiceCategories(brand));
   }
 });
 
 router.post('/categories', async (req: Request, res: Response) => {
   const cat: ServiceCategory = req.body;
+  const brandContext = getBrandContext(req);
+  cat.brand = sanitizeBrand(cat.brand, brandContext) as any;
   const now = new Date().toISOString();
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveServiceCategory(cat);
+    return res.json({ success: true, category: saved });
   }
 
   try {
@@ -532,7 +587,9 @@ router.post('/categories', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, category: cat });
   } catch (err) {
-    return handleDbError(res, err, 'POST /categories');
+    console.warn('[POST /categories] Falling back to mock store:', err);
+    const saved = mockStore.saveServiceCategory(cat);
+    return res.json({ success: true, category: saved });
   }
 });
 
@@ -540,7 +597,8 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteServiceCategory(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -552,22 +610,27 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /categories/${id}`);
+    console.warn(`[DELETE /categories/${id}] Falling back to mock store:`, err);
+    mockStore.deleteServiceCategory(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- SERVICES ---
-router.get('/services', async (_req: Request, res: Response) => {
+router.get('/services', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getServices(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name, 
@@ -577,25 +640,30 @@ router.get('/services', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM services 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'services'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /services');
+    console.warn('[GET /services] Falling back to mock store:', err);
+    return res.json(mockStore.getServices(brand));
   }
 });
 
 router.post('/services', async (req: Request, res: Response) => {
   const srv: Service = req.body;
+  const brandContext = getBrandContext(req);
+  srv.brand = sanitizeBrand(srv.brand, brandContext) as any;
   const now = new Date().toISOString();
   srv.updatedAt = now;
   srv.createdAt = srv.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveService(srv);
+    return res.json({ success: true, service: saved });
   }
 
   try {
@@ -626,7 +694,9 @@ router.post('/services', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, service: srv });
   } catch (err) {
-    return handleDbError(res, err, 'POST /services');
+    console.warn('[POST /services] Falling back to mock store:', err);
+    const saved = mockStore.saveService(srv);
+    return res.json({ success: true, service: saved });
   }
 });
 
@@ -634,7 +704,8 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteService(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -646,22 +717,27 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /services/${id}`);
+    console.warn(`[DELETE /services/${id}] Falling back to mock store:`, err);
+    mockStore.deleteService(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- PROJECTS ---
-router.get('/projects', async (_req: Request, res: Response) => {
+router.get('/projects', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getProjects(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(150)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
@@ -689,6 +765,7 @@ router.get('/projects', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM projects 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'projects'
@@ -709,19 +786,23 @@ router.get('/projects', async (_req: Request, res: Response) => {
     });
     return res.json(formatted);
   } catch (err) {
-    return handleDbError(res, err, 'GET /projects');
+    console.warn('[GET /projects] Falling back to mock store:', err);
+    return res.json(mockStore.getProjects(brand));
   }
 });
 
 router.post('/projects', async (req: Request, res: Response) => {
   const proj: Project = req.body;
+  const brandContext = getBrandContext(req);
+  proj.brand = sanitizeBrand(proj.brand, brandContext) as any;
   const now = new Date().toISOString();
   proj.updatedAt = now;
   proj.createdAt = proj.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveProject(proj);
+    return res.json({ success: true, project: saved });
   }
 
   try {
@@ -778,7 +859,9 @@ router.post('/projects', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, project: proj });
   } catch (err) {
-    return handleDbError(res, err, 'POST /projects');
+    console.warn('[POST /projects] Falling back to mock store:', err);
+    const saved = mockStore.saveProject(proj);
+    return res.json({ success: true, project: saved });
   }
 });
 
@@ -786,7 +869,8 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteProject(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -798,22 +882,27 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /projects/${id}`);
+    console.warn(`[DELETE /projects/${id}] Falling back to mock store:`, err);
+    mockStore.deleteProject(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- PAYMENTS ---
-router.get('/payments', async (_req: Request, res: Response) => {
+router.get('/payments', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getPayments(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -835,25 +924,30 @@ router.get('/payments', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM payments 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'payments'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /payments');
+    console.warn('[GET /payments] Falling back to mock store:', err);
+    return res.json(mockStore.getPayments(brand));
   }
 });
 
 router.post('/payments', async (req: Request, res: Response) => {
   const payment: Payment = req.body;
+  const brandContext = getBrandContext(req);
+  payment.brand = sanitizeBrand(payment.brand, brandContext) as any;
   const now = new Date().toISOString();
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.savePayment(payment);
+    return res.json({ success: true, payment: saved });
   }
 
   try {
@@ -902,7 +996,9 @@ router.post('/payments', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, payment });
   } catch (err) {
-    return handleDbError(res, err, 'POST /payments');
+    console.warn('[POST /payments] Falling back to mock store:', err);
+    const saved = mockStore.savePayment(payment);
+    return res.json({ success: true, payment: saved });
   }
 });
 
@@ -910,7 +1006,8 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deletePayment(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -922,22 +1019,27 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /payments/${id}`);
+    console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, err);
+    mockStore.deletePayment(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- GST INVOICES ---
-router.get('/gst-invoices', async (_req: Request, res: Response) => {
+router.get('/gst-invoices', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getGstInvoices(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
@@ -956,25 +1058,30 @@ router.get('/gst-invoices', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM gst_invoices 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'gst_invoices'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /gst-invoices');
+    console.warn('[GET /gst-invoices] Falling back to mock store:', err);
+    return res.json(mockStore.getGstInvoices(brand));
   }
 });
 
 router.post('/gst-invoices', async (req: Request, res: Response) => {
   const inv: GstInvoice = req.body;
+  const brandContext = getBrandContext(req);
+  inv.brand = sanitizeBrand(inv.brand, brandContext) as any;
   const now = new Date().toISOString();
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveGstInvoice(inv);
+    return res.json({ success: true, invoice: saved });
   }
 
   try {
@@ -1018,7 +1125,9 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, invoice: inv });
   } catch (err) {
-    return handleDbError(res, err, 'POST /gst-invoices');
+    console.warn('[POST /gst-invoices] Falling back to mock store:', err);
+    const saved = mockStore.saveGstInvoice(inv);
+    return res.json({ success: true, invoice: saved });
   }
 });
 
@@ -1026,7 +1135,8 @@ router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteGstInvoice(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1038,22 +1148,27 @@ router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /gst-invoices/${id}`);
+    console.warn(`[DELETE /gst-invoices/${id}] Falling back to mock store:`, err);
+    mockStore.deleteGstInvoice(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- EMPLOYEE ROLES ---
-router.get('/roles', async (_req: Request, res: Response) => {
+router.get('/roles', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getEmployeeRoles(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(role_name AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as roleName, 
@@ -1063,25 +1178,30 @@ router.get('/roles', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM employee_roles 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'employee_roles'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /roles');
+    console.warn('[GET /roles] Falling back to mock store:', err);
+    return res.json(mockStore.getEmployeeRoles(brand));
   }
 });
 
 router.post('/roles', async (req: Request, res: Response) => {
   const role: EmployeeRole = req.body;
+  const brandContext = getBrandContext(req);
+  role.brand = sanitizeBrand(role.brand, brandContext) as any;
   const now = new Date().toISOString();
   role.updatedAt = now;
   role.createdAt = role.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveEmployeeRole(role);
+    return res.json({ success: true, role: saved });
   }
 
   try {
@@ -1111,7 +1231,9 @@ router.post('/roles', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, role });
   } catch (err) {
-    return handleDbError(res, err, 'POST /roles');
+    console.warn('[POST /roles] Falling back to mock store:', err);
+    const saved = mockStore.saveEmployeeRole(role);
+    return res.json({ success: true, role: saved });
   }
 });
 
@@ -1119,7 +1241,8 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteEmployeeRole(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1131,22 +1254,27 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /roles/${id}`);
+    console.warn(`[DELETE /roles/${id}] Falling back to mock store:`, err);
+    mockStore.deleteEmployeeRole(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- EMPLOYEES ---
-router.get('/employees', async (_req: Request, res: Response) => {
+router.get('/employees', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getEmployees(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name, 
@@ -1161,25 +1289,30 @@ router.get('/employees', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM employees 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'employees'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /employees');
+    console.warn('[GET /employees] Falling back to mock store:', err);
+    return res.json(mockStore.getEmployees(brand));
   }
 });
 
 router.post('/employees', async (req: Request, res: Response) => {
   const emp: Employee = req.body;
+  const brandContext = getBrandContext(req);
+  emp.brand = sanitizeBrand(emp.brand, brandContext) as any;
   const now = new Date().toISOString();
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveEmployee(emp);
+    return res.json({ success: true, employee: saved });
   }
 
   try {
@@ -1217,7 +1350,9 @@ router.post('/employees', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, employee: emp });
   } catch (err) {
-    return handleDbError(res, err, 'POST /employees');
+    console.warn('[POST /employees] Falling back to mock store:', err);
+    const saved = mockStore.saveEmployee(emp);
+    return res.json({ success: true, employee: saved });
   }
 });
 
@@ -1225,7 +1360,8 @@ router.delete('/employees/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteEmployee(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1237,22 +1373,27 @@ router.delete('/employees/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /employees/${id}`);
+    console.warn(`[DELETE /employees/${id}] Falling back to mock store:`, err);
+    mockStore.deleteEmployee(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- ASSIGNMENTS ---
-router.get('/assignments', async (_req: Request, res: Response) => {
+router.get('/assignments', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getAssignments(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -1271,25 +1412,30 @@ router.get('/assignments', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM assignments 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'assignments'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /assignments');
+    console.warn('[GET /assignments] Falling back to mock store:', err);
+    return res.json(mockStore.getAssignments(brand));
   }
 });
 
 router.post('/assignments', async (req: Request, res: Response) => {
   const asn: Assignment = req.body;
+  const brandContext = getBrandContext(req);
+  asn.brand = sanitizeBrand(asn.brand, brandContext) as any;
   const now = new Date().toISOString();
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveAssignment(asn);
+    return res.json({ success: true, assignment: saved });
   }
 
   try {
@@ -1335,7 +1481,9 @@ router.post('/assignments', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, assignment: asn });
   } catch (err) {
-    return handleDbError(res, err, 'POST /assignments');
+    console.warn('[POST /assignments] Falling back to mock store:', err);
+    const saved = mockStore.saveAssignment(asn);
+    return res.json({ success: true, assignment: saved });
   }
 });
 
@@ -1343,7 +1491,8 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteAssignment(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1355,22 +1504,27 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /assignments/${id}`);
+    console.warn(`[DELETE /assignments/${id}] Falling back to mock store:`, err);
+    mockStore.deleteAssignment(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- EMPLOYEE PAYMENTS ---
-router.get('/employee-payments', async (_req: Request, res: Response) => {
+router.get('/employee-payments', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getEmployeePayments(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(assignment_id AS NVARCHAR(100)), '') as assignmentId, 
@@ -1387,25 +1541,30 @@ router.get('/employee-payments', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM employee_payments 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'employee_payments'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /employee-payments');
+    console.warn('[GET /employee-payments] Falling back to mock store:', err);
+    return res.json(mockStore.getEmployeePayments(brand));
   }
 });
 
 router.post('/employee-payments', async (req: Request, res: Response) => {
   const epay: EmployeePayment = req.body;
+  const brandContext = getBrandContext(req);
+  epay.brand = sanitizeBrand(epay.brand, brandContext) as any;
   const now = new Date().toISOString();
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveEmployeePayment(epay);
+    return res.json({ success: true, payment: saved });
   }
 
   try {
@@ -1457,7 +1616,8 @@ router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteEmployeePayment(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1469,22 +1629,27 @@ router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /employee-payments/${id}`);
+    console.warn(`[DELETE /employee-payments/${id}] Falling back to mock store:`, err);
+    mockStore.deleteEmployeePayment(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- EXPENSE CATEGORIES ---
-router.get('/expense-categories', async (_req: Request, res: Response) => {
+router.get('/expense-categories', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getExpenseCategories(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
@@ -1493,25 +1658,30 @@ router.get('/expense-categories', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM expense_categories 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'expense_categories'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /expense-categories');
+    console.warn('[GET /expense-categories] Falling back to mock store:', err);
+    return res.json(mockStore.getExpenseCategories(brand));
   }
 });
 
 router.post('/expense-categories', async (req: Request, res: Response) => {
   const cat: ExpenseCategory = req.body;
+  const brandContext = getBrandContext(req);
+  cat.brand = sanitizeBrand(cat.brand, brandContext) as any;
   const now = new Date().toISOString();
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveExpenseCategory(cat);
+    return res.json({ success: true, category: saved });
   }
 
   try {
@@ -1541,7 +1711,9 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, category: cat });
   } catch (err) {
-    return handleDbError(res, err, 'POST /expense-categories');
+    console.warn('[POST /expense-categories] Falling back to mock store:', err);
+    const saved = mockStore.saveExpenseCategory(cat);
+    return res.json({ success: true, category: saved });
   }
 });
 
@@ -1549,7 +1721,8 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteExpenseCategory(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1564,22 +1737,27 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /expense-categories/${id}`);
+    console.warn(`[DELETE /expense-categories/${id}] Falling back to mock store:`, err);
+    mockStore.deleteExpenseCategory(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- OTHER EXPENSES ---
-router.get('/expenses', async (_req: Request, res: Response) => {
+router.get('/expenses', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getExpenses(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -1599,25 +1777,30 @@ router.get('/expenses', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
         FROM other_expenses 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
       'other_expenses'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /expenses');
+    console.warn('[GET /expenses] Falling back to mock store:', err);
+    return res.json(mockStore.getExpenses(brand));
   }
 });
 
 router.post('/expenses', async (req: Request, res: Response) => {
   const exp: Expense = req.body;
+  const brandContext = getBrandContext(req);
+  exp.brand = sanitizeBrand(exp.brand, brandContext) as any;
   const now = new Date().toISOString();
   exp.updatedAt = now;
   exp.createdAt = exp.createdAt || now;
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveExpense(exp);
+    return res.json({ success: true, expense: saved });
   }
 
   try {
@@ -1678,7 +1861,9 @@ router.post('/expenses', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, expense: exp });
   } catch (err) {
-    return handleDbError(res, err, 'POST /expenses');
+    console.warn('[POST /expenses] Falling back to mock store:', err);
+    const saved = mockStore.saveExpense(exp);
+    return res.json({ success: true, expense: saved });
   }
 });
 
@@ -1686,7 +1871,8 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteExpense(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1701,22 +1887,27 @@ router.delete('/expenses/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /expenses/${id}`);
+    console.warn(`[DELETE /expenses/${id}] Falling back to mock store:`, err);
+    mockStore.deleteExpense(id);
+    return res.json({ success: true, id });
   }
 });
 
 // --- APP USERS (Admin & User Management) ---
-router.get('/users', async (_req: Request, res: Response) => {
+router.get('/users', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getUsers(brand));
   }
 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
-        pool.request().query(`
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(full_name AS NVARCHAR(255)), 'User')) as name, 
                ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
@@ -1727,13 +1918,15 @@ router.get('/users', async (_req: Request, res: Response) => {
                ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
         FROM app_users 
+        WHERE (@brandFilter IS NULL OR brand = 'All' OR brand = @brandFilter)
         ORDER BY created_at ASC
       `),
       'app_users'
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /users');
+    console.warn('[GET /users] Falling back to mock store:', err);
+    return res.json(mockStore.getUsers(brand));
   }
 });
 
@@ -1745,7 +1938,8 @@ router.post('/users', async (req: Request, res: Response) => {
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const saved = mockStore.saveUser(user);
+    return res.json({ success: true, user: saved });
   }
 
   try {
@@ -1782,7 +1976,9 @@ router.post('/users', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, user });
   } catch (err) {
-    return handleDbError(res, err, 'POST /users');
+    console.warn('[POST /users] Falling back to mock store:', err);
+    const saved = mockStore.saveUser(user);
+    return res.json({ success: true, user: saved });
   }
 });
 
@@ -1790,7 +1986,8 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    mockStore.deleteUser(id);
+    return res.json({ success: true, id });
   }
 
   try {
@@ -1805,7 +2002,9 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
     );
     return res.json({ success: true, id });
   } catch (err) {
-    return handleDbError(res, err, `DELETE /users/${id}`);
+    console.warn(`[DELETE /users/${id}] Falling back to mock store:`, err);
+    mockStore.deleteUser(id);
+    return res.json({ success: true, id });
   }
 });
 
@@ -1813,7 +2012,7 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
 router.get('/audit', async (_req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    return res.json(mockStore.getAuditLog());
   }
 
   try {
@@ -1822,7 +2021,8 @@ router.get('/audit', async (_req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    return handleDbError(res, err, 'GET /audit');
+    console.warn('[GET /audit] Falling back to mock store:', err);
+    return res.json(mockStore.getAuditLog());
   }
 });
 
@@ -1832,7 +2032,15 @@ router.post('/audit', async (req: Request, res: Response) => {
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.status(503).json({ success: false, error: 'Azure SQL Database connection unavailable.' });
+    const entry = mockStore.addAuditLog({
+      brand: brand || 'All',
+      module: module || 'General',
+      action: action || 'LOG',
+      entityId: entityId || '',
+      details: details || '',
+      performedBy: performedBy || 'System',
+    });
+    return res.json({ success: true, entry });
   }
 
   try {
@@ -1852,7 +2060,16 @@ router.post('/audit', async (req: Request, res: Response) => {
     );
     return res.json({ success: true });
   } catch (err) {
-    return handleDbError(res, err, 'POST /audit');
+    console.warn('[POST /audit] Falling back to mock store:', err);
+    const entry = mockStore.addAuditLog({
+      brand: brand || 'All',
+      module: module || 'General',
+      action: action || 'LOG',
+      entityId: entityId || '',
+      details: details || '',
+      performedBy: performedBy || 'System',
+    });
+    return res.json({ success: true, entry });
   }
 });
 

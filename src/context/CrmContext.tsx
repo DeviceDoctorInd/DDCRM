@@ -161,6 +161,14 @@ interface CrmContextType {
   showToast: (message: string, type?: ToastMessage['type']) => void;
   removeToast: (id: string) => void;
 
+  // Workspace Enforcement Modal & Brand Workspace Selection
+  isWorkspaceModalOpen: boolean;
+  isWorkspaceMandatory: boolean;
+  hasConfirmedWorkspace: boolean;
+  openWorkspaceModal: (mandatory?: boolean) => void;
+  closeWorkspaceModal: () => void;
+  selectBrandWorkspace: (brand: BrandName, isConsolidated?: boolean, remember?: boolean) => void;
+
   // Live Refresh
   refreshData: () => Promise<void>;
 }
@@ -226,6 +234,37 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isProjectModalEditing, setIsProjectModalEditing] = useState(false);
   const [projectModalData, setProjectModalData] = useState<Partial<Project> | null>(null);
 
+  // Workspace Enforcement Modal State
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
+  const [isWorkspaceMandatory, setIsWorkspaceMandatory] = useState(false);
+  const [hasConfirmedWorkspace, setHasConfirmedWorkspaceState] = useState(() => storageService.getHasConfirmedWorkspace());
+
+  const openWorkspaceModal = (mandatory = false) => {
+    setIsWorkspaceMandatory(mandatory);
+    setIsWorkspaceModalOpen(true);
+  };
+
+  const closeWorkspaceModal = () => {
+    if (!isWorkspaceMandatory) {
+      setIsWorkspaceModalOpen(false);
+    }
+  };
+
+  const selectBrandWorkspace = (brand: BrandName, isConsolidated: boolean = false, remember: boolean = true) => {
+    setActiveBrandState(brand);
+    setIsConsolidatedView(isConsolidated);
+    storageService.setIsConsolidated(isConsolidated);
+    if (remember) {
+      storageService.setActiveBrand(brand);
+    }
+    storageService.setHasConfirmedWorkspace(true);
+    setHasConfirmedWorkspaceState(true);
+    setIsWorkspaceModalOpen(false);
+    setIsWorkspaceMandatory(false);
+    showToast(`Active workspace set to ${isConsolidated ? 'All Brands (Consolidated Enterprise View)' : brand}`, 'success');
+    loadAll();
+  };
+
   const setActiveBrand = (brand: BrandName) => {
     setActiveBrandState(brand);
     storageService.setActiveBrand(brand);
@@ -267,7 +306,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         document.documentElement.classList.remove('dark');
       }
 
-      setAuthUserState(storageService.getAuthUser());
+      const currentAuthUser = storageService.getAuthUser();
+      setAuthUserState(currentAuthUser);
 
       const [
         clients,
@@ -383,11 +423,19 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const res = await storageService.login(email, pass);
     if (res.success && res.user) {
       setAuthUserState(res.user);
+      storageService.setHasConfirmedWorkspace(false);
+      setHasConfirmedWorkspaceState(false);
+
+      let defaultBrand: BrandName = 'Device Doctor India';
       if (res.user.brand && res.user.brand !== 'All') {
-        setActiveBrand(res.user.brand as BrandName);
+        defaultBrand = res.user.brand as BrandName;
+      } else {
+        defaultBrand = storageService.getActiveBrand();
       }
-      showToast(`Welcome back, ${res.user.name}! Connected to Azure SQL.`, 'success');
-      await loadAll();
+      setActiveBrandState(defaultBrand);
+      setIsConsolidatedView(false);
+
+      showToast(`Welcome back, ${res.user.name}! Please select your active brand workspace.`, 'info');
       return true;
     }
     showToast(res.error || 'Authentication failed against live Azure SQL app_users.', 'error');
@@ -396,7 +444,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = () => {
     storageService.setAuthUser(null);
+    storageService.setHasConfirmedWorkspace(false);
+    setHasConfirmedWorkspaceState(false);
     setAuthUserState(null);
+    setIsWorkspaceModalOpen(false);
+    setIsWorkspaceMandatory(false);
     showToast('Logged out securely.', 'info');
   };
 
@@ -551,13 +603,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- Strict Live SQL Entity Actions ---
   const saveClientAction = async (client: Client) => {
-    if (!client.brand) client.brand = activeBrand;
+    if (!client.brand || (client.brand as string) === 'All' || (client.brand as string) === 'All Brands') {
+      client.brand = activeBrand;
+    }
+    if (client.brand !== 'Device Doctor India' && client.brand !== 'Codestro' && client.brand !== 'FX Launch Pad') {
+      client.brand = 'Device Doctor India';
+    }
     if (!client.id) {
       client.id = storageService.generateId('CL', client.brand, rawClients);
     }
     const res = await storageService.saveClient(client);
     if (res.success) {
-      showToast(`Client "${client.name}" saved to Azure SQL.`, 'success');
+      showToast(`Client "${client.name}" saved under ${client.brand} workspace.`, 'success');
       await loadAll();
     } else {
       showToast(res.error || 'Failed to save client to Azure SQL.', 'error');
@@ -710,7 +767,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveProjectAction = async (project: Project) => {
-    if (!project.brand) project.brand = activeBrand;
+    if (!project.brand || (project.brand as string) === 'All' || (project.brand as string) === 'All Brands') {
+      project.brand = activeBrand;
+    }
+    if (project.brand !== 'Device Doctor India' && project.brand !== 'Codestro' && project.brand !== 'FX Launch Pad') {
+      project.brand = 'Device Doctor India';
+    }
     if (!project.id) {
       const client = getClientById(project.clientId);
       const service = getServiceById(project.serviceId);
@@ -726,7 +788,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveProject(project);
     if (res.success) {
-      showToast(`Project "${project.id}" saved to Azure SQL.`, 'success');
+      showToast(`Project "${project.id}" saved under ${project.brand} workspace.`, 'success');
       await loadAll();
     } else {
       showToast(res.error || 'Failed to save project.', 'error');
@@ -1220,6 +1282,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         openAddProjectModal,
         openEditProjectModal,
         closeProjectModal,
+        isWorkspaceModalOpen,
+        isWorkspaceMandatory,
+        hasConfirmedWorkspace,
+        openWorkspaceModal,
+        closeWorkspaceModal,
+        selectBrandWorkspace,
         toasts,
         showToast,
         removeToast,

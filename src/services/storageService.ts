@@ -34,6 +34,8 @@ const PREFERENCE_KEYS = {
   ACTIVE_BRAND: 'ddi_crm_active_brand',
   THEME: 'ddi_crm_theme',
   AUTH_USER: 'ddi_crm_auth_user',
+  CONSOLIDATED: 'ddi_crm_is_consolidated',
+  WORKSPACE_CONFIRMED: 'ddi_crm_workspace_confirmed_session',
 };
 
 export const normalizePaymentMode = (mode: unknown): PaymentMode => {
@@ -70,11 +72,25 @@ class StorageService {
     }
   }
 
-  // --- Strict Live API Call Helper ---
-  public async apiCall<T = any>(url: string, method: string = 'GET', body?: unknown): Promise<T> {
+  // --- Strict Live API Call Helper with Active Brand Context Header ---
+  public async apiCall<T = any>(
+    url: string,
+    method: string = 'GET',
+    body?: unknown,
+    customHeaders?: Record<string, string>
+  ): Promise<T> {
+    const isConsolidated = this.getIsConsolidated();
+    const activeBrand = isConsolidated ? 'All' : this.getActiveBrand();
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Active-Brand': activeBrand,
+      ...customHeaders,
+    };
+
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -673,6 +689,31 @@ class StorageService {
     this.notifyListeners();
   }
 
+  public getIsConsolidated(): boolean {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(PREFERENCE_KEYS.CONSOLIDATED) === 'true';
+  }
+
+  public setIsConsolidated(val: boolean) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(PREFERENCE_KEYS.CONSOLIDATED, val ? 'true' : 'false');
+    this.notifyListeners();
+  }
+
+  public getHasConfirmedWorkspace(): boolean {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(PREFERENCE_KEYS.WORKSPACE_CONFIRMED) === 'true';
+  }
+
+  public setHasConfirmedWorkspace(val: boolean) {
+    if (typeof window === 'undefined') return;
+    if (val) {
+      sessionStorage.setItem(PREFERENCE_KEYS.WORKSPACE_CONFIRMED, 'true');
+    } else {
+      sessionStorage.removeItem(PREFERENCE_KEYS.WORKSPACE_CONFIRMED);
+    }
+  }
+
   public getTheme(): 'light' | 'dark' {
     if (typeof window === 'undefined') return 'light';
     const val = localStorage.getItem(PREFERENCE_KEYS.THEME);
@@ -700,6 +741,7 @@ class StorageService {
       localStorage.setItem(PREFERENCE_KEYS.AUTH_USER, JSON.stringify(user));
     } else {
       localStorage.removeItem(PREFERENCE_KEYS.AUTH_USER);
+      this.setHasConfirmedWorkspace(false);
     }
   }
 }

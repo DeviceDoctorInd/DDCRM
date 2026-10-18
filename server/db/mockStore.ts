@@ -655,7 +655,10 @@ class MockStore {
   }
 
   // --- Auth & Users ---
-  public getUsers(): AppUser[] {
+  public getUsers(brand?: string | null): AppUser[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.users.filter((u) => u.brand === 'All' || u.brand === brand);
+    }
     return [...this.users];
   }
 
@@ -700,11 +703,15 @@ class MockStore {
   }
 
   // --- Clients ---
-  public getClients(): Client[] {
+  public getClients(brand?: string | null): Client[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.clients.filter((c) => c.brand === brand);
+    }
     return [...this.clients];
   }
 
   public saveClient(client: Client): Client {
+    if (!client.brand) client.brand = 'Device Doctor India';
     const idx = this.clients.findIndex((c) => c.id === client.id);
     if (idx >= 0) {
       this.clients[idx] = { ...this.clients[idx], ...client, updatedAt: new Date().toISOString() };
@@ -722,11 +729,15 @@ class MockStore {
   }
 
   // --- Categories ---
-  public getCategories(): ServiceCategory[] {
+  public getCategories(brand?: string | null): ServiceCategory[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.categories.filter((c) => c.brand === brand);
+    }
     return [...this.categories];
   }
 
   public saveCategory(cat: ServiceCategory): ServiceCategory {
+    if (!cat.brand) cat.brand = 'Device Doctor India';
     const idx = this.categories.findIndex((c) => c.id === cat.id);
     if (idx >= 0) {
       this.categories[idx] = { ...this.categories[idx], ...cat, updatedAt: new Date().toISOString() };
@@ -743,12 +754,28 @@ class MockStore {
     return this.categories.length < initial;
   }
 
+  public getServiceCategories(brand?: string | null): ServiceCategory[] {
+    return this.getCategories(brand);
+  }
+
+  public saveServiceCategory(cat: ServiceCategory): ServiceCategory {
+    return this.saveCategory(cat);
+  }
+
+  public deleteServiceCategory(id: string): boolean {
+    return this.deleteCategory(id);
+  }
+
   // --- Services ---
-  public getServices(): Service[] {
+  public getServices(brand?: string | null): Service[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.services.filter((s) => s.brand === brand);
+    }
     return [...this.services];
   }
 
   public saveService(srv: Service): Service {
+    if (!srv.brand) srv.brand = 'Device Doctor India';
     const idx = this.services.findIndex((s) => s.id === srv.id);
     if (idx >= 0) {
       this.services[idx] = { ...this.services[idx], ...srv, updatedAt: new Date().toISOString() };
@@ -766,11 +793,15 @@ class MockStore {
   }
 
   // --- Projects ---
-  public getProjects(): Project[] {
+  public getProjects(brand?: string | null): Project[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.projects.filter((p) => p.brand === brand);
+    }
     return [...this.projects];
   }
 
   public saveProject(proj: Project): Project {
+    if (!proj.brand) proj.brand = 'Device Doctor India';
     const idx = this.projects.findIndex((p) => p.id === proj.id);
     if (idx >= 0) {
       this.projects[idx] = { ...this.projects[idx], ...proj, updatedAt: new Date().toISOString() };
@@ -788,11 +819,15 @@ class MockStore {
   }
 
   // --- Payments ---
-  public getPayments(): Payment[] {
+  public getPayments(brand?: string | null): Payment[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.payments.filter((p) => p.brand === brand);
+    }
     return [...this.payments];
   }
 
   public savePayment(payment: Payment): Payment {
+    if (!payment.brand) payment.brand = 'Device Doctor India';
     const idx = this.payments.findIndex((p) => p.id === payment.id);
     if (idx >= 0) {
       this.payments[idx] = { ...this.payments[idx], ...payment, updatedAt: new Date().toISOString() };
@@ -810,11 +845,15 @@ class MockStore {
   }
 
   // --- GST Invoices ---
-  public getGstInvoices(): GstInvoice[] {
+  public getGstInvoices(brand?: string | null): GstInvoice[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.gstInvoices.filter((i) => i.brand === brand);
+    }
     return [...this.gstInvoices];
   }
 
   public saveGstInvoice(inv: GstInvoice): GstInvoice {
+    if (!inv.brand) inv.brand = 'Device Doctor India';
     const idx = this.gstInvoices.findIndex((i) => i.id === inv.id);
     if (idx >= 0) {
       this.gstInvoices[idx] = { ...this.gstInvoices[idx], ...inv, updatedAt: new Date().toISOString() };
@@ -832,11 +871,15 @@ class MockStore {
   }
 
   // --- Roles ---
-  public getRoles(): EmployeeRole[] {
+  public getRoles(brand?: string | null): EmployeeRole[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.roles.filter((r) => r.brand === brand);
+    }
     return [...this.roles];
   }
 
   public saveRole(role: EmployeeRole): EmployeeRole {
+    if (!role.brand) role.brand = 'Device Doctor India';
     const idx = this.roles.findIndex((r) => r.id === role.id);
     if (idx >= 0) {
       this.roles[idx] = { ...this.roles[idx], ...role, updatedAt: new Date().toISOString() };
@@ -853,12 +896,28 @@ class MockStore {
     return this.roles.length < initial;
   }
 
+  public getEmployeeRoles(brand?: string | null): EmployeeRole[] {
+    return this.getRoles(brand);
+  }
+
+  public saveEmployeeRole(role: EmployeeRole): EmployeeRole {
+    return this.saveRole(role);
+  }
+
+  public deleteEmployeeRole(id: string): boolean {
+    return this.deleteRole(id);
+  }
+
   // --- Employees ---
-  public getEmployees(): Employee[] {
+  public getEmployees(brand?: string | null): Employee[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.employees.filter((e) => e.brand === brand);
+    }
     return [...this.employees];
   }
 
   public saveEmployee(emp: Employee): Employee {
+    if (!emp.brand) emp.brand = 'Device Doctor India';
     const idx = this.employees.findIndex((e) => e.id === emp.id);
     if (idx >= 0) {
       this.employees[idx] = { ...this.employees[idx], ...emp, updatedAt: new Date().toISOString() };
@@ -876,11 +935,15 @@ class MockStore {
   }
 
   // --- Assignments ---
-  public getAssignments(): Assignment[] {
+  public getAssignments(brand?: string | null): Assignment[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.assignments.filter((a) => a.brand === brand);
+    }
     return [...this.assignments];
   }
 
   public saveAssignment(asn: Assignment): Assignment {
+    if (!asn.brand) asn.brand = 'Device Doctor India';
     const idx = this.assignments.findIndex((a) => a.id === asn.id);
     if (idx >= 0) {
       this.assignments[idx] = { ...this.assignments[idx], ...asn, updatedAt: new Date().toISOString() };
@@ -898,11 +961,15 @@ class MockStore {
   }
 
   // --- Employee Payments ---
-  public getEmployeePayments(): EmployeePayment[] {
+  public getEmployeePayments(brand?: string | null): EmployeePayment[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.employeePayments.filter((p) => p.brand === brand);
+    }
     return [...this.employeePayments];
   }
 
   public saveEmployeePayment(payment: EmployeePayment): EmployeePayment {
+    if (!payment.brand) payment.brand = 'Device Doctor India';
     const idx = this.employeePayments.findIndex((p) => p.id === payment.id);
     if (idx >= 0) {
       this.employeePayments[idx] = { ...this.employeePayments[idx], ...payment, updatedAt: new Date().toISOString() };
@@ -920,11 +987,15 @@ class MockStore {
   }
 
   // --- Expense Categories ---
-  public getExpenseCategories(): ExpenseCategory[] {
+  public getExpenseCategories(brand?: string | null): ExpenseCategory[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.expenseCategories.filter((c) => c.brand === brand);
+    }
     return [...this.expenseCategories];
   }
 
   public saveExpenseCategory(cat: ExpenseCategory): ExpenseCategory {
+    if (!cat.brand) cat.brand = 'Device Doctor India';
     const idx = this.expenseCategories.findIndex((c) => c.id === cat.id);
     if (idx >= 0) {
       this.expenseCategories[idx] = { ...this.expenseCategories[idx], ...cat, updatedAt: new Date().toISOString() };
@@ -942,11 +1013,15 @@ class MockStore {
   }
 
   // --- Expenses ---
-  public getExpenses(): Expense[] {
+  public getExpenses(brand?: string | null): Expense[] {
+    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+      return this.expenses.filter((e) => e.brand === brand);
+    }
     return [...this.expenses];
   }
 
   public saveExpense(exp: Expense): Expense {
+    if (!exp.brand) exp.brand = 'Device Doctor India';
     const idx = this.expenses.findIndex((e) => e.id === exp.id);
     if (idx >= 0) {
       this.expenses[idx] = { ...this.expenses[idx], ...exp, updatedAt: new Date().toISOString() };

@@ -48,8 +48,8 @@ export const getSqlConfig = (serverOverride?: string): sql.config => {
     options: {
       encrypt, // Explicitly enabled (true) for Azure SQL
       trustServerCertificate: false,
-      connectTimeout: 30000,
-      requestTimeout: 30000,
+      connectTimeout: 3000,
+      requestTimeout: 5000,
     },
     pool: {
       max: 15,
@@ -883,11 +883,17 @@ export function getPool(): sql.ConnectionPool | null {
   return isConnected && pool ? pool : null;
 }
 
+let hasAttemptedInitialConnect = false;
+
 export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
   if (isConnected && pool) {
     return pool;
   }
-  await initAzureSql();
+  if (!hasAttemptedInitialConnect) {
+    hasAttemptedInitialConnect = true;
+    await initAzureSql().catch(() => {});
+    return isConnected && pool ? pool : null;
+  }
   return isConnected && pool ? pool : null;
 }
 

@@ -1,7 +1,19 @@
 import React from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { BrandSwitcher } from '../common/BrandSwitcher';
-import { Menu, Sun, Moon, RefreshCw, Shield, Plus } from 'lucide-react';
+import {
+  Menu,
+  Sun,
+  Moon,
+  RefreshCw,
+  Shield,
+  Plus,
+  Lock,
+  Building2,
+  Wrench,
+  Code2,
+  TrendingUp,
+  Sparkles,
+} from 'lucide-react';
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -17,10 +29,24 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     openAddProjectModal,
     activeBrand,
     brandMeta,
+    brandPrefix,
     isConsolidatedView,
     databaseStatus,
     syncWithDatabase,
   } = useCrm();
+
+  const getBrandIcon = (name: string, className: string = 'w-3.5 h-3.5') => {
+    switch (name) {
+      case 'Device Doctor India':
+        return <Wrench className={className} />;
+      case 'Codestro':
+        return <Code2 className={className} />;
+      case 'FX Launch Pad':
+        return <TrendingUp className={className} />;
+      default:
+        return <Building2 className={className} />;
+    }
+  };
 
   const moduleNames: Record<string, string> = {
     dashboard: 'Executive Dashboard',
@@ -42,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
 
   return (
     <header className="sticky top-0 z-20 h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4">
-      {/* Left zone: Mobile toggle + Brand Switcher + Breadcrumb */}
+      {/* Left zone: Mobile toggle + Session-Locked Workspace + Breadcrumb */}
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenMobileSidebar}
@@ -52,8 +78,42 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Global Brand Switcher in Top Header */}
-        <BrandSwitcher variant="header" />
+        {/* Session-Locked Brand Workspace Indicator (Dropdown switcher removed to prevent accidental data contamination) */}
+        <div
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold select-none ${
+            isConsolidatedView
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : `${brandMeta.badgeBg} ${brandMeta.badgeBorder} ${brandMeta.badgeText}`
+          }`}
+          title={`Active Brand Workspace: ${activeBrand} (Session locked to this brand). Log out to select another brand workspace.`}
+        >
+          <div
+            className={`w-5 h-5 rounded-md bg-gradient-to-tr ${
+              isConsolidatedView ? 'from-emerald-600 to-teal-600' : brandMeta.avatarBg
+            } flex items-center justify-center text-white shrink-0 shadow-xs`}
+          >
+            {isConsolidatedView ? (
+              <Sparkles className="w-3 h-3" />
+            ) : (
+              getBrandIcon(activeBrand, 'w-3 h-3')
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold tracking-tight">
+              {isConsolidatedView ? 'All Brands (Consolidated)' : activeBrand}
+            </span>
+            {!isConsolidatedView && (
+              <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-black/10 dark:bg-white/10 font-bold">
+                {brandPrefix}
+              </span>
+            )}
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-slate-500 dark:text-slate-400 font-semibold border border-black/5 dark:border-white/10">
+              <Lock className="w-2.5 h-2.5 text-amber-500" />
+              <span>Locked</span>
+            </span>
+          </div>
+        </div>
 
         <div className="hidden sm:flex items-center gap-2 text-xs">
           <span className="text-slate-400">/</span>
