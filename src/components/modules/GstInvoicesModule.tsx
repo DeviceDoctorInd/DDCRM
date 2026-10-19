@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const GstInvoicesModule: React.FC = () => {
-  const { gstInvoices, payments, saveGstInvoice } = useCrm();
+  const { gstInvoices, payments, saveGstInvoice, activeBrand, brandPrefix } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [portalFilter, setPortalFilter] = useState<'ALL' | 'Yes' | 'No'>('ALL');
@@ -131,7 +131,7 @@ export const GstInvoicesModule: React.FC = () => {
   };
 
   // Save Modal Form
-  const handleSaveModal = (e: React.FormEvent) => {
+  const handleSaveModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoice) return;
 
@@ -142,6 +142,7 @@ export const GstInvoicesModule: React.FC = () => {
 
     const payload: GstInvoice = {
       ...selectedInvoice,
+      brand: selectedInvoice.brand || activeBrand,
       invoiceNumber: modalFormData.invoiceNumber.trim(),
       uploadedToGstPortal: modalFormData.uploadedToGstPortal,
       gstPortalUploadDate:
@@ -149,7 +150,7 @@ export const GstInvoicesModule: React.FC = () => {
       notes: modalFormData.notes.trim(),
     };
 
-    const res = saveGstInvoice(payload);
+    const res = await saveGstInvoice(payload);
     if (res.success) {
       setIsModalOpen(false);
       setSelectedInvoice(null);
@@ -204,7 +205,7 @@ export const GstInvoicesModule: React.FC = () => {
           format: (r) => r.notes || '',
         },
       ],
-      'DeviceDoctorIndia_GST_Invoices_Ledger'
+      `${brandPrefix}_GST_Invoices_Ledger_${new Date().toISOString().slice(0, 10)}`
     );
   };
 

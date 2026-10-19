@@ -14,12 +14,14 @@ import {
   X,
   FileSpreadsheet,
 } from 'lucide-react';
+import { BrandSafetyGuardBanner } from '../common/BrandSafetyGuardBanner';
+import { BrandSafetyConfirmModal } from '../common/BrandSafetyConfirmModal';
 
 const CURRENCIES: CurrencyCode[] = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'USDT', 'BTC'];
 const STATUS_OPTIONS: ClientStatus[] = ['Active', 'Prospect', 'Inactive', 'Blocked'];
 
 export const ClientsModule: React.FC = () => {
-  const { clients, saveClient, deleteClient, getClientProjectsCount } = useCrm();
+  const { clients, saveClient, deleteClient, getClientProjectsCount, activeBrand, brandPrefix } = useCrm();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +31,8 @@ export const ClientsModule: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [pendingClientSave, setPendingClientSave] = useState<Client | null>(null);
 
   // KPIs
   const totalClients = clients.length;
@@ -69,10 +73,11 @@ export const ClientsModule: React.FC = () => {
       const matchesSearch =
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.city && c.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.gstNumber && c.gstNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchTerm.toLowerCase());
+        (c.contactPerson && c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.phone && c.phone.toLowerCase().includes(searchTerm.toLowerCase()));
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
 
@@ -102,13 +107,14 @@ export const ClientsModule: React.FC = () => {
           format: (r) => getClientProjectsCount(r.id),
         },
       ],
-      'DeviceDoctorIndia_Clients'
+      `${brandPrefix}_Clients_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
   const handleOpenAdd = () => {
     setFormError(null);
     setEditingClient({
+      brand: activeBrand,
       name: '',
       contactPerson: '',
       phone: '',
@@ -126,11 +132,11 @@ export const ClientsModule: React.FC = () => {
 
   const handleOpenEdit = (client: Client) => {
     setFormError(null);
-    setEditingClient({ ...client });
+    setEditingClient({ ...client, brand: client.brand || activeBrand });
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
 
@@ -148,13 +154,29 @@ export const ClientsModule: React.FC = () => {
       }
     }
 
-    const res = saveClient(editingClient as Client);
+    const clientToSave = { ...editingClient, brand: editingClient.brand || activeBrand } as Client;
+
+    // Safety Guard: If creating a new client, show confirmation modal to verify active workspace
+    if (!editingClient.id) {
+      setPendingClientSave(clientToSave);
+      setIsConfirmModalOpen(true);
+      return;
+    }
+
+    await executeSaveClient(clientToSave);
+  };
+
+  const executeSaveClient = async (clientToSave: Client) => {
+    const res = await saveClient(clientToSave);
     if (res.success) {
       setIsModalOpen(false);
+      setIsConfirmModalOpen(false);
       setEditingClient(null);
+      setPendingClientSave(null);
       setFormError(null);
     } else {
       setFormError(res.error || 'Failed to save client');
+      setIsConfirmModalOpen(false);
     }
   };
 
@@ -244,7 +266,12 @@ export const ClientsModule: React.FC = () => {
                           {client.contactPerson}
                         </div>
                         <div className="text-[11px] text-slate-400">
-                          {client.email} · {client.phone}
+                          {client.email ? (
+                            <span>{client.email}</span>
+                          ) : (
+                            <span className="italic text-slate-400">No Email</span>
+                          )}
+                          {client.phone && <span> · {client.phone}</span>}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-mono tabular-nums">
@@ -339,6 +366,14 @@ export const ClientsModule: React.FC = () => {
                 </div>
               )}
 
+              {/* Active Workspace Safety Guard Banner */}
+              <BrandSafetyGuardBanner
+                entityType="Client"
+                targetBrand={editingClient.brand || activeBrand}
+                isEditing={!!editingClient.id}
+                recordId={editingClient.id}
+              />
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Client Name */}
                 <div className="md:col-span-2">
@@ -372,7 +407,7 @@ export const ClientsModule: React.FC = () => {
                 {/* Phone */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Contact Phone
+                    Contact Phone / Mobile (Optional)
                   </label>
                   <input
                     type="text"
@@ -386,7 +421,7 @@ export const ClientsModule: React.FC = () => {
                 {/* Email */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Billing / Communication Email
+                    Billing / Communication Email (Optional)
                   </label>
                   <input
                     type="email"
@@ -400,7 +435,7 @@ export const ClientsModule: React.FC = () => {
                 {/* GST Number */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    GST Number (Strict 15 Chars, Unique)
+                    GST Number (Optional, 15 Chars)
                   </label>
                   <input
                     type="text"
@@ -416,7 +451,7 @@ export const ClientsModule: React.FC = () => {
                     className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Must be 15 alphanumeric characters if provided.
+                    Optional — strictly 15 alphanumeric characters if provided.
                   </span>
                 </div>
 
@@ -542,6 +577,22 @@ export const ClientsModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Brand Safety Confirmation Modal */}
+      <BrandSafetyConfirmModal
+        isOpen={isConfirmModalOpen}
+        entityType="Client"
+        entityName={pendingClientSave?.name || editingClient?.name || ''}
+        targetBrand={pendingClientSave?.brand || editingClient?.brand || activeBrand}
+        onConfirm={() => {
+          if (pendingClientSave) {
+            executeSaveClient(pendingClientSave);
+          }
+        }}
+        onCancel={() => {
+          setIsConfirmModalOpen(false);
+        }}
+      />
     </div>
   );
 };

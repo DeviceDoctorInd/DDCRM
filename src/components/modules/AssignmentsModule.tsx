@@ -45,6 +45,8 @@ export const AssignmentsModule: React.FC = () => {
     getEmployeeById,
     getRoleById,
     getClientById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,11 +143,12 @@ export const AssignmentsModule: React.FC = () => {
     const defaultRole = defaultEmployee ? getRoleById(defaultEmployee.roleId) : undefined;
     const defaultClient = defaultProject ? getClientById(defaultProject.clientId) : undefined;
 
-    const newId = storageService.generateId('DDI-ASN');
+    const newId = storageService.generateId('ASN', activeBrand);
     const today = new Date().toISOString().slice(0, 10);
 
     setFormData({
       id: newId,
+      brand: activeBrand,
       projectId: defaultProject?.id || '',
       clientId: defaultProject?.clientId || '',
       clientName: defaultClient?.name || defaultProject?.clientName || '',
@@ -274,7 +277,7 @@ export const AssignmentsModule: React.FC = () => {
   };
 
   // Save Assignment
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -310,7 +313,8 @@ export const AssignmentsModule: React.FC = () => {
     }
 
     const payload: Assignment = {
-      id: formData.id || storageService.generateId('DDI-ASN'),
+      id: formData.id || storageService.generateId('ASN', activeBrand),
+      brand: formData.brand || activeBrand,
       projectId: formData.projectId,
       clientId: formData.clientId || '',
       clientName: formData.clientName || '',
@@ -328,7 +332,7 @@ export const AssignmentsModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveAssignment(payload);
+    const res = await saveAssignment(payload);
     if (!res.success) {
       setFormError(res.error || 'Failed to save assignment.');
       return;
@@ -384,7 +388,7 @@ export const AssignmentsModule: React.FC = () => {
       { key: 'employeeNotes', header: 'Employee Notes' },
     ];
 
-    exportToCsv(filteredAssignments, columns, 'ddi_assignments_register');
+    exportToCsv(filteredAssignments, columns, `${brandPrefix}_assignments_register_${new Date().toISOString().slice(0, 10)}`);
   };
 
   // Status Badge Helper

@@ -29,6 +29,8 @@ export const EmployeesModule: React.FC = () => {
     saveEmployee,
     deleteEmployee,
     getRoleById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,7 +114,7 @@ export const EmployeesModule: React.FC = () => {
       const matchesSearch =
         emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (emp.notes && emp.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (emp.employeeType && emp.employeeType.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (role && role.roleName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -157,7 +159,7 @@ export const EmployeesModule: React.FC = () => {
         { key: 'comesUnderTds', header: 'Comes Under TDS' },
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
       ],
-      'DeviceDoctorIndia_Employees_Directory'
+      `${brandPrefix}_Employees_Directory_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -166,7 +168,7 @@ export const EmployeesModule: React.FC = () => {
     setIsEditing(false);
 
     // Auto-generate fresh Employee ID
-    const freshId = storageService.generateId('DDI-EMP');
+    const freshId = storageService.generateId('EMP', activeBrand);
     const firstRoleId = roles.find((r) => r.status === 'Active')?.id || (roles[0]?.id ?? '');
 
     setFormData({
@@ -194,7 +196,7 @@ export const EmployeesModule: React.FC = () => {
       id: emp.id,
       name: emp.name,
       roleId: emp.roleId,
-      email: emp.email,
+      email: emp.email || '',
       status: emp.status || 'Active',
       joiningDate: emp.joiningDate || emp.joinedDate || new Date().toISOString().slice(0, 10),
       costOfEmployee: cost,
@@ -205,7 +207,7 @@ export const EmployeesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -221,26 +223,25 @@ export const EmployeesModule: React.FC = () => {
       return;
     }
 
-    // 3. Email validation & strict uniqueness check
-    const cleanEmail = formData.email.trim().toLowerCase();
-    if (!cleanEmail) {
-      setFormError('Email address is required.');
-      return;
-    }
-    const duplicateEmail = employees.find(
-      (e) => e.id !== formData.id && e.email?.trim().toLowerCase() === cleanEmail
-    );
-    if (duplicateEmail) {
-      setFormError(
-        `Email "${formData.email.trim()}" is already registered to Employee "${duplicateEmail.name}" (${duplicateEmail.id}). Email must be strictly unique across all employees.`
+    // 3. Email validation: OPTIONAL, but if provided, must be strictly unique
+    const cleanEmail = formData.email ? formData.email.trim().toLowerCase() : '';
+    if (cleanEmail) {
+      const duplicateEmail = employees.find(
+        (e) => e.id !== formData.id && e.email && e.email.trim().toLowerCase() === cleanEmail
       );
-      return;
+      if (duplicateEmail) {
+        setFormError(
+          `Email "${formData.email.trim()}" is already registered to Employee "${duplicateEmail.name}" (${duplicateEmail.id}). Email must be strictly unique across all employees if provided.`
+        );
+        return;
+      }
     }
 
     const costVal = Number(formData.costOfEmployee) || 0;
 
     const payload: Employee = {
       id: formData.id,
+      brand: activeBrand,
       name: formData.name.trim(),
       roleId: formData.roleId,
       email: cleanEmail,
@@ -257,7 +258,7 @@ export const EmployeesModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveEmployee(payload);
+    const res = await saveEmployee(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormError(null);
@@ -352,7 +353,7 @@ export const EmployeesModule: React.FC = () => {
 
                       {/* 4. Email */}
                       <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
-                        {emp.email}
+                        {emp.email || <span className="italic text-slate-400">Not Provided</span>}
                       </td>
 
                       {/* 5. Active */}
@@ -541,15 +542,14 @@ export const EmployeesModule: React.FC = () => {
                   </span>
                 </div>
 
-                {/* 4. Email (Email input, required — strictly UNIQUE across all employees) */}
+                {/* 4. Email (Email input, optional — strictly UNIQUE if provided) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    4. Email Address <span className="text-rose-500">* (Strictly Unique)</span>
+                    4. Email Address (Optional — Strictly unique if provided)
                   </label>
                   <div className="relative">
                     <input
                       type="email"
-                      required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       placeholder="karthik.r@devicedoctor.in"

@@ -49,7 +49,11 @@ const PALETTE = {
 const DONUT_COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#64748b'];
 
 export const EmployeeReportSubModule: React.FC = () => {
-  const { employees, roles, assignments, employeePayments, projects } = useCrm();
+  const { employees, roles, assignments, employeePayments, projects, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
+
+  const reportTitle = isConsolidatedView
+    ? 'CONSOLIDATED GROUP — EMPLOYEE DASHBOARD'
+    : `${activeBrand.toUpperCase()} — EMPLOYEE DASHBOARD`;
 
   // Find default employee: Prefer "SAUMYA KHADELWAL" / "SAUMYA KHANDELWAL" or first active employee
   const defaultEmployeeId = useMemo(() => {
@@ -249,7 +253,7 @@ export const EmployeeReportSubModule: React.FC = () => {
   // --- CSV Export Handler ---
   const handleExportCsv = () => {
     const summaryRows = [
-      { metric: 'Report Module', value: 'DEVICE DOCTOR — EMPLOYEE DASHBOARD', notes: `Employee: ${employeeDisplayName}` },
+      { metric: 'Report Module', value: reportTitle, notes: `Employee: ${employeeDisplayName}` },
       { metric: 'Date Window', value: `From ${fromDate} to ${toDate}`, notes: `Preset: ${activePreset}` },
       { metric: 'Assignments', value: totalAssignmentsCount, notes: 'Total count of assignments allocated within period' },
       { metric: 'Assigned Amount', value: totalAssignedAmountINR, notes: 'Sum of Amount from Assignments module' },
@@ -270,7 +274,7 @@ export const EmployeeReportSubModule: React.FC = () => {
         },
         { key: 'notes', header: 'Accounting Specification & Formula' },
       ],
-      `DeviceDoctorIndia_Employee_Dashboard_${selectedEmployee ? selectedEmployee.id : 'ALL'}_${fromDate}_to_${toDate}`
+      `${brandPrefix}_Employee_Dashboard_${selectedEmployee ? selectedEmployee.id : 'ALL'}_${fromDate}_to_${toDate}`
     );
   };
 
@@ -497,7 +501,7 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>DEVICE DOCTOR — EMPLOYEE DASHBOARD</span>
+              <span>{reportTitle}</span>
               <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                 AUDITED PAYROLL LEDGER
               </span>

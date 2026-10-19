@@ -7,15 +7,107 @@ export type ProjectStatus = 'Proposal' | 'Contracted' | 'In Progress' | 'On Hold
 export type PaymentMode = 'GST Invoice' | 'Non GST Online' | 'Cash' | 'Crypto';
 export type PaymentStatus = 'Received' | 'Pending' | 'Failed' | 'Cancelled';
 
+// --- Multi-Brand Workspace Architecture ---
+export type BrandName = 'Device Doctor India' | 'Codestro' | 'FX Launch Pad' | 'DUNS';
+export type BrandPrefix = 'DDI' | 'CDS' | 'FXL' | 'DNS';
+export type ActiveBrandFilter = BrandName | 'All Brands (Consolidated View)';
+
+export interface BrandMeta {
+  name: BrandName;
+  prefix: BrandPrefix;
+  shortName: string;
+  tagline: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  accentBg: string;
+  accentHover: string;
+  accentBorder: string;
+  accentText: string;
+  accentRing: string;
+  avatarBg: string;
+}
+
+export const BRAND_CONFIG: Record<BrandName, BrandMeta> = {
+  'Device Doctor India': {
+    name: 'Device Doctor India',
+    prefix: 'DDI',
+    shortName: 'Device Doctor',
+    tagline: 'Enterprise IT, Cloud & Digital Operations',
+    badgeBg: 'bg-cyan-50 dark:bg-cyan-950/60',
+    badgeBorder: 'border-cyan-200 dark:border-cyan-800',
+    badgeText: 'text-cyan-700 dark:text-cyan-300',
+    accentBg: 'bg-cyan-600',
+    accentHover: 'hover:bg-cyan-500',
+    accentBorder: 'border-cyan-600',
+    accentText: 'text-cyan-600 dark:text-cyan-400',
+    accentRing: 'focus:ring-cyan-500',
+    avatarBg: 'from-cyan-600 to-blue-600',
+  },
+  'Codestro': {
+    name: 'Codestro',
+    prefix: 'CDS',
+    shortName: 'Codestro',
+    tagline: 'SaaS Engineering & Custom Software Studio',
+    badgeBg: 'bg-violet-50 dark:bg-violet-950/60',
+    badgeBorder: 'border-violet-200 dark:border-violet-800',
+    badgeText: 'text-violet-700 dark:text-violet-300',
+    accentBg: 'bg-violet-600',
+    accentHover: 'hover:bg-violet-500',
+    accentBorder: 'border-violet-600',
+    accentText: 'text-violet-600 dark:text-violet-400',
+    accentRing: 'focus:ring-violet-500',
+    avatarBg: 'from-violet-600 to-purple-600',
+  },
+  'FX Launch Pad': {
+    name: 'FX Launch Pad',
+    prefix: 'FXL',
+    shortName: 'FX Launch Pad',
+    tagline: 'FinTech, Algorithmic Trading & Prop Firm Tech',
+    badgeBg: 'bg-amber-50 dark:bg-amber-950/60',
+    badgeBorder: 'border-amber-200 dark:border-amber-800',
+    badgeText: 'text-amber-700 dark:text-amber-300',
+    accentBg: 'bg-amber-600',
+    accentHover: 'hover:bg-amber-500',
+    accentBorder: 'border-amber-600',
+    accentText: 'text-amber-600 dark:text-amber-400',
+    accentRing: 'focus:ring-amber-500',
+    avatarBg: 'from-amber-600 to-emerald-600',
+  },
+  'DUNS': {
+    name: 'DUNS',
+    prefix: 'DNS',
+    shortName: 'DUNS',
+    tagline: 'Global Business Verification, Corporate Intelligence & Regulatory Compliance',
+    badgeBg: 'bg-indigo-50 dark:bg-indigo-950/60',
+    badgeBorder: 'border-indigo-200 dark:border-indigo-800',
+    badgeText: 'text-indigo-700 dark:text-indigo-300',
+    accentBg: 'bg-indigo-600',
+    accentHover: 'hover:bg-indigo-500',
+    accentBorder: 'border-indigo-600',
+    accentText: 'text-indigo-600 dark:text-indigo-400',
+    accentRing: 'focus:ring-indigo-500',
+    avatarBg: 'from-indigo-600 to-sky-600',
+  },
+};
+
+export const getBrandPrefix = (brand?: BrandName | string): BrandPrefix => {
+  if (brand === 'Codestro') return 'CDS';
+  if (brand === 'FX Launch Pad') return 'FXL';
+  if (brand === 'DUNS') return 'DNS';
+  return 'DDI';
+};
+
 export interface Client {
-  id: string; // e.g. CL-001
+  id: string; // e.g. DDI-CL-001, CDS-CL-001, FXL-CL-001, DNS-CL-001
+  brand?: BrandName; // Multi-brand tag
   name: string;
-  contactPerson: string;
-  phone: string;
-  email: string;
-  city: string;
-  country: string;
-  gstNumber?: string; // 15 alphanumeric chars, unique if provided
+  contactPerson?: string;
+  phone?: string; // Optional Contact / Mobile Number
+  email?: string; // Optional Billing / Communication Email
+  city?: string;
+  country?: string;
+  gstNumber?: string; // Optional 15 alphanumeric chars, unique if provided
   preferredCurrency: CurrencyCode;
   clientSince: string; // YYYY-MM-DD
   status: ClientStatus;
@@ -25,8 +117,9 @@ export interface Client {
 }
 
 export interface ServiceCategory {
-  id: string; // CAT-001
-  name: string; // Unique
+  id: string; // e.g. DDI-CAT-001
+  brand?: BrandName;
+  name: string; // Unique within brand
   description: string;
   status: CategoryStatus;
   createdAt: string;
@@ -37,6 +130,7 @@ export type ExpenseCategoryStatus = 'Active' | 'Inactive';
 
 export interface ExpenseCategory {
   id: string; // Auto-generated & read-only, e.g. DDI-EXPCAT-001
+  brand?: BrandName;
   name: string; // Required, strictly unique
   description?: string; // Textarea, optional
   status: ExpenseCategoryStatus; // Active | Inactive
@@ -45,7 +139,8 @@ export interface ExpenseCategory {
 }
 
 export interface Service {
-  id: string; // SRV-001
+  id: string; // e.g. DDI-SRV-001
+  brand?: BrandName;
   name: string;
   categoryId: string; // FK to ServiceCategory.id
   description: string;
@@ -79,7 +174,8 @@ export interface PaymentPhase {
 }
 
 export interface Project {
-  id: string; // Smart format: DDI - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE] (auto-generated, read-only)
+  id: string; // Smart format: [PREFIX] - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE] (auto-generated, read-only)
+  brand?: BrandName;
   clientId: string; // Foreign key to Client.id
   clientName: string; // Auto-filled from Client
   serviceId: string; // Foreign key to Service.id (Service Type)
@@ -90,7 +186,7 @@ export interface Project {
   committedEndDate: string; // Auto-calculated read-only: startDate + committedDays
   actualEndDate?: string; // Date picker, optional
   status: ProjectStatus; // Proposal, Contracted, In Progress, On Hold, Completed, Cancelled
-  paymentMode: PaymentMode; // Bank Transfer, UPI, Cash, Cheque, Card, Crypto, Milestone-based
+  paymentMode: PaymentMode; // GST Invoice, Non GST Online, Cash, Crypto
   currency: CurrencyCode; // Dropdown: INR, USD, EUR, etc.
   contract: number; // Contract amount in selected currency
   exchangeRate: number; // Defaults to 1 for INR, editable for others
@@ -120,11 +216,12 @@ export interface PaymentProofDocument {
 }
 
 export interface Payment {
-  id: string; // Auto-generated e.g. DDI-PAY-001
+  id: string; // Auto-generated e.g. DDI-PAY-001, CDS-PAY-001, FXL-PAY-001
+  brand?: BrandName;
   projectId: string; // FK to Project.id (Smart Project ID)
   clientId: string; // Auto-filled & read-only from Project
   clientName?: string; // Auto-filled & read-only from Project
-  paymentMode: PaymentMode; // Dropdown: Bank Transfer, UPI, Cash, Cheque, Card, Crypto, Milestone-based
+  paymentMode: PaymentMode; // Dropdown: GST Invoice, Non GST Online, Cash, Crypto
   paymentDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
   amountReceived: number; // Numeric input in selected currency
@@ -151,8 +248,9 @@ export type EmployeeType = 'Salary Basis' | 'Contract Basis';
 export type TdsOption = 'Yes' | 'No';
 
 export interface EmployeeRole {
-  id: string; // ROL-001
-  roleName: string; // Unique
+  id: string; // e.g. DDI-ROL-001, CDS-ROL-001, FXL-ROL-001
+  brand?: BrandName;
+  roleName: string; // Unique within brand
   department: string;
   status: CategoryStatus;
   description: string;
@@ -161,10 +259,11 @@ export interface EmployeeRole {
 }
 
 export interface Employee {
-  id: string; // Auto-generated & read-only, e.g. DDI-EMP-001
+  id: string; // Auto-generated & read-only, e.g. DDI-EMP-001, CDS-EMP-001, FXL-EMP-001, DNS-EMP-001
+  brand?: BrandName;
   name: string; // Employee Name, required
   roleId: string; // FK to EmployeeRole.id (Linked strictly by Role ID)
-  email: string; // Email, required — strictly UNIQUE
+  email?: string; // Email (Optional — strictly unique if provided)
   status: EmployeeStatus; // Active / Inactive
   joiningDate: string; // YYYY-MM-DD
   costOfEmployee: number; // Cost of Employee in INR
@@ -180,10 +279,12 @@ export interface Employee {
   phone?: string;
   assignedProjectsCount?: number;
 }
+
 export type AssignmentPaymentStatus = 'Pending' | 'Partially Paid' | 'Paid' | 'On Hold' | 'Cancelled';
 
 export interface Assignment {
-  id: string; // Auto-generated & read-only, e.g. DDI-ASN-001
+  id: string; // Auto-generated & read-only, e.g. DDI-ASN-001, CDS-ASN-001, FXL-ASN-001
+  brand?: BrandName;
   projectId: string; // Project ID (smart ID)
   clientId: string; // Auto-filled from Project ID
   clientName: string; // Auto-filled from Project ID
@@ -208,7 +309,8 @@ export type EmployeePaymentMode =
   | 'Crypto';
 
 export interface EmployeePayment {
-  id: string; // Auto-generated & read-only, e.g. DDI-EPAY-001 or <ASSIGNMENT_ID>-PAY-1
+  id: string; // Auto-generated & read-only, e.g. DDI-EPAY-001, CDS-EPAY-001, FXL-EPAY-001
+  brand?: BrandName;
   assignmentId: string; // Dropdown populated from Assignments
   projectId: string; // Auto-filled & read-only
   employeeId: string; // Auto-filled & read-only
@@ -227,7 +329,8 @@ export interface EmployeePayment {
 export type ExpensePaymentStatus = 'Paid' | 'Pending' | 'Failed' | 'Cancelled';
 
 export interface Expense {
-  id: string; // Auto-generated & read-only, e.g. DDI-EXP-001
+  id: string; // Auto-generated & read-only, e.g. DDI-EXP-001, CDS-EXP-001, FXL-EXP-001
+  brand?: BrandName;
   projectId: string; // "NA" or Project ID
   clientId: string; // Auto-filled from Project ID, or "NA"
   clientName: string; // Auto-filled from Project ID, or "NA"
@@ -249,7 +352,8 @@ export interface Expense {
 export type GstPortalUploadStatus = 'Yes' | 'No';
 
 export interface GstInvoice {
-  id: string; // Auto-generated e.g. DDI-GST-001
+  id: string; // Auto-generated e.g. DDI-GST-001, CDS-GST-001, FXL-GST-001
+  brand?: BrandName;
   paymentId: string; // FK to Payment.id
   projectId: string; // Pulled from Payment
   clientId: string; // Pulled from Payment
@@ -259,7 +363,6 @@ export interface GstInvoice {
   currency?: CurrencyCode; // Pulled from Payment
   amountINR: number; // Pulled from Payment
   gstAmountINR: number; // Auto-calculated: amountINR * 0.18
-  // 4 Manual Fields:
   invoiceNumber: string; // Zoho INV Number (e.g., INV-2026-001)
   uploadedToGstPortal: GstPortalUploadStatus; // Dropdown: Yes / No
   gstPortalUploadDate?: string; // Date picker (enabled when Uploaded to GST Portal is 'Yes')
@@ -268,12 +371,39 @@ export interface GstInvoice {
   updatedAt: string;
 }
 
+export type UserRole = 'Super Admin' | 'Brand Admin' | 'Project Manager' | 'Accountant' | 'Viewer';
+
+export interface AppUser {
+  id: string; // e.g. USR-001
+  name: string;
+  email: string;
+  password?: string;
+  role: UserRole;
+  brand?: BrandName | 'All';
+  status: 'Active' | 'Inactive';
+  avatar?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: UserRole | string;
+  brand?: BrandName | 'All';
   avatar?: string;
+}
+
+export interface DatabaseStatus {
+  connected: boolean;
+  server: string;
+  database: string;
+  authType: string;
+  user: string;
+  error?: string | null;
+  timestamp: string;
+  tables?: { [tableName: string]: number };
 }
 
 export type ReportsSubTab = 'business' | 'client' | 'employee' | 'overview';
@@ -292,7 +422,16 @@ export type ActiveModule =
   | 'employee-payments'
   | 'expense-categories'
   | 'expenses'
-  | 'reports';
+  | 'reports'
+  | 'users';
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  message: string;
+}
+
+export type ReferentialBlockState = ReferentialIntegrityBlock;
 
 export interface ReferentialIntegrityBlock {
   isOpen: boolean;

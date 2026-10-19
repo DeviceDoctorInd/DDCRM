@@ -21,6 +21,8 @@ export const EmployeeRolesModule: React.FC = () => {
     saveRole,
     deleteRole,
     getRoleEmployeesCount,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,13 +97,14 @@ export const EmployeeRolesModule: React.FC = () => {
         },
         { key: 'status', header: 'Status' },
       ],
-      'DeviceDoctorIndia_EmployeeRoles'
+      `${brandPrefix}_EmployeeRoles_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
   const handleOpenAdd = () => {
     setFormError(null);
     setEditingRole({
+      brand: activeBrand,
       roleName: '',
       department: 'Software Engineering',
       status: 'Active',
@@ -116,7 +119,7 @@ export const EmployeeRolesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole) return;
 
@@ -135,7 +138,7 @@ export const EmployeeRolesModule: React.FC = () => {
       return;
     }
 
-    const res = saveRole(editingRole as EmployeeRole);
+    const res = await saveRole({ ...editingRole, brand: editingRole.brand || activeBrand } as EmployeeRole);
     if (res.success) {
       setIsModalOpen(false);
       setEditingRole(null);

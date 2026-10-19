@@ -70,6 +70,8 @@ export const PaymentsModule: React.FC = () => {
     deletePayment,
     getClientById,
     getProjectById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -190,7 +192,7 @@ export const PaymentsModule: React.FC = () => {
         },
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
       ],
-      'DeviceDoctorIndia_Payments'
+      `${brandPrefix}_Payments_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -198,7 +200,7 @@ export const PaymentsModule: React.FC = () => {
   const handleOpenAdd = () => {
     setFormError(null);
     setIsEditing(false);
-    const autoId = storageService.generateId('DDI-PAY');
+    const autoId = storageService.generateId('PAY', activeBrand);
     const defaultProject = projects.length > 0 ? projects[0] : undefined;
     const defaultClient = defaultProject
       ? clients.find((c) => c.id === defaultProject.clientId)
@@ -214,6 +216,7 @@ export const PaymentsModule: React.FC = () => {
 
     setFormData({
       id: autoId,
+      brand: activeBrand,
       projectId: defaultProject?.id || '',
       clientId: defaultProject?.clientId || defaultClient?.id || '',
       clientName: defaultProject?.clientName || defaultClient?.name || '',
@@ -224,7 +227,7 @@ export const PaymentsModule: React.FC = () => {
       currency: projectCurrency,
       exchangeRate: projectRate,
       amountINR: initialAmountINR,
-      referenceUtr: `UTR-DDI-${Date.now().toString().slice(-6)}`,
+      referenceUtr: `UTR-${brandPrefix}-${Date.now().toString().slice(-6)}`,
       paymentStatus: 'Received',
       daysOverdue: 0,
       notes: '',
@@ -368,7 +371,7 @@ export const PaymentsModule: React.FC = () => {
     : 0;
 
   // Form submit
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.projectId) {
       setFormError('Please select a Project ID from the dropdown.');
@@ -408,6 +411,7 @@ export const PaymentsModule: React.FC = () => {
 
     const payload: Payment = {
       id: formData.id || '',
+      brand: formData.brand || activeBrand,
       projectId: formData.projectId,
       clientId: formData.clientId || selectedProject?.clientId || '',
       clientName: formData.clientName || selectedProject?.clientName || '',
@@ -431,7 +435,7 @@ export const PaymentsModule: React.FC = () => {
       outstandingAmount: formData.paymentStatus === 'Received' ? 0 : amountINR,
     };
 
-    const res = savePayment(payload);
+    const res = await savePayment(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormData({});

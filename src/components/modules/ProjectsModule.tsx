@@ -41,6 +41,8 @@ export const ProjectsModule: React.FC = () => {
     getProjectExpensesTotalINR,
     openAddProjectModal,
     openEditProjectModal,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -175,7 +177,7 @@ export const ProjectsModule: React.FC = () => {
         { key: 'projectManager', header: 'Project Manager' },
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
       ],
-      'DeviceDoctorIndia_Projects'
+      `${brandPrefix}_Projects_${new Date().toISOString().slice(0, 10)}`
     );
   };
 

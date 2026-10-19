@@ -27,14 +27,15 @@ import { ExpenseCategoriesModule } from './components/modules/ExpenseCategoriesM
 import { ExpensesModule } from './components/modules/ExpensesModule';
 import { GstInvoicesModule } from './components/modules/GstInvoicesModule';
 import { ReportsModule } from './components/modules/ReportsModule';
+import { UsersModule } from './components/modules/UsersModule';
 
 const MainLayout: React.FC = () => {
-  const { authUser, activeModule } = useCrm();
+  const { authUser, activeModule, hasConfirmedWorkspace } = useCrm();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // If user is not logged in, render the login screen
-  if (!authUser) {
+  // If user is not logged in or has not selected brand workspace for this session, render LoginScreen
+  if (!authUser || !hasConfirmedWorkspace) {
     return <LoginScreen />;
   }
 
@@ -68,6 +69,8 @@ const MainLayout: React.FC = () => {
         return <ExpensesModule />;
       case 'reports':
         return <ReportsModule />;
+      case 'users':
+        return <UsersModule />;
       default:
         return <DashboardModule />;
     }

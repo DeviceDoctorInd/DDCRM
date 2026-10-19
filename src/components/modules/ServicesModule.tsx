@@ -23,6 +23,8 @@ export const ServicesModule: React.FC = () => {
     deleteService,
     getCategoryById,
     getServiceProjectsCount,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -108,13 +110,14 @@ export const ServicesModule: React.FC = () => {
           format: (r) => getServiceProjectsCount(r.id),
         },
       ],
-      'DeviceDoctorIndia_Services'
+      `${brandPrefix}_Services_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
   const handleOpenAdd = () => {
     setFormError(null);
     setEditingService({
+      brand: activeBrand,
       name: '',
       categoryId: categories.length > 0 ? categories[0].id : '',
       description: '',
@@ -127,6 +130,7 @@ export const ServicesModule: React.FC = () => {
     setFormError(null);
     setEditingService({
       id: srv.id,
+      brand: srv.brand || activeBrand,
       name: srv.name,
       categoryId: srv.categoryId,
       description: srv.description,
@@ -135,7 +139,7 @@ export const ServicesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingService) return;
 
@@ -148,7 +152,7 @@ export const ServicesModule: React.FC = () => {
       return;
     }
 
-    const res = saveService(editingService as Service);
+    const res = await saveService({ ...editingService, brand: editingService.brand || activeBrand } as Service);
     if (res.success) {
       setIsModalOpen(false);
       setEditingService(null);

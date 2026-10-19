@@ -61,6 +61,8 @@ export const ExpensesModule: React.FC = () => {
     getProjectById,
     getExpenseCategoryById,
     getClientById,
+    activeBrand,
+    brandPrefix,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -191,7 +193,7 @@ export const ExpensesModule: React.FC = () => {
         { key: 'notes', header: 'Notes', format: (r) => r.notes || '' },
         { key: 'createdAt', header: 'Created At' },
       ],
-      'ddi_other_expenses_ledger'
+      `${brandPrefix}_expenses_${new Date().toISOString().slice(0, 10)}`
     );
   };
 
@@ -199,13 +201,14 @@ export const ExpensesModule: React.FC = () => {
   const handleOpenAdd = () => {
     setIsEditing(false);
     setFormError(null);
-    const newId = storageService.generateId('DDI-EXP');
+    const newId = storageService.generateId('EXP', activeBrand);
     const today = new Date().toISOString().slice(0, 10);
     const activeCats = expenseCategories.filter((c) => c.status === 'Active');
     const defaultCatId = activeCats.length > 0 ? activeCats[0].id : '';
 
     setFormData({
       id: newId,
+      brand: activeBrand,
       projectId: 'NA',
       clientId: 'NA',
       clientName: 'NA',
@@ -309,7 +312,7 @@ export const ExpensesModule: React.FC = () => {
   };
 
   // Form Submit Handler
-  const handleSaveSubmit = (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -339,7 +342,8 @@ export const ExpensesModule: React.FC = () => {
     }
 
     const payload: Expense = {
-      id: formData.id || storageService.generateId('DDI-EXP'),
+      id: formData.id || storageService.generateId('EXP', activeBrand),
+      brand: formData.brand || activeBrand,
       projectId: formData.projectId || 'NA',
       clientId: formData.clientId || 'NA',
       clientName: formData.clientName || 'NA',
@@ -358,7 +362,7 @@ export const ExpensesModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = saveExpense(payload);
+    const res = await saveExpense(payload);
     if (res.success) {
       setIsModalOpen(false);
       setFormData({});

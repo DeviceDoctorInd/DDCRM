@@ -53,7 +53,11 @@ const PALETTE = {
 const DONUT_COLORS = ['#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#64748b'];
 
 export const ClientReportSubModule: React.FC = () => {
-  const { clients, projects, payments, employeePayments, assignments, expenses, services } = useCrm();
+  const { clients, projects, payments, employeePayments, assignments, expenses, services, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
+
+  const reportTitle = isConsolidatedView
+    ? 'CONSOLIDATED GROUP — CLIENT DASHBOARD'
+    : `${activeBrand.toUpperCase()} — CLIENT DASHBOARD`;
 
   // Find default client: Prefer "MUKUNDRA ROARING TIGERS" or first active client
   const defaultClientId = useMemo(() => {
@@ -332,7 +336,7 @@ export const ClientReportSubModule: React.FC = () => {
   // --- CSV Export Handler ---
   const handleExportCsv = () => {
     const summaryRows = [
-      { metric: 'Report Module', value: 'DEVICE DOCTOR — CLIENT DASHBOARD', notes: `Client: ${clientDisplayName}` },
+      { metric: 'Report Module', value: reportTitle, notes: `Client: ${clientDisplayName}` },
       { metric: 'Date Window', value: `From ${fromDate} to ${toDate}`, notes: `Preset: ${activePreset}` },
       { metric: 'Projects', value: totalProjectsCount, notes: 'Count of projects belonging to client within period' },
       { metric: 'Total Contract Value (INR)', value: totalContractValueINR, notes: 'Sum of all project contract values' },
@@ -368,7 +372,7 @@ export const ClientReportSubModule: React.FC = () => {
         },
         { key: 'notes', header: 'Formula & Detail' },
       ],
-      `DeviceDoctorIndia_Client_Dashboard_${selectedClient ? selectedClient.id : 'ALL'}_${fromDate}_to_${toDate}`
+      `${brandPrefix}_Client_Dashboard_${selectedClient ? selectedClient.id : 'ALL'}_${fromDate}_to_${toDate}`
     );
   };
 
@@ -612,7 +616,7 @@ export const ClientReportSubModule: React.FC = () => {
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>DEVICE DOCTOR — CLIENT DASHBOARD</span>
+              <span>{reportTitle}</span>
               <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
                 AUDITED CLIENT P&L
               </span>

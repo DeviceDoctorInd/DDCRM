@@ -24,6 +24,12 @@ import {
   BarChart3,
   TrendingUp,
   PieChart,
+  UserCog,
+  Lock,
+  Code2,
+  Building2,
+  Globe,
+  Database,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -56,9 +62,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     employeePayments,
     expenseCategories,
     expenses,
+    users,
     authUser,
     logout,
+    activeBrand,
+    brandPrefix,
+    brandMeta,
   } = useCrm();
+
+  const getBrandIcon = (name: string, className: string = 'w-4 h-4') => {
+    switch (name) {
+      case 'Device Doctor India':
+        return <Wrench className={className} />;
+      case 'Codestro':
+        return <Code2 className={className} />;
+      case 'FX Launch Pad':
+        return <TrendingUp className={className} />;
+      case 'DUNS':
+        return <Globe className={className} />;
+      default:
+        return <Building2 className={className} />;
+    }
+  };
 
   const [isReportsExpanded, setIsReportsExpanded] = useState(true);
 
@@ -178,6 +203,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Receipt className="w-4 h-4 shrink-0" />,
       count: expenses.length,
     },
+    {
+      id: 'users',
+      label: 'Admin & Users',
+      icon: <UserCog className="w-4 h-4 shrink-0" />,
+      count: users.length,
+    },
   ];
 
   const handleNavClick = (id: ActiveModule) => {
@@ -187,19 +218,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-slate-900 text-slate-200 border-r border-slate-800">
-      {/* Brand Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-            <Wrench className="w-5 h-5 text-white" />
+      {/* Session-Locked Brand Workspace Header (Non-clickable, no switcher) */}
+      <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
+          <div
+            className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${brandMeta.avatarBg} flex items-center justify-center text-white shadow-sm shrink-0`}
+            title={`Session strictly locked to ${activeBrand}`}
+          >
+            {getBrandIcon(activeBrand, 'w-4 h-4')}
           </div>
+
           {!isCollapsed && (
-            <div className="min-w-0">
-              <div className="text-sm font-bold tracking-tight text-white truncate">
-                Device Doctor India
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-white tracking-tight truncate">
+                  {activeBrand}
+                </span>
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
+                  {brandPrefix}
+                </span>
               </div>
-              <div className="text-[11px] text-cyan-400 font-medium truncate">
-                Enterprise CRM Portal
+              <div className="flex items-center gap-1 text-[10px] text-slate-400 truncate mt-0.5">
+                <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                <span>Locked Workspace</span>
               </div>
             </div>
           )}
@@ -208,7 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Mobile close button */}
         <button
           onClick={onCloseMobile}
-          className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md"
+          className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md shrink-0"
           aria-label="Close menu"
         >
           <X className="w-5 h-5" />
@@ -372,6 +413,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <LogOut className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Azure SQL Live Database Status Widget */}
+        {!isCollapsed ? (
+          <div className="mt-2 p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px]">
+            <div className="flex items-center justify-between text-slate-300 font-semibold mb-0.5">
+              <div className="flex items-center gap-1.5 text-blue-400">
+                <Database className="w-3 h-3" />
+                <span>Azure SQL Database</span>
+              </div>
+              <span className="flex h-1.5 w-1.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+            </div>
+            <div className="text-[9px] text-slate-400 font-mono truncate">
+              ddrcm.database.windows.net
+            </div>
+            <div className="text-[9px] text-cyan-400/90 font-mono truncate">
+              rathorehemant114@gmail.com
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-center my-1.5" title="Azure SQL: ddrcm.database.windows.net / DDCRM (rathorehemant114@gmail.com)">
+            <Database className="w-3.5 h-3.5 text-blue-400 hover:text-blue-300 transition-colors" />
+          </div>
         )}
 
         {/* Desktop Collapse Toggle */}
