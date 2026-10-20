@@ -100,25 +100,25 @@ export const EmployeePaymentsModule: React.FC = () => {
       label: 'Total Payouts Made',
       value: formatINR(totalPayoutsMade),
       subtext: 'Cumulative employee disbursements',
-      icon: <Wallet className="w-4 h-4 text-emerald-600" />,
+      icon: <Wallet className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Total Transactions',
       value: totalTransactions,
       subtext: 'Recorded payment vouchers',
-      icon: <CheckCircle className="w-4 h-4 text-blue-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: "This Month's Payouts",
       value: formatINR(thisMonthPayouts),
       subtext: 'Current billing period settlements',
-      icon: <Calendar className="w-4 h-4 text-cyan-600" />,
+      icon: <Calendar className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Remaining Assignment Balance',
       value: formatINR(remainingUnpaidBalance),
       subtext: 'Unpaid employee commitments',
-      icon: <Clock className="w-4 h-4 text-amber-500" />,
+      icon: <Clock className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
   ];
 
@@ -386,28 +386,28 @@ export const EmployeePaymentsModule: React.FC = () => {
     switch (mode) {
       case 'GST Invoice':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <CreditCard className="w-3 h-3" />
             GST Invoice
           </span>
         );
       case 'Non GST Online':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <ArrowUpRight className="w-3 h-3" />
             Non GST Online
           </span>
         );
       case 'Cash':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <Wallet className="w-3 h-3" />
             Cash
           </span>
         );
       case 'Crypto':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <Hash className="w-3 h-3" />
             Crypto
           </span>
@@ -483,7 +483,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleOpenAdd}
-                        className="mt-2 text-xs text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 font-semibold"
+                        className="mt-2 text-xs text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold"
                       >
                         + Record First Employee Payment
                       </button>
@@ -503,7 +503,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                     >
                       {/* 1. Payment ID */}
-                      <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {p.id}
                       </td>
 
@@ -525,7 +525,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       {/* 3. Employee */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
                             {employeeDisplayName.charAt(0)}
                           </div>
                           <div className="flex flex-col">
@@ -546,7 +546,7 @@ export const EmployeePaymentsModule: React.FC = () => {
 
                       {/* 5. Amount Paid */}
                       <td className="py-3 px-4 whitespace-nowrap text-right">
-                        <span className="inline-block font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                        <span className="inline-block font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
                           {formatINR(p.amountPaid)}
                         </span>
                       </td>
@@ -576,17 +576,17 @@ export const EmployeePaymentsModule: React.FC = () => {
                               setSelectedPaymentForProof(p);
                               setIsProofModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shadow-xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs"
                             title={`View Payment Proof (${p.paymentProof.name})`}
                           >
-                            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                             <span>View Proof</span>
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(p)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 italic hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 italic hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Attach Payment Proof / Receipt"
                           >
                             <span>+ Attach Proof</span>
@@ -619,7 +619,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setDeleteCandidate(p)}
-                            className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Delete Payment"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -642,7 +642,7 @@ export const EmployeePaymentsModule: React.FC = () => {
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-md">
+                <div className="p-2.5 rounded-xl bg-black text-white shadow-md">
                   <Wallet className="w-5 h-5" />
                 </div>
                 <div>
@@ -666,8 +666,8 @@ export const EmployeePaymentsModule: React.FC = () => {
             {/* Modal Body Form */}
             <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
               {formError && (
-                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-800 dark:text-slate-200" />
                   <span>{formError}</span>
                 </div>
               )}
@@ -676,8 +676,8 @@ export const EmployeePaymentsModule: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-cyan-600" />
-                    1. Assignment ID <span className="text-rose-500">*</span>
+                    <Layers className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                    1. Assignment ID <span className="text-slate-800 dark:text-slate-200">*</span>
                   </span>
                   <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
                     Select to auto-fill project & employee
@@ -687,7 +687,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                   value={formData.assignmentId || ''}
                   onChange={(e) => handleAssignmentChange(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
                 >
                   <option value="" disabled>
                     -- Select Assignment --
@@ -705,13 +705,13 @@ export const EmployeePaymentsModule: React.FC = () => {
                   })}
                 </select>
                 {selectedModalAssignment && (
-                  <div className="p-2.5 rounded-lg bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200/60 dark:border-cyan-800/40 text-[11px] text-cyan-900 dark:text-cyan-200 flex items-center justify-between">
+                  <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-between">
                     <div>
                       Task: <strong className="font-semibold">{selectedModalAssignment.workAssigned}</strong>
                     </div>
                     <div>
                       Allocated: <strong>{formatINR(selectedModalAssignment.amount)}</strong> | Remaining Balance:{' '}
-                      <strong className="text-emerald-600 dark:text-emerald-400">{formatINR(modalRemainingBalance)}</strong>
+                      <strong className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">{formatINR(modalRemainingBalance)}</strong>
                     </div>
                   </div>
                 )}
@@ -720,7 +720,7 @@ export const EmployeePaymentsModule: React.FC = () => {
               {/* Auto-filled details card */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <Sparkles className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   Auto-Filled Relational Fields (Read-Only)
                 </div>
 
@@ -735,7 +735,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       type="text"
                       readOnly
                       value={formData.id || ''}
-                      className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-cyan-600 dark:text-cyan-400 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed"
                     />
                   </div>
 
@@ -791,15 +791,15 @@ export const EmployeePaymentsModule: React.FC = () => {
                 {/* 6. Payment Date (Date picker, defaults to today) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-cyan-600" />
-                    6. Payment Date <span className="text-rose-500">*</span>
+                    <Calendar className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                    6. Payment Date <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <input
                     type="date"
                     required
                     value={formData.paymentDate || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
                   />
                 </div>
 
@@ -807,8 +807,8 @@ export const EmployeePaymentsModule: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                      7. Amount Paid (INR) <span className="text-rose-500">*</span>
+                      <Wallet className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                      7. Amount Paid (INR) <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       Max: {formatINR(modalRemainingBalance)}
@@ -824,10 +824,10 @@ export const EmployeePaymentsModule: React.FC = () => {
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, amountPaid: Number(e.target.value) || 0 }))
                     }
-                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-slate-900 outline-none"
                   />
                   {Number(formData.amountPaid) > modalRemainingBalance && (
-                    <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                    <p className="text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
                       Amount Paid exceeds remaining balance of {formatINR(modalRemainingBalance)}.
                     </p>
                   )}
@@ -836,8 +836,8 @@ export const EmployeePaymentsModule: React.FC = () => {
                 {/* 8. Payment Mode (Dropdown) */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-cyan-600" />
-                    8. Payment Mode <span className="text-rose-500">*</span>
+                    <CreditCard className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                    8. Payment Mode <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <select
                     value={formData.paymentMode || 'GST Invoice'}
@@ -848,7 +848,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       }))
                     }
                     required
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
                   >
                     {PAYMENT_MODES.map((mode) => (
                       <option key={mode} value={mode}>
@@ -862,7 +862,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <Hash className="w-3.5 h-3.5 text-cyan-600" />
+                      <Hash className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                       9. Reference / UTR
                     </span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
@@ -874,7 +874,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                     value={formData.referenceUtr || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, referenceUtr: e.target.value }))}
                     placeholder="e.g. EPAY-NEFT-991823101"
-                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
                   />
                 </div>
               </div>
@@ -883,11 +883,11 @@ export const EmployeePaymentsModule: React.FC = () => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                     <span>10. Payment Proof / Receipt Upload</span>
                   </label>
                   {formData.paymentProof && (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <span className="text-[10px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Attached
                     </span>
                   )}
@@ -907,7 +907,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                             />
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
+                          <div className="w-12 h-12 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
                             <FileText className="w-6 h-6" />
                           </div>
                         )}
@@ -926,7 +926,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                               href={formData.paymentProof.externalUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[10px] text-cyan-600 hover:underline flex items-center gap-0.5 mt-0.5"
+                              className="text-[10px] text-slate-800 dark:text-slate-200 hover:underline flex items-center gap-0.5 mt-0.5"
                             >
                               <span>External receipt link</span>
                               <ExternalLink className="w-2.5 h-2.5" />
@@ -952,7 +952,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleRemoveProof}
-                          className="p-1 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                          className="p-1 text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                           title="Remove attachment"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -961,8 +961,8 @@ export const EmployeePaymentsModule: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-400 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 mb-1 transition-colors" />
+                      <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 dark:hover:border-slate-700 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
+                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-slate-800 dark:text-slate-200 dark:group-hover:text-slate-800 dark:text-slate-200 mb-1 transition-colors" />
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                           Click to upload employee payment receipt / screenshot
                         </span>
@@ -989,7 +989,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                           placeholder="Or paste Google Drive / payroll voucher URL..."
                           value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
                           onChange={(e) => handleExternalUrlChange(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                         />
                       </div>
                     </div>
@@ -1014,7 +1014,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                         }));
                       }}
                       placeholder="e.g. IMPS reference screenshot from HDFC Netbanking • Cash voucher signed by employee..."
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
                 </div>
@@ -1023,7 +1023,7 @@ export const EmployeePaymentsModule: React.FC = () => {
               {/* 11. Notes (Textarea) */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                  <FileText className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   11. Notes
                 </label>
                 <textarea
@@ -1031,7 +1031,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                   value={formData.notes || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                   placeholder="e.g. Milestone 1 driver dispatch backend APIs payout cleared."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none resize-none"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none resize-none"
                 />
               </div>
 
@@ -1046,7 +1046,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4" />
                   {isEditing ? 'Save Changes' : 'Record Employee Payment'}
@@ -1062,7 +1062,7 @@ export const EmployeePaymentsModule: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>
@@ -1078,7 +1078,7 @@ export const EmployeePaymentsModule: React.FC = () => {
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               Are you sure you want to delete payment voucher{' '}
               <strong className="text-slate-900 dark:text-white">{deleteCandidate.id}</strong> of{' '}
-              <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+              <strong className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-mono">
                 {formatINR(deleteCandidate.amountPaid)}
               </strong>{' '}
               to <strong className="text-slate-900 dark:text-white">{deleteCandidate.employeeName}</strong>?
@@ -1099,7 +1099,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                   deleteEmployeePayment(deleteCandidate.id);
                   setDeleteCandidate(null);
                 }}
-                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
               >
                 Delete Payment
               </button>

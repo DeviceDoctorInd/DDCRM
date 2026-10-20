@@ -154,11 +154,11 @@ export const BusinessOverviewSubModule: React.FC = () => {
     const onHold = projects.filter((p) => p.status === 'On Hold' || p.status === 'Proposal').length;
 
     const items = [
-      { name: 'Active / In Progress', value: active, color: '#ef4444' }, // red as specified
-      { name: 'Completed', value: completed, color: '#f59e0b' }, // amber/yellow as specified
+      { name: 'Active / In Progress', value: active, color: '#0f172a' },
+      { name: 'Completed', value: completed, color: '#475569' },
     ];
     if (onHold > 0) {
-      items.push({ name: 'On Hold / Proposal', value: onHold, color: '#6366f1' });
+      items.push({ name: 'On Hold / Proposal', value: onHold, color: '#94a3b8' });
     }
     return items;
   }, [projects]);
@@ -166,14 +166,14 @@ export const BusinessOverviewSubModule: React.FC = () => {
   // --- Chart 2: Financial Position Horizontal Bar Chart Data (8 metrics) ---
   const financialPositionData = useMemo(() => {
     return [
-      { name: 'Contract Value', value: totalContractValueINR, fill: '#3b82f6' },
-      { name: 'Received', value: totalReceivedINR, fill: '#06b6d4' },
-      { name: 'Outstanding', value: totalOutstandingINR, fill: '#f59e0b' },
-      { name: 'Employee Cost', value: projectEmployeeCost, fill: '#6366f1' },
-      { name: 'Project Expenses', value: projectExpenses, fill: '#ec4899' },
-      { name: 'Fixed Expenses', value: fixedExpenses, fill: '#8b5cf6' },
-      { name: 'Project Profit', value: projectProfit, fill: '#10b981' },
-      { name: 'Business Profit', value: businessProfit, fill: '#059669' },
+      { name: 'Contract Value', value: totalContractValueINR, fill: '#0f172a' },
+      { name: 'Received', value: totalReceivedINR, fill: '#1e293b' },
+      { name: 'Outstanding', value: totalOutstandingINR, fill: '#64748b' },
+      { name: 'Employee Cost', value: projectEmployeeCost, fill: '#334155' },
+      { name: 'Project Expenses', value: projectExpenses, fill: '#475569' },
+      { name: 'Fixed Expenses', value: fixedExpenses, fill: '#64748b' },
+      { name: 'Project Profit', value: projectProfit, fill: '#000000' },
+      { name: 'Business Profit', value: businessProfit, fill: '#0f172a' },
     ];
   }, [
     totalContractValueINR,
@@ -303,7 +303,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
         <div>
           <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <span>{reportTitle}</span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-black text-white dark:bg-white dark:text-black font-semibold">
               EXECUTIVE BRIEFING
             </span>
           </h2>
@@ -319,7 +319,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-xs"
             title="Export Business Overview to CSV"
           >
-            <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            <Download className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
             <span>Export Business Overview (CSV / Print)</span>
           </button>
 
@@ -338,23 +338,23 @@ export const BusinessOverviewSubModule: React.FC = () => {
       {/* SECTION 1: TWO-TIER HERO BANNER CARDS */}
       <div className="space-y-3.5">
         {/* Row 1: Light Blue Background Banner — Operational Snapshot */}
-        <div className="p-4 rounded-xl bg-cyan-50/80 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/60 shadow-xs">
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-900 dark:text-cyan-300 flex items-center gap-1.5">
-              <Building className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
               <span>Operational Snapshot</span>
             </span>
-            <span className="text-[10px] font-mono text-cyan-700 dark:text-cyan-400">
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
               Agency Scale & Delivery
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* 1. TOTAL CLIENTS */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-cyan-100 dark:border-cyan-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center justify-between">
                 <span>TOTAL CLIENTS</span>
-                <Users className="w-3.5 h-3.5 text-cyan-600" />
+                <Users className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
               </div>
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {totalClientsCount}
@@ -363,10 +363,10 @@ export const BusinessOverviewSubModule: React.FC = () => {
             </div>
 
             {/* 2. TOTAL PROJECTS */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-cyan-100 dark:border-cyan-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center justify-between">
                 <span>TOTAL PROJECTS</span>
-                <Briefcase className="w-3.5 h-3.5 text-blue-600" />
+                <Briefcase className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
               </div>
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {totalProjectsCount}
@@ -375,24 +375,24 @@ export const BusinessOverviewSubModule: React.FC = () => {
             </div>
 
             {/* 3. ACTIVE PROJECTS */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-cyan-100 dark:border-cyan-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center justify-between">
                 <span>ACTIVE PROJECTS</span>
-                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                <Clock className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
               </div>
-              <div className="text-2xl font-bold font-mono text-cyan-700 dark:text-cyan-300 mt-1">
+              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {activeProjectsCount}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">In progress & sprints</div>
             </div>
 
             {/* 4. DELAYED PROJECTS */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-cyan-100 dark:border-cyan-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center justify-between">
                 <span>DELAYED PROJECTS</span>
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                <AlertTriangle className="w-3.5 h-3.5 text-slate-500" />
               </div>
-              <div className={`text-2xl font-bold font-mono mt-1 ${delayedProjectsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+              <div className={`text-2xl font-bold font-mono mt-1 text-slate-900 dark:text-white`}>
                 {delayedProjectsCount}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Delay days &gt; 0</div>
@@ -401,20 +401,20 @@ export const BusinessOverviewSubModule: React.FC = () => {
         </div>
 
         {/* Row 2: Light Green Background Banner — Financial Snapshot in INR */}
-        <div className="p-4 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-              <IndianRupee className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-900 dark:text-white flex items-center gap-1.5">
+              <IndianRupee className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
               <span>Financial Snapshot (INR)</span>
             </span>
-            <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400">
+            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
               Consolidated Lifetime Ledger
             </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {/* 1. CONTRACT VALUE */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 CONTRACT VALUE
               </div>
@@ -425,34 +425,34 @@ export const BusinessOverviewSubModule: React.FC = () => {
             </div>
 
             {/* 2. RECEIVED */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 RECEIVED
               </div>
-              <div className="text-xl font-bold font-mono text-cyan-600 dark:text-cyan-400 mt-1">
+              <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(totalReceivedINR)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Cleared collections</div>
             </div>
 
             {/* 3. OUTSTANDING */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 OUTSTANDING
               </div>
-              <div className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+              <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(totalOutstandingINR)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Contract Value - Received</div>
             </div>
 
             {/* 4. PROJECT PROFIT */}
-            <div className="bg-white/80 dark:bg-slate-900/80 p-3 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
-              <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
                 <span>PROJECT PROFIT</span>
                 <TrendingUp className="w-3.5 h-3.5" />
               </div>
-              <div className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+              <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(projectProfit)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Contract - Cost - Exp.</div>
@@ -466,7 +466,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
         {/* Navy Blue Header */}
         <div className="bg-[#0f172a] text-white px-5 py-3.5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <Layers className="w-4 h-4 text-cyan-400" />
+            <Layers className="w-4 h-4 text-slate-300" />
             <h3 className="text-xs font-bold tracking-wider uppercase">
               COST & PROFITABILITY SUMMARY
             </h3>
@@ -485,7 +485,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Project Employee Cost
               </div>
-              <div className="text-lg font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(projectEmployeeCost)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -498,7 +498,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Project Expenses
               </div>
-              <div className="text-lg font-bold font-mono text-pink-600 dark:text-pink-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(projectExpenses)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -511,7 +511,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Fixed / Non-project Expenses
               </div>
-              <div className="text-lg font-bold font-mono text-purple-600 dark:text-purple-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(fixedExpenses)}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -537,10 +537,10 @@ export const BusinessOverviewSubModule: React.FC = () => {
 
             {/* Col 2 */}
             <div className="p-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-              <div className="text-emerald-700 dark:text-emerald-400 font-bold text-[11px]">
+              <div className="text-slate-800 dark:text-slate-200 font-bold text-[11px]">
                 Project Profit
               </div>
-              <div className="text-lg font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(projectProfit)}
               </div>
               <div className="text-[10px] text-slate-500 mt-0.5">
@@ -549,11 +549,11 @@ export const BusinessOverviewSubModule: React.FC = () => {
             </div>
 
             {/* Col 3 */}
-            <div className="p-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-emerald-500/10 dark:bg-emerald-950/20">
-              <div className="text-emerald-800 dark:text-emerald-300 font-bold text-[11px]">
+            <div className="p-4 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-slate-100 dark:bg-slate-800">
+              <div className="text-slate-900 dark:text-white font-bold text-[11px]">
                 Business Profit (Net)
               </div>
-              <div className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-300 mt-1">
+              <div className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {formatINR(businessProfit)}
               </div>
               <div className="text-[10px] text-slate-500 mt-0.5">
@@ -569,7 +569,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Profit Margin
               </div>
-              <div className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {profitMarginPercent.toFixed(1)}%
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -582,7 +582,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Collection Rate
               </div>
-              <div className="text-lg font-bold font-mono text-cyan-600 dark:text-cyan-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {collectionRatePercent.toFixed(1)}%
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -595,7 +595,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Outstanding %
               </div>
-              <div className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {outstandingPercent.toFixed(1)}%
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -611,7 +611,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Paid Projects
               </div>
-              <div className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {paidProjectsCount}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -624,7 +624,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Outstanding Projects
               </div>
-              <div className="text-lg font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+              <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-1">
                 {outstandingProjectsCount}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -637,7 +637,7 @@ export const BusinessOverviewSubModule: React.FC = () => {
               <div className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
                 Delayed Projects
               </div>
-              <div className={`text-lg font-bold font-mono mt-1 ${delayedProjectsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-200'}`}>
+              <div className={`text-lg font-bold font-mono mt-1 text-slate-900 dark:text-white`}>
                 {delayedProjectsCount}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -655,11 +655,11 @@ export const BusinessOverviewSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-rose-500" />
+                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>PROJECT STATUS</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Active / In Progress (Red) vs Completed (Amber/Yellow)
+                Active / In Progress vs Completed Distribution
               </p>
             </div>
             <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-medium">
@@ -708,14 +708,14 @@ export const BusinessOverviewSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                <BarChart2 className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>FINANCIAL POSITION</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Horizontal comparison of 8 core financial dimensions
               </p>
             </div>
-            <span className="text-[11px] font-mono text-cyan-600 bg-cyan-50 dark:bg-cyan-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
               INR Ledger
             </span>
           </div>
@@ -765,14 +765,14 @@ export const BusinessOverviewSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <TrendingUp className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>MONTHLY COLLECTIONS</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Trend line with data points showing month-by-month Received (INR)
               </p>
             </div>
-            <span className="text-[11px] font-mono text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
               {formatINR(totalReceivedINR)} Total
             </span>
           </div>
@@ -807,9 +807,9 @@ export const BusinessOverviewSubModule: React.FC = () => {
                     type="monotone"
                     dataKey="received"
                     name="Collections"
-                    stroke="#10b981"
-                    strokeWidth={3}
-                    dot={{ r: 5, fill: '#10b981', stroke: '#064e3b', strokeWidth: 1.5 }}
+                    stroke="#000000"
+                    strokeWidth={2.5}
+                    dot={{ r: 5, fill: '#000000', stroke: '#334155', strokeWidth: 1.5 }}
                     activeDot={{ r: 7 }}
                   />
                 </LineChart>
@@ -823,14 +823,14 @@ export const BusinessOverviewSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Award className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <Award className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>TOP PROJECTS BY PROFIT</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Top individual projects ranked by net contract profit
               </p>
             </div>
-            <span className="text-[11px] font-mono text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
               Top 8 Ranking
             </span>
           </div>
@@ -874,9 +874,9 @@ export const BusinessOverviewSubModule: React.FC = () => {
                       color: '#f8fafc',
                     }}
                   />
-                  <Bar dataKey="profit" fill="#10b981" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="profit" fill="#334155" radius={[0, 4, 4, 0]}>
                     {topProjectsByProfitData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#059669' : index < 3 ? '#10b981' : '#34d399'} />
+                      <Cell key={`cell-${index}`} fill={index === 0 ? '#0f172a' : index < 3 ? '#334155' : '#64748b'} />
                     ))}
                   </Bar>
                 </BarChart>

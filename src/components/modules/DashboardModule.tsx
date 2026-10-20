@@ -131,8 +131,8 @@ export const DashboardModule: React.FC = () => {
 
         {/* Locked Session Workspace Indicator */}
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none">
-            <Lock className="w-3.5 h-3.5 text-amber-500" />
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 select-none">
+            <Lock className="w-3.5 h-3.5 text-slate-500" />
             <span>Locked Workspace: {brandPrefix}</span>
           </div>
         </div>
@@ -150,13 +150,13 @@ export const DashboardModule: React.FC = () => {
           {/* Card 1: Total Clients */}
           <div
             onClick={() => setActiveModule('clients')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-cyan-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Total Clients
               </span>
-              <Users className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <Users className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
               <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
@@ -173,16 +173,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 2: Active Clients */}
           <div
             onClick={() => setActiveModule('clients')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Active Clients
               </span>
-              <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div className="text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
+              <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {activeClients}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -196,13 +196,13 @@ export const DashboardModule: React.FC = () => {
           {/* Card 3: Total Projects */}
           <div
             onClick={() => setActiveModule('projects')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-blue-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Total Projects
               </span>
-              <Briefcase className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <Briefcase className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
               <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
@@ -217,16 +217,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 4: In Progress Projects */}
           <div
             onClick={() => setActiveModule('projects')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-indigo-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 In Progress
               </span>
-              <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <Clock className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div className="text-2xl font-bold font-mono tracking-tight text-indigo-600 dark:text-indigo-400">
+              <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {inProgressProjects}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -238,30 +238,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 5: Delayed Projects */}
           <div
             onClick={() => setActiveModule('projects')}
-            className={`p-4 rounded-xl bg-white dark:bg-slate-900 border shadow-xs cursor-pointer transition-all flex flex-col justify-between ${
-              delayedProjectsCount > 0
-                ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/20 dark:bg-rose-950/20 hover:border-rose-500'
-                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
-            }`}
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Delayed Projects
               </span>
-              <AlertTriangle
-                className={`w-4 h-4 ${
-                  delayedProjectsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'
-                }`}
-              />
+              <AlertTriangle className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div
-                className={`text-2xl font-bold font-mono tracking-tight ${
-                  delayedProjectsCount > 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-slate-900 dark:text-slate-100'
-                }`}
-              >
+              <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {delayedProjectsCount}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -273,13 +259,13 @@ export const DashboardModule: React.FC = () => {
           {/* Card 6: Total Contract Value */}
           <div
             onClick={() => setActiveModule('projects')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-cyan-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Contract Value (INR)
               </span>
-              <IndianRupee className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <IndianRupee className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
               <div className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
@@ -294,16 +280,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 7: Total Received */}
           <div
             onClick={() => setActiveModule('payments')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-emerald-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Total Received (INR)
               </span>
-              <BadgeDollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <BadgeDollarSign className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
+              <div className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {formatINR(totalReceived)}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -317,16 +303,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 8: Total Outstanding */}
           <div
             onClick={() => setActiveModule('payments')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-amber-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Outstanding (INR)
               </span>
-              <Clock className="w-4 h-4 text-amber-500" />
+              <Clock className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div className="text-xl font-bold font-mono tracking-tight text-amber-600 dark:text-amber-400">
+              <div className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {formatINR(totalOutstanding)}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -338,16 +324,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 9: Total Profit */}
           <div
             onClick={() => setActiveModule('reports')}
-            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-teal-500/50 cursor-pointer transition-all flex flex-col justify-between"
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Gross Margin (INR)
               </span>
-              <TrendingUp className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <TrendingUp className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div className="text-xl font-bold font-mono tracking-tight text-teal-600 dark:text-teal-400">
+              <div className="text-xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {formatINR(totalProfit)}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -359,30 +345,16 @@ export const DashboardModule: React.FC = () => {
           {/* Card 10: Overdue Invoices */}
           <div
             onClick={() => setActiveModule('payments')}
-            className={`p-4 rounded-xl bg-white dark:bg-slate-900 border shadow-xs cursor-pointer transition-all flex flex-col justify-between ${
-              overduePaymentsCount > 0
-                ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/20 dark:bg-rose-950/20 hover:border-rose-500'
-                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
-            }`}
+            className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-400 dark:hover:border-slate-600 cursor-pointer transition-all flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Overdue Invoices
               </span>
-              <ShieldAlert
-                className={`w-4 h-4 ${
-                  overduePaymentsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'
-                }`}
-              />
+              <ShieldAlert className="w-4 h-4 text-slate-700 dark:text-slate-300" />
             </div>
             <div className="mt-3">
-              <div
-                className={`text-2xl font-bold font-mono tracking-tight ${
-                  overduePaymentsCount > 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-slate-900 dark:text-slate-100'
-                }`}
-              >
+              <div className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100">
                 {overduePaymentsCount}
               </div>
               <div className="text-[11px] text-slate-400 mt-1">
@@ -399,7 +371,7 @@ export const DashboardModule: React.FC = () => {
         <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+              <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div>
@@ -413,7 +385,7 @@ export const DashboardModule: React.FC = () => {
             </div>
             <button
               onClick={() => setActiveModule('projects')}
-              className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-slate-900 dark:text-white hover:underline flex items-center gap-1"
             >
               <span>View All</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -451,7 +423,7 @@ export const DashboardModule: React.FC = () => {
                         <div className="font-mono text-xs font-bold tabular-nums text-slate-900 dark:text-slate-100">
                           {formatINR(project.contractValue || 0)}
                         </div>
-                        <div className="text-[11px] text-rose-600 dark:text-rose-400 font-medium mt-1">
+                        <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium mt-1">
                           Target: {formatDate(project.committedEndDate)}
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
@@ -470,7 +442,7 @@ export const DashboardModule: React.FC = () => {
         <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+              <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
                 <AlertOctagon className="w-4 h-4" />
               </div>
               <div>
@@ -484,7 +456,7 @@ export const DashboardModule: React.FC = () => {
             </div>
             <button
               onClick={() => setActiveModule('payments')}
-              className="text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+              className="text-xs font-semibold text-slate-900 dark:text-white hover:underline flex items-center gap-1"
             >
               <span>View Ledger</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -527,21 +499,21 @@ export const DashboardModule: React.FC = () => {
                           )}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-1">
-                          Due: <span className={isOverdue ? 'text-rose-500 font-semibold' : ''}>{formatDate(pay.dueDate)}</span>
+                          Due: <span className={isOverdue ? 'text-slate-900 dark:text-white font-semibold underline' : ''}>{formatDate(pay.dueDate)}</span>
                           {isOverdue && ' (Past Due)'}
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
                         <div className="text-xs text-slate-400 font-medium">Pending Balance</div>
-                        <div className="font-mono text-sm font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        <div className="font-mono text-sm font-bold tabular-nums text-slate-900 dark:text-slate-100">
                           {formatINR(pay.amountINR || pay.outstandingAmount || pay.amount || 0)}
                         </div>
                         <span
                           className={`inline-block mt-1 text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
                             isOverdue
-                              ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                              : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                              ? 'bg-black text-white dark:bg-white dark:text-slate-900'
+                              : 'border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800'
                           }`}
                         >
                           {isOverdue ? 'Overdue' : pay.paymentStatus}

@@ -15,6 +15,7 @@ import {
   AppUser,
   AuthUser,
   BrandName,
+  BankAccount,
   getBrandPrefix,
 } from '../types/crm';
 
@@ -292,6 +293,33 @@ class StorageService {
   public async deletePayment(id: string): Promise<{ success: boolean; error?: string }> {
     try {
       await this.apiCall(`/api/payments/${id}`, 'DELETE');
+      this.notifyListeners();
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
+    }
+  }
+
+  // --- Bank Accounts (CRUD) ---
+  public async fetchBankAccounts(): Promise<BankAccount[]> {
+    return this.apiCall<BankAccount[]>('/api/bank-accounts');
+  }
+
+  public async saveBankAccount(account: BankAccount): Promise<{ success: boolean; bankAccount?: BankAccount; error?: string }> {
+    try {
+      const res = await this.apiCall<{ success: boolean; bankAccount: BankAccount }>('/api/bank-accounts', 'POST', account);
+      this.notifyListeners();
+      return { success: true, bankAccount: res.bankAccount };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
+    }
+  }
+
+  public async deleteBankAccount(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.apiCall(`/api/bank-accounts/${id}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -646,6 +674,18 @@ class StorageService {
       return {
         allowed: false,
         reason: `Cannot delete expense category because ${linked.length} expense voucher(s) reference it.`,
+        linkedCount: linked.length,
+      };
+    }
+    return { allowed: true, linkedCount: 0 };
+  }
+
+  public canDeleteBankAccount(bankAccountId: string, payments: Payment[]): { allowed: boolean; reason?: string; linkedCount: number } {
+    const linked = payments.filter((p) => p.bankAccountId === bankAccountId);
+    if (linked.length > 0) {
+      return {
+        allowed: false,
+        reason: `Cannot delete bank account because ${linked.length} payment record(s) are tagged with this account. Mark account as Inactive instead to maintain accurate revenue and audit histories.`,
         linkedCount: linked.length,
       };
     }

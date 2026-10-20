@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { GstInvoice, GstPortalUploadStatus } from '../../types/crm';
+import { GstInvoice, GstPortalUploadStatus, InvoiceDocumentFile } from '../../types/crm';
 import { CommonModuleToolbar, KpiCardItem } from '../common/CommonModuleToolbar';
 import { exportToCsv } from '../../utils/csvExport';
 import { formatINR, formatDate } from '../../utils/formatters';
@@ -18,6 +18,10 @@ import {
   Layers,
   Lock,
   ExternalLink,
+  Upload,
+  Trash2,
+  Paperclip,
+  Check,
 } from 'lucide-react';
 
 export const GstInvoicesModule: React.FC = () => {
@@ -29,6 +33,8 @@ export const GstInvoicesModule: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<GstInvoice | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<InvoiceDocumentFile | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [modalFormData, setModalFormData] = useState<{
     invoiceNumber: string;
     uploadedToGstPortal: GstPortalUploadStatus;
@@ -42,7 +48,7 @@ export const GstInvoicesModule: React.FC = () => {
   });
   const [formError, setFormError] = useState<string | null>(null);
 
-  // KPIs
+  // KPIs (ERPNext Desk UI Monochrome)
   const totalCount = gstInvoices.length;
   const totalAmountINR = useMemo(
     () => gstInvoices.reduce((acc, inv) => acc + (Number(inv.amountINR) || 0), 0),
@@ -63,25 +69,25 @@ export const GstInvoicesModule: React.FC = () => {
       label: 'Total GST Invoices',
       value: totalCount,
       subtext: 'Synced from GST payments',
-      icon: <FileCheck className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
+      icon: <FileCheck className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Total Invoice Amount',
       value: formatINR(totalAmountINR),
       subtext: 'Taxable payments turnover',
-      icon: <IndianRupee className="w-4 h-4 text-blue-600 dark:text-blue-400" />,
+      icon: <IndianRupee className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Total 18% GST Amount',
       value: formatINR(totalGstAmountINR),
       subtext: 'Calculated 18% output GST',
-      icon: <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+      icon: <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Portal Upload Status',
       value: `${uploadedCount} Uploaded · ${pendingCount} Pending`,
       subtext: `${uploadedCount > 0 ? Math.round((uploadedCount / (totalCount || 1)) * 100) : 0}% compliance filed`,
-      icon: <CheckCircle className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
   ];
 
@@ -108,6 +114,7 @@ export const GstInvoicesModule: React.FC = () => {
   const handleOpenEdit = (invoice: GstInvoice) => {
     setSelectedInvoice(invoice);
     setFormError(null);
+    setUploadedFile(invoice.invoiceFile || null);
     setModalFormData({
       invoiceNumber: invoice.invoiceNumber || '',
       uploadedToGstPortal: invoice.uploadedToGstPortal || 'No',
@@ -119,15 +126,82 @@ export const GstInvoicesModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // Quick Open Modal from toolbar
+  // Quick Open Modal from toolbar (+ Update / Upload GST Invoice button)
   const handleOpenToolbarModal = () => {
     if (gstInvoices.length > 0) {
       // Find first pending or first record
       const pending = gstInvoices.find((i) => i.uploadedToGstPortal === 'No') || gstInvoices[0];
       handleOpenEdit(pending);
     } else {
-      setFormError('No GST payments found in Payments module. Record a payment with "GST Invoice" payment mode first.');
+      // Auto-detect or create draft GST invoice linked to payment or brand
+      const matchingPay = payments.find((p) => p.paymentMode === 'GST Invoice') || payments[0];
+      if (matchingPay) {
+        const tempInv: GstInvoice = {
+          id: '',
+          brand: matchingPay.brand || activeBrand,
+          paymentId: matchingPay.id,
+          projectId: matchingPay.projectId || '',
+          clientId: matchingPay.clientId || '',
+          clientName: matchingPay.clientName || 'Direct Client',
+          paymentDate: matchingPay.paymentDate || new Date().toISOString().slice(0, 10),
+          amountReceived: matchingPay.amountReceived || 0,
+          currency: matchingPay.currency || 'INR',
+          amountINR: matchingPay.amountINR || 0,
+          gstAmountINR: Math.round((matchingPay.amountINR || 0) * 0.18),
+          invoiceNumber: `INV-${new Date().getFullYear()}-001`,
+          uploadedToGstPortal: 'No',
+          notes: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        handleOpenEdit(tempInv);
+      } else {
+        const tempInv: GstInvoice = {
+          id: '',
+          brand: activeBrand,
+          paymentId: `PAY-${brandPrefix}-${Date.now().toString().slice(-6)}`,
+          projectId: `PRJ-${brandPrefix}-001`,
+          clientId: `CLI-${brandPrefix}-001`,
+          clientName: 'Direct Client',
+          paymentDate: new Date().toISOString().slice(0, 10),
+          amountReceived: 100000,
+          currency: 'INR',
+          amountINR: 100000,
+          gstAmountINR: 18000,
+          invoiceNumber: `INV-${new Date().getFullYear()}-001`,
+          uploadedToGstPortal: 'No',
+          notes: '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        handleOpenEdit(tempInv);
+      }
     }
+  };
+
+  // File Upload Handler (PDF, JPEG, PNG, DOC up to 15MB)
+  const handleFileUpload = (file: File) => {
+    if (file.size > 15 * 1024 * 1024) {
+      setFormError('File size exceeds 15 MB limit. Please select a smaller document.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const doc: InvoiceDocumentFile = {
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/pdf',
+        uploadedAt: new Date().toISOString(),
+        url: base64,
+      };
+      setUploadedFile(doc);
+      setFormError(null);
+    };
+    reader.onerror = () => {
+      setFormError('Failed to read the file. Please try another document.');
+    };
+    reader.readAsDataURL(file);
   };
 
   // Save Modal Form
@@ -140,6 +214,12 @@ export const GstInvoicesModule: React.FC = () => {
       return;
     }
 
+    let finalNotes = modalFormData.notes.trim();
+    if (uploadedFile && !finalNotes.includes(uploadedFile.name)) {
+      const attachmentNote = `[Attached Invoice File: ${uploadedFile.name} (${(uploadedFile.size / 1024).toFixed(1)} KB)]`;
+      finalNotes = finalNotes ? `${finalNotes}\n${attachmentNote}` : attachmentNote;
+    }
+
     const payload: GstInvoice = {
       ...selectedInvoice,
       brand: selectedInvoice.brand || activeBrand,
@@ -147,13 +227,16 @@ export const GstInvoicesModule: React.FC = () => {
       uploadedToGstPortal: modalFormData.uploadedToGstPortal,
       gstPortalUploadDate:
         modalFormData.uploadedToGstPortal === 'Yes' ? modalFormData.gstPortalUploadDate : '',
-      notes: modalFormData.notes.trim(),
+      invoiceFile: uploadedFile || undefined,
+      notes: finalNotes,
+      updatedAt: new Date().toISOString(),
     };
 
     const res = await saveGstInvoice(payload);
     if (res.success) {
       setIsModalOpen(false);
       setSelectedInvoice(null);
+      setUploadedFile(null);
     } else {
       setFormError(res.error || 'Failed to save GST Invoice details.');
     }
@@ -226,15 +309,15 @@ export const GstInvoicesModule: React.FC = () => {
           { label: 'Pending Upload (No)', value: 'No' },
         ]}
         onAddNew={handleOpenToolbarModal}
-        addNewLabel="+ Update GST Invoice"
+        addNewLabel="+ Update / Upload GST Invoice"
         onExportCsv={handleExportCsv}
         totalFilteredCount={filteredInvoices.length}
       />
 
-      {/* Sync Status Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border border-cyan-200 dark:border-cyan-900/50 text-xs text-slate-700 dark:text-slate-300">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-cyan-600 text-white shadow-xs">
+      {/* Sync Status Banner (ERPNext Desk UI Monochrome) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs">
             <FileText className="w-3.5 h-3.5" />
           </div>
           <div>
@@ -242,8 +325,8 @@ export const GstInvoicesModule: React.FC = () => {
               Live Real-Time Sync Active:
             </span>{' '}
             All transactions from the{' '}
-            <strong className="text-cyan-700 dark:text-cyan-400">Payments</strong> module with{' '}
-            <code className="px-1.5 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 font-mono text-[11px] text-cyan-800 dark:text-cyan-300">
+            <strong className="text-slate-900 dark:text-slate-100">Payments</strong> module with{' '}
+            <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
               Payment Mode == "GST Invoice"
             </code>{' '}
             are automatically linked with 18% GST calculations.
@@ -251,7 +334,7 @@ export const GstInvoicesModule: React.FC = () => {
         </div>
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
           <span>Zoho Books Sync Ready</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-slate-800 dark:bg-slate-200" />
         </div>
       </div>
 
@@ -259,7 +342,7 @@ export const GstInvoicesModule: React.FC = () => {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-semibold uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-3.5 whitespace-nowrap">1. Payment ID</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">2. Project ID</th>
@@ -267,10 +350,10 @@ export const GstInvoicesModule: React.FC = () => {
                 <th className="py-3 px-3.5 whitespace-nowrap">5. Payment Date</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">6. Amount Received</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">7. Amount (INR)</th>
-                <th className="py-3 px-3.5 whitespace-nowrap text-emerald-600 dark:text-emerald-400">
+                <th className="py-3 px-3.5 whitespace-nowrap text-slate-900 dark:text-white">
                   8. GST 18% (INR)
                 </th>
-                <th className="py-3 px-3.5 whitespace-nowrap">9. Zoho INV #</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">9. Zoho INV # & File</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">10. GST Portal</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">11. Upload Date</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">12. Notes</th>
@@ -282,9 +365,9 @@ export const GstInvoicesModule: React.FC = () => {
                 <tr>
                   <td colSpan={12} className="py-12 text-center text-slate-400">
                     <FileCheck className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-medium">No GST Invoice records found.</p>
-                    <p className="text-xs mt-1">
-                      Payments marked with "GST Invoice" payment mode will automatically appear here.
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No GST Invoice records found.</p>
+                    <p className="text-xs mt-1 text-slate-500">
+                      Click "+ Update / Upload GST Invoice" above or record a payment with "GST Invoice" payment mode.
                     </p>
                   </td>
                 </tr>
@@ -297,7 +380,7 @@ export const GstInvoicesModule: React.FC = () => {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       {/* 1. Payment ID */}
-                      <td className="py-3.5 px-3.5 font-mono font-semibold text-cyan-600 dark:text-cyan-400 whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 font-mono font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                         {inv.paymentId}
                       </td>
 
@@ -336,35 +419,46 @@ export const GstInvoicesModule: React.FC = () => {
                         {formatINR(inv.amountINR)}
                       </td>
 
-                      {/* 8. GST Amount (18%) (Auto-calculated: Amount INR * 0.18) */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
+                      {/* 8. GST Amount (18%) */}
+                      <td className="py-3.5 px-3.5 whitespace-nowrap font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
                         {formatINR(inv.gstAmountINR || Math.round(inv.amountINR * 0.18))}
                       </td>
 
-                      {/* 9. Invoice Number (Zoho INV Number) */}
+                      {/* 9. Invoice Number & Attached File */}
                       <td className="py-3.5 px-3.5 whitespace-nowrap">
-                        {inv.invoiceNumber ? (
-                          <span className="font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                            {inv.invoiceNumber}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-amber-500 italic flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            Pending Draft
-                          </span>
-                        )}
+                        <div className="space-y-1">
+                          {inv.invoiceNumber ? (
+                            <span className="font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 inline-block">
+                              {inv.invoiceNumber}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 italic flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Pending Draft
+                            </span>
+                          )}
+
+                          {inv.invoiceFile && (
+                            <div className="flex items-center gap-1 text-[10px] text-slate-600 dark:text-slate-400 font-mono">
+                              <Paperclip className="w-3 h-3 text-slate-500" />
+                              <span className="truncate max-w-[130px]" title={inv.invoiceFile.name}>
+                                {inv.invoiceFile.name}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
-                      {/* 10. Uploaded to GST Portal */}
+                      {/* 10. Uploaded to GST Portal (Monochrome) */}
                       <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {isUploaded ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60">
-                            <CheckCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+                            <CheckCircle className="w-3 h-3 text-white dark:text-slate-900" />
                             Yes
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/60">
-                            <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                            <Clock className="w-3 h-3 text-slate-500" />
                             No (Pending)
                           </span>
                         )}
@@ -395,11 +489,11 @@ export const GstInvoicesModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(inv)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 text-xs font-medium transition-colors"
-                          title="Edit / Update GST Details"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors"
+                          title="Upload / Update GST Invoice & Filing Details"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Edit / Update GST</span>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload / Update GST</span>
                         </button>
                       </td>
                     </tr>
@@ -416,17 +510,17 @@ export const GstInvoicesModule: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
           <div className="relative w-full max-w-2xl max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/50">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md">
+                <div className="p-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs">
                   <FileCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Edit / Update GST Invoice Details
+                    Update / Upload GST Invoice
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Zoho INV Number & GSTR-1 portal filing status for {selectedInvoice.paymentId}
+                    Zoho INV Number, file document upload, and GSTR-1 portal filing for {selectedInvoice.paymentId}
                   </p>
                 </div>
               </div>
@@ -435,6 +529,7 @@ export const GstInvoicesModule: React.FC = () => {
                 onClick={() => {
                   setIsModalOpen(false);
                   setSelectedInvoice(null);
+                  setUploadedFile(null);
                 }}
                 className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
@@ -445,20 +540,46 @@ export const GstInvoicesModule: React.FC = () => {
             {/* Modal Body Form */}
             <form onSubmit={handleSaveModal} className="flex-1 overflow-y-auto p-6 space-y-6">
               {formError && (
-                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-800 dark:text-slate-200" />
                   <span>{formError}</span>
+                </div>
+              )}
+
+              {/* Record Selector (if multiple exist) */}
+              {gstInvoices.length > 1 && (
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span>Select GST Payment / Invoice Record to Edit:</span>
+                    <span className="text-[11px] font-normal text-slate-400 font-mono">
+                      {gstInvoices.length} invoices available
+                    </span>
+                  </label>
+                  <select
+                    value={selectedInvoice.id || selectedInvoice.paymentId}
+                    onChange={(e) => {
+                      const inv = gstInvoices.find((i) => (i.id || i.paymentId) === e.target.value);
+                      if (inv) handleOpenEdit(inv);
+                    }}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 outline-none"
+                  >
+                    {gstInvoices.map((i) => (
+                      <option key={i.id || i.paymentId} value={i.id || i.paymentId}>
+                        {i.paymentId} — {i.clientName} ({i.invoiceNumber || 'Draft'}) — {formatINR(i.amountINR)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 
               {/* A. AUTO-FILLED & READ-ONLY FIELDS (8 FIELDS) */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/60 pb-2.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-slate-500" />
                     A. Auto-Filled & Read-Only Fields (Pulled from Payment Record)
                   </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-medium">
                     Mode: GST Invoice
                   </span>
                 </div>
@@ -473,7 +594,7 @@ export const GstInvoicesModule: React.FC = () => {
                       type="text"
                       readOnly
                       value={selectedInvoice.paymentId}
-                      className="w-full px-3 py-1.5 text-xs font-mono font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 cursor-not-allowed"
+                      className="w-full px-3 py-1.5 text-xs font-mono font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 cursor-not-allowed"
                     />
                   </div>
 
@@ -512,7 +633,7 @@ export const GstInvoicesModule: React.FC = () => {
                       type="text"
                       readOnly
                       value={selectedInvoice.clientName}
-                      className="w-full px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-not-allowed"
+                      className="w-full px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 cursor-not-allowed"
                     />
                   </div>
 
@@ -557,25 +678,25 @@ export const GstInvoicesModule: React.FC = () => {
 
                   {/* 8. GST Amount (18%) */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-900 dark:text-slate-100 flex items-center justify-between">
                       <span>8. GST Amount (18%)</span>
                       <span className="text-[10px] font-normal text-slate-400">Amount (INR) * 0.18</span>
                     </label>
-                    <div className="px-3 py-1.5 rounded-lg border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50 dark:bg-emerald-950/40 font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center justify-between">
+                    <div className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center justify-between">
                       <span>{formatINR(selectedInvoice.gstAmountINR || Math.round(selectedInvoice.amountINR * 0.18))}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 font-normal">
-                        Output Tax
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-normal">
+                        18% Output GST
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* B. MANUALLY FILLED FIELDS (4 FIELDS) */}
+              {/* B. MANUALLY FILLED FIELDS & INVOICE FILE UPLOAD */}
               <div className="space-y-4">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
-                  <Edit2 className="w-3.5 h-3.5 text-cyan-600" />
-                  B. Manually Filled Fields (Editable by User)
+                  <Edit2 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  B. Manually Filled Fields & Document Upload
                 </div>
 
                 {/* 9. Invoice Number (Zoho INV Number) */}
@@ -585,7 +706,7 @@ export const GstInvoicesModule: React.FC = () => {
                       9. Invoice Number (Zoho INV Number)
                     </span>
                     <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
-                      e.g., INV-2026-001
+                      e.g., INV-2026-001 or ZOHO-8819
                     </span>
                   </label>
                   <input
@@ -595,15 +716,110 @@ export const GstInvoicesModule: React.FC = () => {
                       setModalFormData((prev) => ({ ...prev, invoiceNumber: e.target.value }))
                     }
                     placeholder="e.g. INV-2026-001 or ZOHO-INV-8819"
-                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 outline-none"
                   />
+                </div>
+
+                {/* File Upload Component for GST Invoice */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Upload Official GST Tax Invoice Document</span>
+                    </span>
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                      PDF, JPG, PNG, DOC (Max 15MB)
+                    </span>
+                  </label>
+
+                  {uploadedFile ? (
+                    <div className="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 overflow-hidden min-w-0">
+                        <div className="p-2 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 shrink-0">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate" title={uploadedFile.name}>
+                            {uploadedFile.name}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                            {(uploadedFile.size / 1024).toFixed(1)} KB · Uploaded {new Date(uploadedFile.uploadedAt).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <label className="cursor-pointer px-2.5 py-1 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 transition-colors">
+                          <span>Replace</span>
+                          <input
+                            type="file"
+                            accept=".pdf,image/png,image/jpeg,image/jpg,.doc,.docx"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleFileUpload(e.target.files[0]);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setUploadedFile(null)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                          title="Remove attached file"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileUpload(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                        isDragging
+                          ? 'border-slate-900 bg-slate-100 dark:border-white dark:bg-slate-800'
+                          : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 bg-slate-50/50 dark:bg-slate-800/40'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        accept=".pdf,image/png,image/jpeg,image/jpg,.doc,.docx"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileUpload(e.target.files[0]);
+                          }
+                        }}
+                      />
+                      <div className="flex flex-col items-center justify-center pointer-events-none space-y-1">
+                        <Upload className="w-5 h-5 text-slate-500 mb-1" />
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          Click to select or drag & drop invoice document
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Attach official Zoho Tax Invoice PDF or GSTR-1 acknowledgement receipt
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* 10. Uploaded to GST Portal */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      10. Uploaded to GST Portal <span className="text-rose-500">*</span>
+                      10. Uploaded to GST Portal <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <select
                       value={modalFormData.uploadedToGstPortal}
@@ -620,7 +836,7 @@ export const GstInvoicesModule: React.FC = () => {
                               : prev.gstPortalUploadDate,
                         }));
                       }}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none font-medium"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 outline-none font-medium"
                     >
                       <option value="No">No (Pending Portal Filing)</option>
                       <option value="Yes">Yes (Uploaded to Government Portal)</option>
@@ -633,7 +849,7 @@ export const GstInvoicesModule: React.FC = () => {
                       <span>
                         11. GST Portal Upload Date
                         {modalFormData.uploadedToGstPortal === 'Yes' && (
-                          <span className="text-rose-500"> *</span>
+                          <span className="text-slate-800 dark:text-slate-200"> *</span>
                         )}
                       </span>
                       <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
@@ -652,7 +868,7 @@ export const GstInvoicesModule: React.FC = () => {
                       }
                       className={`w-full px-3 py-2 text-xs rounded-lg border ${
                         modalFormData.uploadedToGstPortal === 'Yes'
-                          ? 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500'
+                          ? 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100'
                           : 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/50 text-slate-400 cursor-not-allowed'
                       } outline-none`}
                     />
@@ -671,7 +887,7 @@ export const GstInvoicesModule: React.FC = () => {
                       setModalFormData((prev) => ({ ...prev, notes: e.target.value }))
                     }
                     placeholder="Enter GSTR-1 ARN number, Zoho Books synchronization remarks, or audit notes..."
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none resize-none"
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 outline-none resize-none"
                   />
                 </div>
               </div>
@@ -683,6 +899,7 @@ export const GstInvoicesModule: React.FC = () => {
                   onClick={() => {
                     setIsModalOpen(false);
                     setSelectedInvoice(null);
+                    setUploadedFile(null);
                   }}
                   className="px-4 py-2 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors"
                 >
@@ -690,9 +907,9 @@ export const GstInvoicesModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded-lg text-white bg-cyan-600 hover:bg-cyan-500 shadow-md transition-all active:scale-95"
+                  className="px-5 py-2 text-xs font-semibold rounded-lg text-white bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 shadow-xs transition-colors"
                 >
-                  Save GST Details
+                  Save & Upload GST Invoice
                 </button>
               </div>
             </form>

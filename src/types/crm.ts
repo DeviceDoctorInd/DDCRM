@@ -34,60 +34,60 @@ export const BRAND_CONFIG: Record<BrandName, BrandMeta> = {
     prefix: 'DDI',
     shortName: 'Device Doctor',
     tagline: 'Enterprise IT, Cloud & Digital Operations',
-    badgeBg: 'bg-cyan-50 dark:bg-cyan-950/60',
-    badgeBorder: 'border-cyan-200 dark:border-cyan-800',
-    badgeText: 'text-cyan-700 dark:text-cyan-300',
-    accentBg: 'bg-cyan-600',
-    accentHover: 'hover:bg-cyan-500',
-    accentBorder: 'border-cyan-600',
-    accentText: 'text-cyan-600 dark:text-cyan-400',
-    accentRing: 'focus:ring-cyan-500',
-    avatarBg: 'from-cyan-600 to-blue-600',
+    badgeBg: 'bg-slate-100 dark:bg-slate-800',
+    badgeBorder: 'border-slate-300 dark:border-slate-700',
+    badgeText: 'text-slate-900 dark:text-slate-100',
+    accentBg: 'bg-slate-900 dark:bg-white',
+    accentHover: 'hover:bg-slate-800 dark:hover:bg-slate-100',
+    accentBorder: 'border-slate-900 dark:border-white',
+    accentText: 'text-slate-900 dark:text-slate-100',
+    accentRing: 'focus:ring-slate-900 dark:focus:ring-slate-100',
+    avatarBg: 'from-slate-800 to-slate-900',
   },
   'Codestro': {
     name: 'Codestro',
     prefix: 'CDS',
     shortName: 'Codestro',
     tagline: 'SaaS Engineering & Custom Software Studio',
-    badgeBg: 'bg-violet-50 dark:bg-violet-950/60',
-    badgeBorder: 'border-violet-200 dark:border-violet-800',
-    badgeText: 'text-violet-700 dark:text-violet-300',
-    accentBg: 'bg-violet-600',
-    accentHover: 'hover:bg-violet-500',
-    accentBorder: 'border-violet-600',
-    accentText: 'text-violet-600 dark:text-violet-400',
-    accentRing: 'focus:ring-violet-500',
-    avatarBg: 'from-violet-600 to-purple-600',
+    badgeBg: 'bg-slate-100 dark:bg-slate-800',
+    badgeBorder: 'border-slate-300 dark:border-slate-700',
+    badgeText: 'text-slate-900 dark:text-slate-100',
+    accentBg: 'bg-slate-900 dark:bg-white',
+    accentHover: 'hover:bg-slate-800 dark:hover:bg-slate-100',
+    accentBorder: 'border-slate-900 dark:border-white',
+    accentText: 'text-slate-900 dark:text-slate-100',
+    accentRing: 'focus:ring-slate-900 dark:focus:ring-slate-100',
+    avatarBg: 'from-slate-800 to-slate-900',
   },
   'FX Launch Pad': {
     name: 'FX Launch Pad',
     prefix: 'FXL',
     shortName: 'FX Launch Pad',
     tagline: 'FinTech, Algorithmic Trading & Prop Firm Tech',
-    badgeBg: 'bg-amber-50 dark:bg-amber-950/60',
-    badgeBorder: 'border-amber-200 dark:border-amber-800',
-    badgeText: 'text-amber-700 dark:text-amber-300',
-    accentBg: 'bg-amber-600',
-    accentHover: 'hover:bg-amber-500',
-    accentBorder: 'border-amber-600',
-    accentText: 'text-amber-600 dark:text-amber-400',
-    accentRing: 'focus:ring-amber-500',
-    avatarBg: 'from-amber-600 to-emerald-600',
+    badgeBg: 'bg-slate-100 dark:bg-slate-800',
+    badgeBorder: 'border-slate-300 dark:border-slate-700',
+    badgeText: 'text-slate-900 dark:text-slate-100',
+    accentBg: 'bg-slate-900 dark:bg-white',
+    accentHover: 'hover:bg-slate-800 dark:hover:bg-slate-100',
+    accentBorder: 'border-slate-900 dark:border-white',
+    accentText: 'text-slate-900 dark:text-slate-100',
+    accentRing: 'focus:ring-slate-900 dark:focus:ring-slate-100',
+    avatarBg: 'from-slate-800 to-slate-900',
   },
   'DUNS': {
     name: 'DUNS',
     prefix: 'DNS',
     shortName: 'DUNS',
     tagline: 'Global Business Verification, Corporate Intelligence & Regulatory Compliance',
-    badgeBg: 'bg-indigo-50 dark:bg-indigo-950/60',
-    badgeBorder: 'border-indigo-200 dark:border-indigo-800',
-    badgeText: 'text-indigo-700 dark:text-indigo-300',
-    accentBg: 'bg-indigo-600',
-    accentHover: 'hover:bg-indigo-500',
-    accentBorder: 'border-indigo-600',
-    accentText: 'text-indigo-600 dark:text-indigo-400',
-    accentRing: 'focus:ring-indigo-500',
-    avatarBg: 'from-indigo-600 to-sky-600',
+    badgeBg: 'bg-slate-100 dark:bg-slate-800',
+    badgeBorder: 'border-slate-300 dark:border-slate-700',
+    badgeText: 'text-slate-900 dark:text-slate-100',
+    accentBg: 'bg-slate-900 dark:bg-white',
+    accentHover: 'hover:bg-slate-800 dark:hover:bg-slate-100',
+    accentBorder: 'border-slate-900 dark:border-white',
+    accentText: 'text-slate-900 dark:text-slate-100',
+    accentRing: 'focus:ring-slate-900 dark:focus:ring-slate-100',
+    avatarBg: 'from-slate-800 to-slate-900',
   },
 };
 
@@ -215,6 +215,25 @@ export interface PaymentProofDocument {
   notes?: string; // proof notes / verification details
 }
 
+export type BankAccountType = 'Current' | 'Savings' | 'Crypto Wallet' | 'Escrow' | 'Other';
+export type BankAccountStatus = 'Active' | 'Inactive';
+
+export interface BankAccount {
+  id: string; // e.g. DDI-BNK-001, CDS-BNK-001, FXL-BNK-001, DNS-BNK-001
+  brand: BrandName; // Multi-brand association
+  accountName: string; // e.g. "Primary Operating Account", "HDFC Corporate"
+  bankName: string; // e.g. "HDFC Bank", "ICICI Bank", "Wise", "Binance / Tether"
+  accountNumber: string; // Account Number or Wallet Address
+  ifscCode?: string; // Optional IFSC / SWIFT / routing code
+  branchName?: string; // Optional Branch / Network
+  upiId?: string; // Optional UPI ID
+  accountType: BankAccountType;
+  status: BankAccountStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Payment {
   id: string; // Auto-generated e.g. DDI-PAY-001, CDS-PAY-001, FXL-PAY-001
   brand?: BrandName;
@@ -222,6 +241,8 @@ export interface Payment {
   clientId: string; // Auto-filled & read-only from Project
   clientName?: string; // Auto-filled & read-only from Project
   paymentMode: PaymentMode; // Dropdown: GST Invoice, Non GST Online, Cash, Crypto
+  bankAccountId?: string; // FK to BankAccount.id
+  bankAccountName?: string; // Snapshot / display label of receiving bank account
   paymentDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
   amountReceived: number; // Numeric input in selected currency
@@ -349,6 +370,14 @@ export interface Expense {
   updatedAt: string;
 }
 
+export interface InvoiceDocumentFile {
+  name: string;
+  size: number;
+  type: string;
+  uploadedAt: string;
+  url: string;
+}
+
 export type GstPortalUploadStatus = 'Yes' | 'No';
 
 export interface GstInvoice {
@@ -366,6 +395,7 @@ export interface GstInvoice {
   invoiceNumber: string; // Zoho INV Number (e.g., INV-2026-001)
   uploadedToGstPortal: GstPortalUploadStatus; // Dropdown: Yes / No
   gstPortalUploadDate?: string; // Date picker (enabled when Uploaded to GST Portal is 'Yes')
+  invoiceFile?: InvoiceDocumentFile; // Attached GST Tax Invoice document / PDF / scan
   notes?: string; // Textarea
   createdAt: string;
   updatedAt: string;
@@ -406,7 +436,7 @@ export interface DatabaseStatus {
   tables?: { [tableName: string]: number };
 }
 
-export type ReportsSubTab = 'business' | 'client' | 'employee' | 'overview';
+export type ReportsSubTab = 'business' | 'client' | 'employee' | 'overview' | 'bank-accounts' | 'payment-modes';
 
 export type ActiveModule =
   | 'dashboard'
@@ -415,6 +445,7 @@ export type ActiveModule =
   | 'services'
   | 'projects'
   | 'payments'
+  | 'bank-accounts'
   | 'gst-invoices'
   | 'roles'
   | 'employees'

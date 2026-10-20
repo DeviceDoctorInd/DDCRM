@@ -7,7 +7,7 @@ export function exportToCsv<T extends Record<string, any>>(
   filename: string
 ) {
   if (!data || data.length === 0) {
-    alert('No data available to export.');
+    console.warn('No data available to export.');
     return;
   }
 

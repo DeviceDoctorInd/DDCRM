@@ -41,15 +41,15 @@ import {
 type DatePreset = 'this-month' | 'last-3-months' | 'last-6-months' | 'this-fy' | 'all-time';
 
 const COLORS = {
-  received: '#06b6d4', // cyan-500
-  outstanding: '#f59e0b', // amber-500
-  employeeCost: '#6366f1', // indigo-500
-  expenses: '#ec4899', // pink-500
-  profitPositive: '#10b981', // emerald-500
-  profitNegative: '#ef4444', // red-500
-  pieProfit: '#10b981',
-  pieEmployee: '#6366f1',
-  pieExpense: '#ec4899',
+  received: '#0f172a', // slate-900 / dark charcoal
+  outstanding: '#64748b', // slate-500
+  employeeCost: '#334155', // slate-700
+  expenses: '#94a3b8', // slate-400
+  profitPositive: '#000000', // black
+  profitNegative: '#475569', // slate-600
+  pieProfit: '#0f172a',
+  pieEmployee: '#475569',
+  pieExpense: '#94a3b8',
 };
 
 export const BusinessReportSubModule: React.FC = () => {
@@ -377,7 +377,7 @@ export const BusinessReportSubModule: React.FC = () => {
           {/* Date Pickers */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <Calendar className="w-4 h-4 text-slate-700 dark:text-slate-300 shrink-0" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                 Period Window:
               </span>
@@ -428,7 +428,7 @@ export const BusinessReportSubModule: React.FC = () => {
                     onClick={() => handlePresetSelect(preset.id)}
                     className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                       isSelected
-                        ? 'bg-white dark:bg-slate-700 text-cyan-700 dark:text-cyan-300 shadow-xs font-semibold'
+                        ? 'bg-black text-white shadow-xs font-semibold'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
@@ -446,7 +446,7 @@ export const BusinessReportSubModule: React.FC = () => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-xs"
               title="Export Business Dashboard to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+              <Download className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
               <span>Export CSV</span>
             </button>
 
@@ -471,8 +471,8 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="flex items-center gap-2">
             <span>Currency: <strong className="text-slate-700 dark:text-slate-300">INR (₹)</strong></span>
             <span>·</span>
-            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-              <CheckCircle2 className="w-3 h-3" /> Auto-calculated
+            <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium">
+              <CheckCircle2 className="w-3 h-3 text-slate-500" /> Auto-calculated
             </span>
           </div>
         </div>
@@ -484,7 +484,7 @@ export const BusinessReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Projects</span>
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <Briefcase className="w-4 h-4" />
             </div>
           </div>
@@ -500,11 +500,11 @@ export const BusinessReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Received (INR)</span>
-            <div className="p-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <IndianRupee className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-cyan-600 dark:text-cyan-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalReceivedINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -516,11 +516,11 @@ export const BusinessReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Outstanding (INR)</span>
-            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-amber-600 dark:text-amber-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalOutstandingINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -532,11 +532,11 @@ export const BusinessReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Employee Cost</span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalEmployeeCost)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -545,41 +545,21 @@ export const BusinessReportSubModule: React.FC = () => {
         </div>
 
         {/* Net Profit */}
-        <div
-          className={`p-4 rounded-xl border shadow-xs ${
-            isProfitable
-              ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60'
-              : 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60'
-          }`}
-        >
-          <div className="flex items-center justify-between text-xs font-medium">
-            <span className={isProfitable ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}>
-              Net Profit (INR)
-            </span>
-            <div
-              className={`p-1.5 rounded-lg ${
-                isProfitable
-                  ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
-                  : 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300'
-              }`}
-            >
+        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Net Profit (INR)</span>
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               {isProfitable ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
             </div>
           </div>
-          <div
-            className={`mt-2 text-xl font-bold font-mono ${
-              isProfitable ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
-            }`}
-          >
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(netProfitINR)}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold">
-            <span
-              className={isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}
-            >
+            <span className="text-slate-900 dark:text-slate-100 font-bold">
               {profitMarginPercent.toFixed(1)}% margin
             </span>
-            <span className="text-slate-400 font-normal">
+            <span className="text-slate-500 font-normal">
               · {isProfitable ? 'Net Surplus' : 'Operating Deficit'}
             </span>
           </div>
@@ -592,7 +572,7 @@ export const BusinessReportSubModule: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>{reportTitle}</span>
-              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-black text-white dark:bg-white dark:text-black">
                 AUDITED P&L LEDGER
               </span>
             </h3>
@@ -620,7 +600,7 @@ export const BusinessReportSubModule: React.FC = () => {
               {/* Row 1: Projects */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-400" />
                   <span>Projects</span>
                 </td>
                 <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-slate-100 text-sm">
@@ -633,29 +613,29 @@ export const BusinessReportSubModule: React.FC = () => {
                   Total projects contracted or active in Projects module within selected dates
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                     Active Base
                   </span>
                 </td>
               </tr>
 
               {/* Row 2: Received (INR) */}
-              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-cyan-50/20 dark:bg-cyan-950/10">
-                <td className="py-3.5 px-4 font-bold text-cyan-800 dark:text-cyan-300 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
+              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-slate-50/60 dark:bg-slate-800/30">
+                <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" />
                   <span>Received (INR)</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-cyan-700 dark:text-cyan-300 text-base">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-base">
                   {formatINR(totalReceivedINR)}
                 </td>
-                <td className="py-3.5 px-4 text-right font-mono font-bold text-cyan-700 dark:text-cyan-400">
+                <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
                   100.0%
                 </td>
                 <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
                   Sum of <code className="font-mono text-[11px]">Amount (INR)</code> from Payments where Status == "Received"
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-950 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-bold text-white bg-black px-2 py-0.5 rounded">
                     Revenue Cleared
                   </span>
                 </td>
@@ -664,10 +644,10 @@ export const BusinessReportSubModule: React.FC = () => {
               {/* Row 3: Outstanding (INR) */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-500" />
                   <span>Outstanding (INR)</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-amber-600 dark:text-amber-400 text-sm">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-sm">
                   {formatINR(totalOutstandingINR)}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-slate-500 dark:text-slate-400">
@@ -677,7 +657,7 @@ export const BusinessReportSubModule: React.FC = () => {
                   Sum of remaining unpaid balance (<code className="font-mono text-[11px]">Contract Value - Received</code>) for period projects
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                     Receivable
                   </span>
                 </td>
@@ -686,10 +666,10 @@ export const BusinessReportSubModule: React.FC = () => {
               {/* Row 4: Employee Cost */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-600" />
                   <span>Employee Cost</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-indigo-600 dark:text-indigo-400 text-sm">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-sm">
                   {formatINR(totalEmployeeCost)}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-slate-600 dark:text-slate-300 font-medium">
@@ -699,7 +679,7 @@ export const BusinessReportSubModule: React.FC = () => {
                   Sum of <code className="font-mono text-[11px]">Amount Paid</code> from Employee Payments & Assignments module
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                     Payroll Outflow
                   </span>
                 </td>
@@ -708,10 +688,10 @@ export const BusinessReportSubModule: React.FC = () => {
               {/* Row 5: Expenses */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-pink-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-400" />
                   <span>Expenses</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-pink-600 dark:text-pink-400 text-sm">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-sm">
                   {formatINR(totalExpensesINR)}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-slate-600 dark:text-slate-300 font-medium">
@@ -721,7 +701,7 @@ export const BusinessReportSubModule: React.FC = () => {
                   Sum of <code className="font-mono text-[11px]">Amount (INR)</code> from Other Expenses module (tools, licenses, cloud infra)
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-pink-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                     Operating Cost
                   </span>
                 </td>
@@ -747,15 +727,9 @@ export const BusinessReportSubModule: React.FC = () => {
               </tr>
 
               {/* Row 7: Net Profit (INR) */}
-              <tr
-                className={`font-bold transition-colors ${
-                  isProfitable
-                    ? 'bg-emerald-500/10 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300'
-                    : 'bg-rose-500/10 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300'
-                }`}
-              >
+              <tr className="font-bold transition-colors bg-slate-100 dark:bg-slate-800 border-t-2 border-black dark:border-white text-slate-900 dark:text-white">
                 <td className="py-4 px-4 text-sm flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${isProfitable ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                  <div className="w-3 h-3 rounded-full bg-black dark:bg-white" />
                   <span>Profit (Net Surplus)</span>
                 </td>
                 <td className="py-4 px-4 font-mono text-right text-lg">
@@ -768,13 +742,7 @@ export const BusinessReportSubModule: React.FC = () => {
                   Auto-calculated formula: <strong className="font-mono">Received (INR) - Employee Cost - Expenses</strong>
                 </td>
                 <td className="py-4 px-4 text-center">
-                  <span
-                    className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                      isProfitable
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200'
-                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/80 dark:text-rose-200'
-                    }`}
-                  >
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-black text-white dark:bg-white dark:text-black">
                     {isProfitable ? 'Profitable' : 'Deficit'}
                   </span>
                 </td>
@@ -791,14 +759,14 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                <BarChart2 className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Financial Breakdown (Bar Graph)</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Comparison of Inflow, Outstanding, Outflows & Net Profit
               </p>
             </div>
-            <span className="text-[11px] font-mono font-semibold text-cyan-600 bg-cyan-50 dark:bg-cyan-950/60 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
               P&L Overview
             </span>
           </div>
@@ -827,7 +795,7 @@ export const BusinessReportSubModule: React.FC = () => {
                     fontSize: '12px',
                     color: '#f8fafc',
                   }}
-                  itemStyle={{ color: '#38bdf8' }}
+                  itemStyle={{ color: '#ffffff' }}
                 />
                 <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
                   {financialBarData.map((entry, index) => (
@@ -844,7 +812,7 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <TrendingUp className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Monthly Inflow vs Outflow vs Profit</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
@@ -892,15 +860,15 @@ export const BusinessReportSubModule: React.FC = () => {
                       val === 'received' ? 'Inflow' : val === 'outflow' ? 'Outflow' : 'Profit Line'
                     }
                   />
-                  <Bar dataKey="received" name="received" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="outflow" name="outflow" fill="#818cf8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="received" name="received" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="outflow" name="outflow" fill="#64748b" radius={[4, 4, 0, 0]} />
                   <Line
                     type="monotone"
                     dataKey="profit"
                     name="profit"
-                    stroke="#10b981"
+                    stroke="#000000"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#10b981' }}
+                    dot={{ r: 4, fill: '#000000' }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -913,7 +881,7 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Project Value Distribution (Deal Size Histogram)</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
@@ -954,7 +922,7 @@ export const BusinessReportSubModule: React.FC = () => {
                     color: '#f8fafc',
                   }}
                 />
-                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill="#334155" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -965,14 +933,14 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Revenue Allocation (Profit vs Costs Split)</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Proportion of Net Profit, Employee Cost & Expenses from Total Inflow
               </p>
             </div>
-            <span className="text-[11px] font-mono text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
               {profitMarginPercent.toFixed(1)}% Profit
             </span>
           </div>

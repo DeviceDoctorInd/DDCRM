@@ -50,13 +50,13 @@ export const ExpenseCategoriesModule: React.FC = () => {
       label: 'Total Expense Categories',
       value: totalCategories,
       subtext: 'Operational expense ledger domains',
-      icon: <Tags className="w-4 h-4 text-cyan-600" />,
+      icon: <Tags className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Active Categories',
       value: activeCategories,
       subtext: 'Available for expense bookings',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Inactive Categories',
@@ -207,7 +207,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleOpenAdd}
-                        className="mt-2 text-xs text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 font-semibold"
+                        className="mt-2 text-xs text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold"
                       >
                         + Add Expense Category
                       </button>
@@ -221,14 +221,14 @@ export const ExpenseCategoriesModule: React.FC = () => {
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                   >
                     {/* 1. Category ID */}
-                    <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                    <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                       {cat.id}
                     </td>
 
                     {/* 2. Category Name */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                        <div className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white shrink-0" />
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
                           {cat.name}
                         </span>
@@ -255,7 +255,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                           type="button"
                           onClick={() => setExpenseCategoryStatus(cat.id, 'Inactive')}
                           title="Click to toggle to Inactive"
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:opacity-80 transition-opacity cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:opacity-80 transition-opacity cursor-pointer"
                         >
                           <CheckCircle className="w-3 h-3" />
                           Active
@@ -279,7 +279,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(cat)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                           title="Edit Category"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -287,7 +287,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setDeleteCandidate(cat)}
-                          className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                           title="Delete Category"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -309,7 +309,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md">
+                <div className="p-2.5 rounded-xl bg-black text-white text-white shadow-md">
                   <Tags className="w-5 h-5" />
                 </div>
                 <div>
@@ -333,8 +333,8 @@ export const ExpenseCategoriesModule: React.FC = () => {
             {/* Modal Form */}
             <form onSubmit={handleSaveSubmit} className="p-6 space-y-4">
               {formError && (
-                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-800 dark:text-slate-200" />
                   <span>{formError}</span>
                 </div>
               )}
@@ -349,7 +349,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                   type="text"
                   readOnly
                   value={formData.id || ''}
-                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-cyan-600 dark:text-cyan-400 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed"
                 />
               </div>
 
@@ -357,8 +357,8 @@ export const ExpenseCategoriesModule: React.FC = () => {
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Tags className="w-3.5 h-3.5 text-cyan-600" />
-                    2. Category Name <span className="text-rose-500">*</span>
+                    <Tags className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                    2. Category Name <span className="text-slate-800 dark:text-slate-200">*</span>
                   </span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
                     Strictly unique across categories
@@ -370,14 +370,14 @@ export const ExpenseCategoriesModule: React.FC = () => {
                   value={formData.name || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="e.g. Hosting, Domain, Advertising, Office"
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none font-medium"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none font-medium"
                 />
               </div>
 
               {/* 3. Description (Textarea, optional) */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                  <FileText className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   3. Description <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <textarea
@@ -385,15 +385,15 @@ export const ExpenseCategoriesModule: React.FC = () => {
                   value={formData.description || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="e.g. Cloud server hosting, virtual instances, container clusters, and storage buckets."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none resize-none"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none resize-none"
                 />
               </div>
 
               {/* 4. Status (Dropdown: Active, Inactive) */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-cyan-600" />
-                  4. Status <span className="text-rose-500">*</span>
+                  <Activity className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                  4. Status <span className="text-slate-800 dark:text-slate-200">*</span>
                 </label>
                 <select
                   value={formData.status || 'Active'}
@@ -404,7 +404,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                     }))
                   }
                   required
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
                 >
                   <option value="Active">Active (Available for expense bookings)</option>
                   <option value="Inactive">Inactive (Disabled for new bookings)</option>
@@ -422,7 +422,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black text-white hover:bg-neutral-800 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <CheckCircle className="w-4 h-4" />
                   {isEditing ? 'Save Category' : 'Create Category'}
@@ -438,7 +438,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>
@@ -464,7 +464,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                   setExpenseCategoryStatus(deleteCandidate.id, 'Inactive');
                   setDeleteCandidate(null);
                 }}
-                className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 transition-colors"
               >
                 Mark Inactive Instead
               </button>
@@ -482,7 +482,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
                     deleteExpenseCategory(deleteCandidate.id);
                     setDeleteCandidate(null);
                   }}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
                 >
                   Delete
                 </button>

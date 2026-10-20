@@ -24,6 +24,7 @@ import {
   Eye,
   ExternalLink,
   Download,
+  Landmark,
 } from 'lucide-react';
 import { PaymentProofModal } from '../common/PaymentProofModal';
 import { PaymentProofDocument } from '../../types/crm';
@@ -66,6 +67,7 @@ export const PaymentsModule: React.FC = () => {
     payments,
     projects,
     clients,
+    bankAccounts,
     savePayment,
     deletePayment,
     getClientById,
@@ -110,25 +112,25 @@ export const PaymentsModule: React.FC = () => {
       label: 'Settled Receipts (INR)',
       value: formatINR(totalReceivedINR),
       subtext: 'Cleared payments',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Pending Invoices (INR)',
       value: formatINR(totalPendingINR),
       subtext: 'Invoiced awaiting settlement',
-      icon: <Clock className="w-4 h-4 text-cyan-600" />,
+      icon: <Clock className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Remaining Balance (INR)',
       value: formatINR(totalOutstandingBalance),
       subtext: 'Contract balance across projects',
-      icon: <AlertOctagon className="w-4 h-4 text-amber-500" />,
+      icon: <AlertOctagon className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Overdue Payments',
       value: overdueCount,
       subtext: 'Pending past due date',
-      icon: <ShieldAlert className="w-4 h-4 text-rose-500" />,
+      icon: <ShieldAlert className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
   ];
 
@@ -228,6 +230,11 @@ export const PaymentsModule: React.FC = () => {
       exchangeRate: projectRate,
       amountINR: initialAmountINR,
       referenceUtr: `UTR-${brandPrefix}-${Date.now().toString().slice(-6)}`,
+      bankAccountId: bankAccounts.find((b) => b.brand === activeBrand && b.status === 'Active')?.id || '',
+      bankAccountName: (() => {
+        const b = bankAccounts.find((acc) => acc.brand === activeBrand && acc.status === 'Active');
+        return b ? `${b.bankName} - ${b.accountNumber} (${b.accountName})` : '';
+      })(),
       paymentStatus: 'Received',
       daysOverdue: 0,
       notes: '',
@@ -416,6 +423,8 @@ export const PaymentsModule: React.FC = () => {
       clientId: formData.clientId || selectedProject?.clientId || '',
       clientName: formData.clientName || selectedProject?.clientName || '',
       paymentMode: formData.paymentMode || 'GST Invoice',
+      bankAccountId: formData.bankAccountId || '',
+      bankAccountName: formData.bankAccountName || '',
       paymentDate: formData.paymentDate || new Date().toISOString().slice(0, 10),
       dueDate: formData.dueDate || new Date().toISOString().slice(0, 10),
       amountReceived,
@@ -471,14 +480,14 @@ export const PaymentsModule: React.FC = () => {
       {/* Payment Mode Filter Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-2">
-          <CreditCard className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+          <CreditCard className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
             Payment Mode:
           </span>
           <select
             value={modeFilter}
             onChange={(e) => setModeFilter(e.target.value)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-medium"
+            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
           >
             <option value="ALL">All Payment Modes</option>
             {PAYMENT_MODES.map((mode) => (
@@ -533,14 +542,14 @@ export const PaymentsModule: React.FC = () => {
                   let statusBadge = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
                   if (pay.paymentStatus === 'Received') {
                     statusBadge =
-                      'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (pay.paymentStatus === 'Pending') {
                     statusBadge = isOverdue
-                      ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900/60'
-                      : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/60';
+                      ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
+                      : 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (pay.paymentStatus === 'Failed') {
                     statusBadge =
-                      'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (pay.paymentStatus === 'Cancelled') {
                     statusBadge =
                       'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
@@ -551,7 +560,7 @@ export const PaymentsModule: React.FC = () => {
                       key={pay.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {pay.id}
                       </td>
                       <td className="py-3.5 px-4 max-w-[260px]">
@@ -586,16 +595,25 @@ export const PaymentsModule: React.FC = () => {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                             pay.paymentMode === 'GST Invoice'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
                               : pay.paymentMode === 'Non GST Online'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
                               : pay.paymentMode === 'Cash'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                              : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
+                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
+                              : 'bg-slate-50 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
                           }`}
                         >
                           {pay.paymentMode}
                         </span>
+                        {pay.bankAccountName && (
+                          <div
+                            className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1 truncate max-w-[170px]"
+                            title={`Credited to: ${pay.bankAccountName}`}
+                          >
+                            <Landmark className="w-3 h-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0" />
+                            <span className="truncate">{pay.bankAccountName}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700 dark:text-slate-300">
                         <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 select-all">
@@ -607,7 +625,7 @@ export const PaymentsModule: React.FC = () => {
                           {formatDate(pay.dueDate)}
                         </div>
                         {isOverdue ? (
-                          <div className="text-[10px] font-semibold text-rose-500 flex items-center gap-1 mt-0.5">
+                          <div className="text-[10px] font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5">
                             <span>{overdueDays}d overdue</span>
                           </div>
                         ) : (
@@ -624,17 +642,17 @@ export const PaymentsModule: React.FC = () => {
                               setSelectedPaymentForProof(pay);
                               setIsProofModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors shadow-xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-xs"
                             title={`View Payment Proof / Screenshot (${pay.paymentProof.name})`}
                           >
-                            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                             <span>View Proof</span>
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(pay)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 italic hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 italic hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Attach Payment Proof / Receipt Screenshot"
                           >
                             <span>+ Attach Proof</span>
@@ -650,14 +668,14 @@ export const PaymentsModule: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => handleOpenEdit(pay)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Payment Record"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deletePayment(pay.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Payment Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -680,7 +698,7 @@ export const PaymentsModule: React.FC = () => {
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-600/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-black/10 dark:bg-slate-500/20 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0">
                   <CreditCard className="w-5 h-5" />
                 </div>
                 <div>
@@ -707,7 +725,7 @@ export const PaymentsModule: React.FC = () => {
             {/* Form */}
             <form onSubmit={handleSaveSubmit} className="p-6 space-y-6">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <div className="p-3 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{formError}</span>
                 </div>
@@ -715,21 +733,21 @@ export const PaymentsModule: React.FC = () => {
 
               {/* Project Balance Live Sync Indicator */}
               {selectedProject && (
-                <div className="p-3.5 rounded-xl bg-cyan-50/80 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-cyan-900 dark:text-cyan-200">
-                    <Layers className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+                <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                    <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0" />
                     <div>
                       <span className="font-semibold">Project Commercial Balance: </span>
                       <span>Contract: </span>
                       <strong className="font-mono">{formatINR(selectedProject.contractValue || 0)}</strong>
                       <span className="mx-1.5">|</span>
                       <span>Received: </span>
-                      <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                      <strong className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {formatINR(otherReceivedOnSelectedProject)}
                       </strong>
                     </div>
                   </div>
-                  <div className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-cyan-300 dark:border-cyan-800 font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                  <div className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                     Remaining Balance: {formatINR(selectedProjectRemainingBalance)}
                   </div>
                 </div>
@@ -750,20 +768,20 @@ export const PaymentsModule: React.FC = () => {
                       type="text"
                       readOnly
                       value={formData.id || 'DDI-PAY-Auto'}
-                      className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-cyan-600 dark:text-cyan-400 cursor-not-allowed select-all"
+                      className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed select-all"
                     />
                   </div>
 
                   {/* Field 2: Project ID (Dropdown with smart project IDs) */}
                   <div className="md:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Project ID <span className="text-rose-500">*</span>
+                      Project ID <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <select
                       required
                       value={formData.projectId || ''}
                       onChange={(e) => handleProjectSelect(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono"
                     >
                       <option value="" disabled>-- Select Project --</option>
                       {projects.map((p) => (
@@ -818,7 +836,7 @@ export const PaymentsModule: React.FC = () => {
                       onChange={(e) =>
                         setFormData({ ...formData, paymentMode: e.target.value as PaymentMode })
                       }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     >
                       {PAYMENT_MODES.map((mode) => (
                         <option key={mode} value={mode}>
@@ -828,24 +846,70 @@ export const PaymentsModule: React.FC = () => {
                     </select>
                   </div>
 
+                  {/* Field: Receiving Bank Account (Active Brand's Accounts) */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Landmark className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
+                        <span>Receiving Bank Account</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        ({(formData.brand || activeBrand)} Accounts)
+                      </span>
+                    </label>
+                    <select
+                      value={formData.bankAccountId || ''}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        if (!selId) {
+                          setFormData({ ...formData, bankAccountId: '', bankAccountName: '' });
+                        } else {
+                          const matched = bankAccounts.find((b) => b.id === selId);
+                          setFormData({
+                            ...formData,
+                            bankAccountId: selId,
+                            bankAccountName: matched
+                              ? `${matched.bankName} - ${matched.accountNumber} (${matched.accountName})`
+                              : '',
+                          });
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    >
+                      <option value="">-- No Bank Account Tagged / Cash / Direct Settlement --</option>
+                      {formData.bankAccountId && !bankAccounts.some((b) => b.id === formData.bankAccountId && b.brand === (formData.brand || activeBrand) && b.status === 'Active') && (
+                        <option value={formData.bankAccountId}>
+                          {formData.bankAccountName || formData.bankAccountId} (Currently Tagged)
+                        </option>
+                      )}
+                      {bankAccounts
+                        .filter((b) => b.brand === (formData.brand || activeBrand) && b.status === 'Active')
+                        .map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.bankName} — {acc.accountNumber} ({acc.accountName} · {acc.accountType})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
                   {/* Field 6: Payment Date (Date picker) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment Date <span className="text-rose-500">*</span>
+                      Payment Date <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <input
                       type="date"
                       required
                       value={formData.paymentDate || ''}
                       onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
 
                   {/* Field 7: Due Date (Date picker) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Due Date <span className="text-rose-500">*</span>
+                      Due Date <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <input
                       type="date"
@@ -857,7 +921,7 @@ export const PaymentsModule: React.FC = () => {
                           (formData.paymentStatus as PaymentStatus) || 'Pending'
                         )
                       }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
 
@@ -874,7 +938,7 @@ export const PaymentsModule: React.FC = () => {
                           e.target.value as PaymentStatus
                         )
                       }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     >
                       {PAYMENT_STATUS_OPTIONS.map((st) => (
                         <option key={st} value={st}>
@@ -896,7 +960,7 @@ export const PaymentsModule: React.FC = () => {
                           : '0 days (Not overdue)'}
                       </span>
                       {formData.daysOverdue !== undefined && formData.daysOverdue > 0 && (
-                        <span className="text-[10px] font-bold text-rose-500 uppercase px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60">
+                        <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
                           Past Due
                         </span>
                       )}
@@ -919,7 +983,7 @@ export const PaymentsModule: React.FC = () => {
                     <select
                       value={formData.currency || 'INR'}
                       onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     >
                       {CURRENCIES.map((curr) => (
                         <option key={curr} value={curr}>
@@ -932,7 +996,7 @@ export const PaymentsModule: React.FC = () => {
                   {/* Field 8: Amount Received (Numeric input) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Amount Received <span className="text-rose-500">*</span>
+                      Amount Received <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <input
                       type="number"
@@ -946,7 +1010,7 @@ export const PaymentsModule: React.FC = () => {
                           formData.exchangeRate ?? 1
                         )
                       }
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
 
@@ -966,7 +1030,7 @@ export const PaymentsModule: React.FC = () => {
                           parseFloat(e.target.value) || 1
                         )
                       }
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
 
@@ -975,7 +1039,7 @@ export const PaymentsModule: React.FC = () => {
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Amount (INR, Auto)
                     </label>
-                    <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-300 truncate">
+                    <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 truncate">
                       {formatINR(formData.amountINR || 0)}
                     </div>
                   </div>
@@ -983,7 +1047,7 @@ export const PaymentsModule: React.FC = () => {
                   {/* Field 12: Reference / UTR (Text input — Unique check enforced) */}
                   <div className="sm:col-span-2 md:col-span-4 mt-2">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Reference / UTR (Unique ID) <span className="text-rose-500">*</span>
+                      Reference / UTR (Unique ID) <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <input
                       type="text"
@@ -991,7 +1055,7 @@ export const PaymentsModule: React.FC = () => {
                       value={formData.referenceUtr || ''}
                       onChange={(e) => setFormData({ ...formData, referenceUtr: e.target.value })}
                       placeholder="e.g. UTR-HDFC-9928172601 or IMPS-20261014-998"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">
                       Must be strictly unique across all payments in the system.
@@ -1004,11 +1068,11 @@ export const PaymentsModule: React.FC = () => {
               <div>
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                     <span>4. Payment Proof / Receipt Upload</span>
                   </span>
                   {formData.paymentProof && (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <span className="text-[10px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Attached
                     </span>
                   )}
@@ -1028,7 +1092,7 @@ export const PaymentsModule: React.FC = () => {
                             />
                           </div>
                         ) : (
-                          <div className="w-12 h-12 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
+                          <div className="w-12 h-12 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
                             <FileText className="w-6 h-6" />
                           </div>
                         )}
@@ -1047,7 +1111,7 @@ export const PaymentsModule: React.FC = () => {
                               href={formData.paymentProof.externalUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[10px] text-cyan-600 hover:underline flex items-center gap-0.5 mt-0.5"
+                              className="text-[10px] text-slate-800 dark:text-slate-200 hover:underline flex items-center gap-0.5 mt-0.5"
                             >
                               <span>External receipt link</span>
                               <ExternalLink className="w-2.5 h-2.5" />
@@ -1073,7 +1137,7 @@ export const PaymentsModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleRemoveProof}
-                          className="p-1 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                          className="p-1 text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                           title="Remove attachment"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1082,8 +1146,8 @@ export const PaymentsModule: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 dark:hover:border-cyan-400 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
-                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 mb-1.5 transition-colors" />
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 dark:hover:border-slate-700 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
+                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-slate-800 dark:text-slate-200 dark:group-hover:text-slate-800 dark:text-slate-200 mb-1.5 transition-colors" />
                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                           Click to upload screenshot / receipt proof
                         </span>
@@ -1110,7 +1174,7 @@ export const PaymentsModule: React.FC = () => {
                           placeholder="Or paste Google Drive / external receipt URL..."
                           value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
                           onChange={(e) => handleExternalUrlChange(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                         />
                       </div>
                     </div>
@@ -1135,7 +1199,7 @@ export const PaymentsModule: React.FC = () => {
                         }));
                       }}
                       placeholder="e.g. PhonePe UPI transaction screenshot verified by accounts desk • IMPS reference cleared in HDFC..."
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
                 </div>
@@ -1152,7 +1216,7 @@ export const PaymentsModule: React.FC = () => {
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Record bank clearance reference, remittance details, or client billing communication..."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -1167,7 +1231,7 @@ export const PaymentsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>{isEditing ? 'Save Payment Changes' : 'Record Payment'}</span>

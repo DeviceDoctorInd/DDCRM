@@ -81,7 +81,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
           onClick={() => setIsOpen(!isOpen)}
           className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all border text-left cursor-pointer ${
             isOpen
-              ? 'bg-slate-800 border-cyan-500/50 shadow-md ring-1 ring-cyan-500/30'
+              ? 'bg-slate-800 border-slate-300 dark:border-slate-700 shadow-md ring-1 ring-cyan-500/30'
               : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 hover:border-slate-600'
           }`}
           title={`Active Brand: ${activeBrand} (${brandPrefix})`}
@@ -99,7 +99,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                   <span className="text-xs font-bold text-white tracking-tight truncate">
                     {activeBrand}
                   </span>
-                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-700/90 text-cyan-300 border border-slate-600 shrink-0">
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-700/90 text-slate-800 dark:text-slate-200 border border-slate-600 shrink-0">
                     {brandPrefix}
                   </span>
                 </div>
@@ -113,7 +113,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
           {!isCollapsed && (
             <ChevronDown
               className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
-                isOpen ? 'rotate-180 text-cyan-400' : ''
+                isOpen ? 'rotate-180 text-slate-800 dark:text-slate-200' : ''
               }`}
             />
           )}
@@ -146,8 +146,8 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                     onClick={() => handleSelectBrand(brand)}
                     className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
                       isSelected
-                        ? 'bg-cyan-950/80 text-white border border-cyan-700/50'
-                        : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                        ? 'bg-slate-900 text-white border border-slate-300 dark:border-slate-700'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 overflow-hidden">
@@ -168,7 +168,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                         </div>
                       </div>
                     </div>
-                    {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0 ml-1.5" />}
+                    {isSelected && <Check className="w-4 h-4 text-slate-800 dark:text-slate-200 shrink-0 ml-1.5" />}
                   </button>
                 );
               })}
@@ -185,12 +185,12 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                   }}
                   className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
                     isConsolidatedView
-                      ? 'bg-emerald-950/70 border border-emerald-700 text-emerald-200'
+                      ? 'bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                     <div>
                       <div className="font-semibold text-[11px]">
                         All Brands (Consolidated View)
@@ -200,7 +200,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                       </div>
                     </div>
                   </div>
-                  {isConsolidatedView && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                  {isConsolidatedView && <Check className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />}
                 </button>
               </div>
             )}
@@ -213,7 +213,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                   setIsOpen(false);
                   openWorkspaceModal(false);
                 }}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 hover:bg-slate-800/80 rounded-lg transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Brand Workspace Center...</span>
@@ -233,7 +233,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-xs cursor-pointer ${
           isConsolidatedView
-            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+            ? 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
             : `${brandMeta.badgeBg} ${brandMeta.badgeBorder} ${brandMeta.badgeText} hover:opacity-90`
         }`}
         title="Switch Active Brand Workspace"
@@ -241,7 +241,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
         <div className="flex items-center gap-1.5">
           <div
             className={`w-5 h-5 rounded-md bg-gradient-to-tr ${
-              isConsolidatedView ? 'from-emerald-600 to-teal-600' : brandMeta.avatarBg
+              isConsolidatedView ? 'from-slate-900 to-slate-800' : brandMeta.avatarBg
             } flex items-center justify-center text-white shrink-0`}
           >
             {isConsolidatedView ? (
@@ -316,7 +316,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                     </div>
                   </div>
                   {isSelected && (
-                    <Check className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0 ml-1.5" />
+                    <Check className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0 ml-1.5" />
                   )}
                 </button>
               );
@@ -334,12 +334,12 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                 }}
                 className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
                   isConsolidatedView
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold'
+                    ? 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 font-bold'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                   <div>
                     <div className="font-semibold text-[11px]">
                       All Brands (Consolidated View)
@@ -350,7 +350,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                   </div>
                 </div>
                 {isConsolidatedView && (
-                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <Check className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                 )}
               </button>
             </div>
@@ -364,7 +364,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
                 setIsOpen(false);
                 openWorkspaceModal(false);
               }}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 rounded-lg transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
               <Layers className="w-3.5 h-3.5" />
               <span>Brand Workspace Center...</span>

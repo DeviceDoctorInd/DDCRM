@@ -84,12 +84,12 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
         <div className="px-6 sm:px-8 pt-7 pb-5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-b from-slate-50/70 to-transparent dark:from-slate-800/40">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 text-white flex items-center justify-center shadow-lg shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center shadow-xs shrink-0">
                 <Layers className="w-6 h-6" />
               </div>
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/80 mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 mb-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
                   <span>Workspace Enforcement & Data Isolation</span>
                 </div>
                 <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
@@ -129,7 +129,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                   onClick={() => handleSelectBrandCard(brand)}
                   className={`group relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                     isSelected
-                      ? `border-cyan-500 bg-cyan-50/50 dark:bg-cyan-950/30 shadow-md ring-2 ring-cyan-500/20`
+                      ? `border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 shadow-md ring-2 ring-cyan-500/20`
                       : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
                   }`}
                 >
@@ -149,7 +149,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                           {meta.prefix}
                         </span>
                         {authUser?.brand === brand && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shrink-0">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0">
                             Your Assigned Brand
                           </span>
                         )}
@@ -173,7 +173,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                           Projects
                         </span>
                         <span className="text-slate-300 dark:text-slate-700">·</span>
-                        <span className="text-cyan-600 dark:text-cyan-400 font-mono">
+                        <span className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-mono">
                           ID: {meta.prefix}-***
                         </span>
                       </div>
@@ -184,7 +184,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                     <div
                       className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                         isSelected
-                          ? 'border-cyan-600 bg-cyan-600 text-white'
+                          ? 'border-slate-300 dark:border-slate-700 bg-black text-white'
                           : 'border-slate-300 dark:border-slate-700'
                       }`}
                     >
@@ -201,12 +201,12 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                 onClick={handleSelectConsolidated}
                 className={`group relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                   isConsolidatedSelected
-                    ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 shadow-md ring-2 ring-emerald-500/20'
+                    ? 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 shadow-md ring-2 ring-emerald-500/20'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
                 }`}
               >
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-600 flex items-center justify-center text-white shadow-md shrink-0">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-800 flex items-center justify-center text-white shadow-md shrink-0">
                     <Sparkles className="w-6 h-6" />
                   </div>
                   <div className="min-w-0">
@@ -214,7 +214,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                       <span className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
                         All Brands (Consolidated Enterprise View)
                       </span>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         Multi-Brand Admin
                       </span>
                     </div>
@@ -233,7 +233,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
                   <div
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                       isConsolidatedSelected
-                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        ? 'border-slate-300 dark:border-slate-700 bg-black text-white'
                         : 'border-slate-300 dark:border-slate-700'
                     }`}
                   >
@@ -251,7 +251,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
               id="rememberWorkspaceCheckbox"
               checked={rememberDefault}
               onChange={(e) => setRememberDefault(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+              className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:ring-slate-900 cursor-pointer"
             />
             <label
               htmlFor="rememberWorkspaceCheckbox"
@@ -274,7 +274,7 @@ export const BrandWorkspaceModal: React.FC<BrandWorkspaceModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-md hover:shadow-cyan-500/20 transition-all cursor-pointer"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg font-bold text-xs text-white bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 shadow-xs transition-all cursor-pointer"
           >
             <span>
               Enter {isConsolidatedSelected ? 'Consolidated' : BRAND_CONFIG[selectedBrand]?.shortName || selectedBrand} Workspace

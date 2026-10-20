@@ -85,15 +85,15 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
         <div
           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold select-none ${
             isConsolidatedView
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              ? 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100'
               : `${brandMeta.badgeBg} ${brandMeta.badgeBorder} ${brandMeta.badgeText}`
           }`}
           title={`Active Brand Workspace: ${activeBrand} (Session locked to this brand). Log out to select another brand workspace.`}
         >
           <div
-            className={`w-5 h-5 rounded-md bg-gradient-to-tr ${
-              isConsolidatedView ? 'from-emerald-600 to-teal-600' : brandMeta.avatarBg
-            } flex items-center justify-center text-white shrink-0 shadow-xs`}
+            className={`w-5 h-5 rounded-md ${
+              isConsolidatedView ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+            } flex items-center justify-center shrink-0 shadow-xs`}
           >
             {isConsolidatedView ? (
               <Sparkles className="w-3 h-3" />
@@ -112,7 +112,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
               </span>
             )}
             <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-slate-500 dark:text-slate-400 font-semibold border border-black/5 dark:border-white/10">
-              <Lock className="w-2.5 h-2.5 text-amber-500" />
+              <Lock className="w-2.5 h-2.5 text-slate-500 dark:text-slate-400" />
               <span>Locked</span>
             </span>
           </div>
@@ -120,11 +120,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
 
         <div className="hidden sm:flex items-center gap-2 text-xs">
           <span className="text-slate-400">/</span>
-          <span className={`${brandMeta.accentText} font-medium`}>
+          <span className="text-slate-900 dark:text-slate-100 font-medium">
             {moduleNames[activeModule] || activeModule}
           </span>
           {isConsolidatedView && (
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold">
               Consolidated
             </span>
           )}
@@ -169,7 +169,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
         >
           {theme === 'dark' ? (
-            <Sun className="w-4 h-4 text-amber-400" />
+            <Sun className="w-4 h-4 text-slate-300" />
           ) : (
             <Moon className="w-4 h-4 text-slate-600" />
           )}
@@ -177,7 +177,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
 
         {/* User Badge */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${brandMeta.avatarBg} text-white flex items-center justify-center font-bold text-xs shadow-xs`}>
+          <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center font-bold text-xs shadow-xs">
             <Shield className="w-4 h-4" />
           </div>
           <div className="hidden xl:block text-left">

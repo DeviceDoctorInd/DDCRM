@@ -16,6 +16,7 @@ import {
   ExpenseCategory,
   Expense,
   AppUser,
+  BankAccount,
 } from '../../src/types/crm';
 import { mockStore } from '../db/mockStore';
 
@@ -909,6 +910,8 @@ router.get('/payments', async (req: Request, res: Response) => {
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
                ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
                ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(bank_account_id AS NVARCHAR(50)), '') as bankAccountId,
+               ISNULL(CAST(bank_account_name AS NVARCHAR(255)), '') as bankAccountName,
                ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
                ISNULL(CAST(due_date AS NVARCHAR(50)), '') as dueDate,
                ISNULL(amount_received, 0) as amountReceived, 
@@ -929,6 +932,46 @@ router.get('/payments', async (req: Request, res: Response) => {
       `),
       'payments'
     );
+    if (!q.recordset || q.recordset.length === 0) {
+      const seeds = mockStore.getPayments();
+      for (const p of seeds) {
+        try {
+          const guidId = toGuid(p.id);
+          await pool.request()
+            .input('id', guidId)
+            .input('rawId', p.id)
+            .input('brand', p.brand || 'Device Doctor India')
+            .input('project_id', toGuidOrNull(p.projectId))
+            .input('client_id', toGuidOrNull(p.clientId))
+            .input('client_name', p.clientName || '')
+            .input('payment_mode', p.paymentMode || 'GST Invoice')
+            .input('bank_account_id', p.bankAccountId || '')
+            .input('bank_account_name', p.bankAccountName || '')
+            .input('payment_date', p.paymentDate || '')
+            .input('due_date', p.dueDate || '')
+            .input('amount_received', p.amountReceived || 0)
+            .input('currency', p.currency || 'INR')
+            .input('exchange_rate', p.exchangeRate || 1)
+            .input('amount_inr', p.amountINR || 0)
+            .input('reference_utr', p.referenceUtr || '')
+            .input('payment_status', p.paymentStatus || 'Received')
+            .input('days_overdue', p.daysOverdue || 0)
+            .input('notes', p.notes || '')
+            .input('payment_proof', p.paymentProof ? JSON.stringify(p.paymentProof) : '')
+            .input('payment_proof_notes', p.paymentProofNotes || '')
+            .input('created_at', p.createdAt)
+            .input('updated_at', p.updatedAt)
+            .query(`
+              IF NOT EXISTS (SELECT 1 FROM payments WHERE reference_utr = @reference_utr OR CAST(id AS NVARCHAR(100)) = @rawId)
+                INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+                VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+            `);
+        } catch {
+          // ignore duplicate
+        }
+      }
+      return res.json(mockStore.getPayments(brand));
+    }
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /payments] Falling back to mock store:', err);
@@ -965,6 +1008,8 @@ router.post('/payments', async (req: Request, res: Response) => {
           .input('client_id', clientGuid)
           .input('client_name', payment.clientName || '')
           .input('payment_mode', payment.paymentMode || 'GST Invoice')
+          .input('bank_account_id', payment.bankAccountId || '')
+          .input('bank_account_name', payment.bankAccountName || '')
           .input('payment_date', payment.paymentDate || '')
           .input('due_date', payment.dueDate || '')
           .input('amount_received', payment.amountReceived || 0)
@@ -982,15 +1027,16 @@ router.post('/payments', async (req: Request, res: Response) => {
           .query(`
             IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
               UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                 payment_mode=@payment_mode, payment_date=@payment_date, due_date=@due_date,
+                                 payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
+                                 payment_date=@payment_date, due_date=@due_date,
                                  amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
                                  amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
                                  days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
                                  payment_proof_notes=@payment_proof_notes, updated_at=@updated_at
               WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
             ELSE
-              INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+              INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
           `),
       'payments'
     );
@@ -1021,6 +1067,171 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
   } catch (err) {
     console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, err);
     mockStore.deletePayment(id);
+    return res.json({ success: true, id });
+  }
+});
+
+// --- BANK ACCOUNTS ---
+router.get('/bank-accounts', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  if (!pool) {
+    return res.json(mockStore.getBankAccounts(brand));
+  }
+
+  try {
+    const q = await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(account_name AS NVARCHAR(255)), '') as accountName, 
+               ISNULL(CAST(bank_name AS NVARCHAR(255)), '') as bankName, 
+               ISNULL(CAST(account_number AS NVARCHAR(150)), '') as accountNumber,
+               ISNULL(CAST(ifsc_code AS NVARCHAR(50)), '') as ifscCode, 
+               ISNULL(CAST(branch_name AS NVARCHAR(100)), '') as branchName, 
+               ISNULL(CAST(upi_id AS NVARCHAR(100)), '') as upiId,
+               ISNULL(CAST(account_type AS NVARCHAR(50)), 'Current') as accountType,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM bank_accounts 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+        ORDER BY created_at DESC
+      `),
+      'bank_accounts'
+    );
+    if (!q.recordset || q.recordset.length === 0) {
+      try {
+        const countCheck = await pool.request().query('SELECT COUNT(*) as total FROM bank_accounts');
+        const totalCount = countCheck.recordset?.[0]?.total || 0;
+        if (totalCount === 0) {
+          const seeds = mockStore.getBankAccounts();
+          for (const acc of seeds) {
+            try {
+              const guidId = toGuid(acc.id);
+              await pool.request()
+                .input('id', guidId)
+                .input('rawId', acc.id)
+                .input('brand', acc.brand)
+                .input('account_name', acc.accountName)
+                .input('bank_name', acc.bankName)
+                .input('account_number', acc.accountNumber)
+                .input('ifsc_code', acc.ifscCode || '')
+                .input('branch_name', acc.branchName || '')
+                .input('upi_id', acc.upiId || '')
+                .input('account_type', acc.accountType)
+                .input('status', acc.status)
+                .input('notes', acc.notes || '')
+                .input('created_at', acc.createdAt)
+                .input('updated_at', acc.updatedAt)
+                .query(`
+                  IF NOT EXISTS (SELECT 1 FROM bank_accounts WHERE account_number = @account_number AND brand = @brand)
+                    INSERT INTO bank_accounts (id, brand, account_name, bank_name, account_number, ifsc_code, branch_name, upi_id, account_type, status, notes, created_at, updated_at)
+                    VALUES (@id, @brand, @account_name, @bank_name, @account_number, @ifsc_code, @branch_name, @upi_id, @account_type, @status, @notes, @created_at, @updated_at)
+                `);
+            } catch {
+              // ignore duplicate
+            }
+          }
+          return res.json(mockStore.getBankAccounts(brand));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return res.json(q.recordset || []);
+  } catch (err) {
+    console.warn('[GET /bank-accounts] Falling back to mock store:', err);
+    return res.json(mockStore.getBankAccounts(brand));
+  }
+});
+
+router.post('/bank-accounts', async (req: Request, res: Response) => {
+  const account: BankAccount = req.body;
+  const brandContext = getBrandContext(req);
+  account.brand = sanitizeBrand(account.brand, brandContext) as any;
+  const now = new Date().toISOString();
+  account.updatedAt = now;
+  account.createdAt = account.createdAt || now;
+
+  mockStore.saveBankAccount(account);
+
+  const pool = await getOrInitPool();
+  if (!pool) {
+    return res.json({ success: true, bankAccount: account });
+  }
+
+  try {
+    const guidId = toGuid(account.id);
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', account.id || '')
+          .input('brand', account.brand || 'Device Doctor India')
+          .input('account_name', account.accountName || '')
+          .input('bank_name', account.bankName || '')
+          .input('account_number', account.accountNumber || '')
+          .input('ifsc_code', account.ifscCode || '')
+          .input('branch_name', account.branchName || '')
+          .input('upi_id', account.upiId || '')
+          .input('account_type', account.accountType || 'Current')
+          .input('status', account.status || 'Active')
+          .input('notes', account.notes || '')
+          .input('created_at', account.createdAt)
+          .input('updated_at', account.updatedAt)
+          .query(`
+            IF EXISTS (SELECT 1 FROM bank_accounts WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE bank_accounts 
+              SET brand=@brand, account_name=@account_name, bank_name=@bank_name, account_number=@account_number,
+                  ifsc_code=@ifsc_code, branch_name=@branch_name, upi_id=@upi_id, account_type=@account_type,
+                  status=@status, notes=@notes, updated_at=@updated_at
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            ELSE
+              INSERT INTO bank_accounts (id, brand, account_name, bank_name, account_number, ifsc_code, branch_name, upi_id, account_type, status, notes, created_at, updated_at)
+              VALUES (@id, @brand, @account_name, @bank_name, @account_number, @ifsc_code, @branch_name, @upi_id, @account_type, @status, @notes, @created_at, @updated_at)
+          `),
+      'bank_accounts'
+    );
+    return res.json({ success: true, bankAccount: account });
+  } catch (err) {
+    console.warn('[POST /bank-accounts] Falling back to mock store:', err);
+    return res.json({ success: true, bankAccount: account });
+  }
+});
+
+router.delete('/bank-accounts/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const guidId = toGuid(id);
+
+  mockStore.deleteBankAccount(id);
+  mockStore.deleteBankAccount(guidId);
+
+  const pool = await getOrInitPool();
+  if (!pool) {
+    return res.json({ success: true, id });
+  }
+
+  try {
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool
+          .request()
+          .input('id', guidId)
+          .input('rawId', id)
+          .query('DELETE FROM bank_accounts WHERE CAST(id AS NVARCHAR(100)) = @rawId OR CAST(id AS NVARCHAR(100)) = @id'),
+      'bank_accounts'
+    );
+    return res.json({ success: true, id });
+  } catch (err) {
+    console.warn(`[DELETE /bank-accounts/${id}] Falling back to mock store:`, err);
     return res.json({ success: true, id });
   }
 });
@@ -1078,15 +1289,15 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
+  mockStore.saveGstInvoice(inv);
+
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveGstInvoice(inv);
-    return res.json({ success: true, invoice: saved });
+    return res.json({ success: true, invoice: inv });
   }
 
   try {
     const guidId = toGuid(inv.id);
-    const paymentGuid = toGuidOrNull(inv.paymentId);
     await executeSqlWithAutoMigration(
       pool,
       () =>
@@ -1094,7 +1305,7 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
           .input('id', guidId)
           .input('rawId', inv.id || '')
           .input('brand', inv.brand || 'Device Doctor India')
-          .input('payment_id', paymentGuid)
+          .input('payment_id', inv.paymentId || '')
           .input('project_id', inv.projectId || '')
           .input('client_id', inv.clientId || '')
           .input('client_name', inv.clientName || '')
@@ -1110,13 +1321,13 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
           .input('created_at', inv.createdAt)
           .input('updated_at', inv.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR (payment_id = @payment_id AND @payment_id <> ''))
               UPDATE gst_invoices SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
                                      client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
                                      currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
                                      invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
                                      gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR (payment_id = @payment_id AND @payment_id <> '')
             ELSE
               INSERT INTO gst_invoices (id, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
               VALUES (@id, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
@@ -1126,8 +1337,7 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
     return res.json({ success: true, invoice: inv });
   } catch (err) {
     console.warn('[POST /gst-invoices] Falling back to mock store:', err);
-    const saved = mockStore.saveGstInvoice(inv);
-    return res.json({ success: true, invoice: saved });
+    return res.json({ success: true, invoice: inv });
   }
 });
 

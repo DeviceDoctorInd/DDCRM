@@ -45,25 +45,25 @@ export const ClientsModule: React.FC = () => {
       label: 'Total Accounts',
       value: totalClients,
       subtext: 'Registered client entities',
-      icon: <Users className="w-4 h-4 text-cyan-600" />,
+      icon: <Users className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Active Contracts',
       value: activeClients,
       subtext: 'Operational hardware SLAs',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Prospects',
       value: prospects,
       subtext: 'Under SLA pilot / proposal',
-      icon: <Clock className="w-4 h-4 text-blue-600" />,
+      icon: <Clock className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Inactive / Blocked',
       value: inactiveOrBlocked,
       subtext: 'Archived or restricted',
-      icon: <Ban className="w-4 h-4 text-rose-500" />,
+      icon: <Ban className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
   ];
 
@@ -236,11 +236,11 @@ export const ClientsModule: React.FC = () => {
 
                   let statusBadge = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
                   if (client.status === 'Active') {
-                    statusBadge = 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60';
+                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (client.status === 'Prospect') {
-                    statusBadge = 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900/60';
+                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (client.status === 'Blocked') {
-                    statusBadge = 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900/60';
+                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   }
 
                   return (
@@ -248,7 +248,7 @@ export const ClientsModule: React.FC = () => {
                       key={client.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {client.id}
                       </td>
                       <td className="py-3.5 px-4">
@@ -296,7 +296,7 @@ export const ClientsModule: React.FC = () => {
                         <span
                           className={`px-2 py-0.5 rounded text-xs font-semibold ${
                             projectCount > 0
-                              ? 'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300'
+                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
                               : 'text-slate-400'
                           }`}
                         >
@@ -312,14 +312,14 @@ export const ClientsModule: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => handleOpenEdit(client)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Client"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteClient(client.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Client (Protected if projects exist)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -346,7 +346,7 @@ export const ClientsModule: React.FC = () => {
                   {editingClient.id ? `Edit Client: ${editingClient.name}` : 'Onboard New Corporate Client'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Client ID: <span className="font-mono text-cyan-600 dark:text-cyan-400 font-semibold">{editingClient.id || 'Auto-generated (e.g. CL-007)'}</span>
+                  Client ID: <span className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold">{editingClient.id || 'Auto-generated (e.g. CL-007)'}</span>
                 </p>
               </div>
               <button
@@ -361,7 +361,7 @@ export const ClientsModule: React.FC = () => {
             {/* Form */}
             <form onSubmit={handleSaveSubmit} className="p-6 space-y-4">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">
+                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                   {formError}
                 </div>
               )}
@@ -378,7 +378,7 @@ export const ClientsModule: React.FC = () => {
                 {/* Client Name */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Client / Enterprise Company Name <span className="text-rose-500">*</span>
+                    Client / Enterprise Company Name <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <input
                     type="text"
@@ -386,7 +386,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.name || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, name: e.target.value })}
                     placeholder="e.g. Infosys Infrastructure Support Services"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -400,7 +400,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.contactPerson || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, contactPerson: e.target.value })}
                     placeholder="e.g. Rajesh Nair"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -414,7 +414,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.phone || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, phone: e.target.value })}
                     placeholder="+91 98201 44521"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -428,7 +428,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.email || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, email: e.target.value })}
                     placeholder="billing@company.in"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -448,7 +448,7 @@ export const ClientsModule: React.FC = () => {
                       })
                     }
                     placeholder="e.g. 27AABCZ8493K1Z2"
-                    className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     Optional — strictly 15 alphanumeric characters if provided.
@@ -465,7 +465,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.city || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, city: e.target.value })}
                     placeholder="Mumbai / Bengaluru"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -479,7 +479,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.country || 'India'}
                     onChange={(e) => setEditingClient({ ...editingClient, country: e.target.value })}
                     placeholder="India"
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -496,7 +496,7 @@ export const ClientsModule: React.FC = () => {
                         preferredCurrency: e.target.value as CurrencyCode,
                       })
                     }
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   >
                     {CURRENCIES.map((curr) => (
                       <option key={curr} value={curr}>
@@ -515,7 +515,7 @@ export const ClientsModule: React.FC = () => {
                     type="date"
                     value={editingClient.clientSince || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, clientSince: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
@@ -532,7 +532,7 @@ export const ClientsModule: React.FC = () => {
                         status: e.target.value as ClientStatus,
                       })
                     }
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   >
                     {STATUS_OPTIONS.map((st) => (
                       <option key={st} value={st}>
@@ -552,7 +552,7 @@ export const ClientsModule: React.FC = () => {
                     value={editingClient.notes || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, notes: e.target.value })}
                     placeholder="Enter warranty notes, dispatch instructions, or account specifications..."
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
               </div>
@@ -568,7 +568,7 @@ export const ClientsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors"
                 >
                   Save Client Account
                 </button>

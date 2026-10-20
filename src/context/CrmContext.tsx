@@ -25,6 +25,7 @@ import {
   BRAND_CONFIG,
   getBrandPrefix,
   ReportsSubTab,
+  BankAccount,
 } from '../types/crm';
 import { storageService, DatabaseStatus } from '../services/storageService';
 
@@ -51,6 +52,7 @@ interface CrmContextType {
   services: Service[];
   projects: Project[];
   payments: Payment[];
+  bankAccounts: BankAccount[];
   roles: EmployeeRole[];
   employees: Employee[];
   assignments: Assignment[];
@@ -81,6 +83,7 @@ interface CrmContextType {
   getExpenseById: (id: string) => Expense | undefined;
   getGstInvoiceById: (id: string) => GstInvoice | undefined;
   getGstInvoiceByPaymentId: (paymentId: string) => GstInvoice | undefined;
+  getBankAccountById: (id: string) => BankAccount | undefined;
   getProjectExpenses: (projectId: string) => Expense[];
   getProjectExpensesTotalINR: (projectId: string) => number;
 
@@ -109,6 +112,10 @@ interface CrmContextType {
 
   savePayment: (payment: Payment) => Promise<{ success: boolean; error?: string }>;
   deletePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
+
+  saveBankAccount: (account: BankAccount) => Promise<{ success: boolean; error?: string }>;
+  deleteBankAccount: (id: string) => Promise<{ success: boolean; error?: string }>;
+  setBankAccountStatus: (id: string, status: BankAccount['status']) => Promise<void>;
 
   saveRole: (role: EmployeeRole) => Promise<{ success: boolean; error?: string }>;
   deleteRole: (roleId: string) => Promise<{ success: boolean; error?: string }>;
@@ -191,6 +198,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [rawServices, setRawServices] = useState<Service[]>([]);
   const [rawProjects, setRawProjects] = useState<Project[]>([]);
   const [rawPayments, setRawPayments] = useState<Payment[]>([]);
+  const [rawBankAccounts, setRawBankAccounts] = useState<BankAccount[]>([]);
   const [rawRoles, setRawRoles] = useState<EmployeeRole[]>([]);
   const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
   const [rawAssignments, setRawAssignments] = useState<Assignment[]>([]);
@@ -315,6 +323,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         services,
         projects,
         payments,
+        bankAccounts,
         gstInvoices,
         roles,
         employees,
@@ -344,6 +353,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         storageService.fetchPayments().catch((err) => {
           console.warn('[Fetch Payments]', err);
           return [] as Payment[];
+        }),
+        storageService.fetchBankAccounts().catch((err) => {
+          console.warn('[Fetch Bank Accounts]', err);
+          return [] as BankAccount[];
         }),
         storageService.fetchGstInvoices().catch((err) => {
           console.warn('[Fetch GST Invoices]', err);
@@ -385,6 +398,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setRawServices(services);
       setRawProjects(projects);
       setRawPayments(payments);
+      setRawBankAccounts(bankAccounts);
       setRawGstInvoices(gstInvoices);
       setRawRoles(roles);
       setRawEmployees(employees);
@@ -498,6 +512,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const expenseMap = useMemo(() => new Map(rawExpenses.map((e) => [e.id, e])), [rawExpenses]);
   const gstInvoiceMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.id, g])), [rawGstInvoices]);
   const gstInvoicePaymentMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.paymentId, g])), [rawGstInvoices]);
+  const bankAccountMap = useMemo(() => new Map(rawBankAccounts.map((b) => [b.id, b])), [rawBankAccounts]);
 
   const getClientById = (id: string) => clientMap.get(id);
   const getCategoryById = (id: string) => categoryMap.get(id);
@@ -511,6 +526,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getExpenseById = (id: string) => expenseMap.get(id);
   const getGstInvoiceById = (id: string) => gstInvoiceMap.get(id);
   const getGstInvoiceByPaymentId = (paymentId: string) => gstInvoicePaymentMap.get(paymentId);
+  const getBankAccountById = (id: string) => bankAccountMap.get(id);
   const getProjectExpenses = (projectId: string) => {
     if (!projectId || projectId === 'NA') return [];
     return rawExpenses.filter((e) => e.projectId === projectId);
@@ -544,6 +560,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (isConsolidatedView) return rawPayments;
     return rawPayments.filter((p) => p.brand === activeBrand);
   }, [rawPayments, activeBrand, isConsolidatedView]);
+
+  const bankAccounts = useMemo(() => {
+    if (isConsolidatedView) return rawBankAccounts;
+    return rawBankAccounts.filter((b) => b.brand === activeBrand);
+  }, [rawBankAccounts, activeBrand, isConsolidatedView]);
 
   const roles = useMemo(() => {
     if (isConsolidatedView) return rawRoles;
@@ -862,6 +883,64 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showToast(res.error || 'Failed to remove payment.', 'error');
     }
     return res;
+  };
+
+  const saveBankAccountAction = async (account: BankAccount) => {
+    if (!account.brand) account.brand = activeBrand;
+    if (!account.id) {
+      account.id = storageService.generateId('BNK', account.brand, rawBankAccounts);
+    }
+    const res = await storageService.saveBankAccount(account);
+    if (res.success) {
+      showToast(`Bank account "${account.accountName}" saved to Azure SQL.`, 'success');
+      await loadAll();
+    } else {
+      showToast(res.error || 'Failed to save bank account to Azure SQL.', 'error');
+    }
+    return res;
+  };
+
+  const deleteBankAccountAction = async (bankAccountId: string) => {
+    const bnk = getBankAccountById(bankAccountId);
+    const bnkName = bnk?.accountName || bankAccountId;
+    const check = storageService.canDeleteBankAccount(bankAccountId, rawPayments);
+
+    if (!check.allowed) {
+      openReferentialBlock({
+        title: 'Referential Integrity Block: Bank Account Linked to Payments',
+        message: check.reason || `Cannot delete bank account "${bnkName}" because payments are tagged with it.`,
+        entityName: bnkName,
+        entityType: 'Bank Account',
+        entityId: bankAccountId,
+        linkedCount: check.linkedCount,
+        onSetInactive: async () => {
+          await setBankAccountStatus(bankAccountId, 'Inactive');
+          showToast(`Bank account "${bnkName}" marked as Inactive.`, 'info');
+          closeReferentialModal();
+        },
+      });
+      return { success: false, error: check.reason };
+    }
+
+    // Optimistically update local state for immediate, instant UI refresh
+    setRawBankAccounts((prev) => prev.filter((b) => b.id !== bankAccountId));
+
+    const res = await storageService.deleteBankAccount(bankAccountId);
+    if (res.success) {
+      showToast(`Bank account "${bnkName}" deleted from Azure SQL.`, 'info');
+      await loadAll();
+    } else {
+      // Revert optimistic removal on failure
+      await loadAll();
+      showToast(res.error || 'Failed to delete bank account.', 'error');
+    }
+    return res;
+  };
+
+  const setBankAccountStatus = async (bankAccountId: string, status: BankAccount['status']) => {
+    const bnk = getBankAccountById(bankAccountId);
+    if (!bnk) return;
+    await saveBankAccountAction({ ...bnk, status });
   };
 
   const saveRoleAction = async (role: EmployeeRole) => {
@@ -1207,6 +1286,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         services,
         projects,
         payments,
+        bankAccounts,
         allProjects: rawProjects,
         allPayments: rawPayments,
         allClients: rawClients,
@@ -1231,6 +1311,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getExpenseById,
         getGstInvoiceById,
         getGstInvoiceByPaymentId,
+        getBankAccountById,
         getProjectExpenses,
         getProjectExpensesTotalINR,
         getCategoryServicesCount,
@@ -1251,6 +1332,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setProjectStatus,
         savePayment: savePaymentAction,
         deletePayment: deletePaymentAction,
+        saveBankAccount: saveBankAccountAction,
+        deleteBankAccount: deleteBankAccountAction,
+        setBankAccountStatus,
         saveRole: saveRoleAction,
         deleteRole: deleteRoleAction,
         saveEmployee: saveEmployeeAction,

@@ -57,7 +57,7 @@ export const BrandSafetyGuardBanner: React.FC<BrandSafetyGuardBannerProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 leading-relaxed">
-              <ShieldAlert className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <ShieldAlert className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0" />
               <span>
                 {isEditing ? (
                   <>
@@ -81,7 +81,7 @@ export const BrandSafetyGuardBanner: React.FC<BrandSafetyGuardBannerProps> = ({
             onClick={onChangeWorkspace}
             className="self-end sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-colors shadow-2xs shrink-0 cursor-pointer"
           >
-            <RefreshCw className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+            <RefreshCw className="w-3 h-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
             <span>Change Brand</span>
           </button>
         )}

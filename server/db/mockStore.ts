@@ -12,6 +12,7 @@ import {
   ExpenseCategory,
   Expense,
   AppUser,
+  BankAccount,
 } from '../../src/types/crm';
 
 export interface AuditLogEntry {
@@ -31,6 +32,7 @@ class MockStore {
   private services: Service[] = [];
   private projects: Project[] = [];
   private payments: Payment[] = [];
+  private bankAccounts: BankAccount[] = [];
   private gstInvoices: GstInvoice[] = [];
   private roles: EmployeeRole[] = [];
   private employees: Employee[] = [];
@@ -423,6 +425,152 @@ class MockStore {
       },
     ];
 
+    // Bank Accounts (associated with each brand)
+    this.bankAccounts = [
+      // Device Doctor India
+      {
+        id: 'DDI-BNK-001',
+        brand: 'Device Doctor India',
+        accountName: 'Primary Operating Account',
+        bankName: 'HDFC Bank',
+        accountNumber: '50200088921478',
+        ifscCode: 'HDFC0001234',
+        branchName: 'Connaught Place, New Delhi',
+        upiId: 'devicedoctor@hdfcbank',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'Primary INR client collections and GST invoices account.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-BNK-002',
+        brand: 'Device Doctor India',
+        accountName: 'Corporate Reserves A/C',
+        bankName: 'ICICI Bank',
+        accountNumber: '001205019842',
+        ifscCode: 'ICIC0000012',
+        branchName: 'Nehru Place, New Delhi',
+        upiId: 'devicedoctor.reserves@icici',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'Enterprise contracts and operational reserve account.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-BNK-003',
+        brand: 'Device Doctor India',
+        accountName: 'Online Escrow & Payment Gateway',
+        bankName: 'Razorpay / Cashfree Settlement',
+        accountNumber: 'PG-DDI-SETTLE-88',
+        ifscCode: 'RAZR0000001',
+        branchName: 'Virtual Nodal Account',
+        upiId: 'ddi.instant@razorpay',
+        accountType: 'Escrow',
+        status: 'Active',
+        notes: 'Automated digital payments & UPI gateway collections.',
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      // Codestro
+      {
+        id: 'CDS-BNK-001',
+        brand: 'Codestro',
+        accountName: 'Digital Product Operating A/C',
+        bankName: 'Axis Bank',
+        accountNumber: '921020054789123',
+        ifscCode: 'UTIB0000456',
+        branchName: 'Koramangala, Bengaluru',
+        upiId: 'codestro@axisbank',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'SaaS retainers and domestic software development billing.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-BNK-002',
+        brand: 'Codestro',
+        accountName: 'Global Wire & Foreign Inward A/C',
+        bankName: 'Wise Multi-Currency / SVB',
+        accountNumber: '4420891204',
+        ifscCode: 'WISEUS33XXX',
+        branchName: 'New York Wire Center',
+        upiId: '',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'Cross-border USD/EUR international client transfers.',
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      // FX Launch Pad
+      {
+        id: 'FXL-BNK-001',
+        brand: 'FX Launch Pad',
+        accountName: 'FinTech Corporate Treasury',
+        bankName: 'Emirates NBD',
+        accountNumber: '10129840291',
+        ifscCode: 'EBILAEADXXX',
+        branchName: 'DIFC Branch, Dubai UAE',
+        upiId: '',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'Middle East & Global FinTech licensing corporate account.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'FXL-BNK-002',
+        brand: 'FX Launch Pad',
+        accountName: 'USDT TRC20 Corporate Treasury',
+        bankName: 'Tether TRC-20 Institutional Wallet',
+        accountNumber: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        ifscCode: 'TRC-20-CHAIN',
+        branchName: 'Tron Network Multicall',
+        upiId: '',
+        accountType: 'Crypto Wallet',
+        status: 'Active',
+        notes: 'Multi-sig algorithmic trading challenges and prop firm fee deposits.',
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      // DUNS
+      {
+        id: 'DNS-BNK-001',
+        brand: 'DUNS',
+        accountName: 'Corporate Compliance Clearing',
+        bankName: 'Standard Chartered Bank',
+        accountNumber: '66201948291',
+        ifscCode: 'SCBL0036001',
+        branchName: 'Barakhamba Road, New Delhi',
+        upiId: 'duns.global@sc',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'International D-U-N-S verification and regulatory billing.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DNS-BNK-002',
+        brand: 'DUNS',
+        accountName: 'Institutional Advisory A/C',
+        bankName: 'State Bank of India',
+        accountNumber: '33901928471',
+        ifscCode: 'SBIN0000691',
+        branchName: 'Parliament Street, New Delhi',
+        upiId: 'duns.india@sbi',
+        accountType: 'Current',
+        status: 'Active',
+        notes: 'Corporate intelligence and Indian compliance operations.',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+
     // Payments
     this.payments = [
       {
@@ -432,6 +580,8 @@ class MockStore {
         clientId: 'DDI-CL-001',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'GST Invoice',
+        bankAccountId: 'DDI-BNK-001',
+        bankAccountName: 'HDFC Bank - Primary Operating Account (50200088921478)',
         paymentDate: '2025-01-20',
         dueDate: '2025-01-20',
         amountReceived: 300000,
@@ -452,6 +602,8 @@ class MockStore {
         clientId: 'DDI-CL-001',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'GST Invoice',
+        bankAccountId: 'DDI-BNK-001',
+        bankAccountName: 'HDFC Bank - Primary Operating Account (50200088921478)',
         paymentDate: '',
         dueDate: '2025-04-20',
         amountReceived: 150000,
@@ -472,6 +624,8 @@ class MockStore {
         clientId: 'CDS-CL-001',
         clientName: 'FinScale Technologies Inc',
         paymentMode: 'Non GST Online',
+        bankAccountId: 'CDS-BNK-002',
+        bankAccountName: 'Wise Multi-Currency / SVB - Global Wire & Foreign Inward A/C (4420891204)',
         paymentDate: '2025-02-15',
         dueDate: '2025-02-15',
         amountReceived: 12000,
@@ -492,6 +646,8 @@ class MockStore {
         clientId: 'FXL-CL-001',
         clientName: 'AlphaEdge Quantitative Capital',
         paymentMode: 'Crypto',
+        bankAccountId: 'FXL-BNK-002',
+        bankAccountName: 'Tether TRC-20 Institutional Wallet - USDT Corporate Treasury (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)',
         paymentDate: '2025-02-24',
         dueDate: '2025-02-24',
         amountReceived: 25000,
@@ -512,6 +668,8 @@ class MockStore {
         clientId: 'DNS-CL-001',
         clientName: 'Vertex Global Compliance Corp',
         paymentMode: 'Non GST Online',
+        bankAccountId: 'DNS-BNK-001',
+        bankAccountName: 'Standard Chartered Bank - Corporate Compliance Clearing (66201948291)',
         paymentDate: '2025-02-05',
         dueDate: '2025-02-05',
         amountReceived: 13872.83,
@@ -522,6 +680,183 @@ class MockStore {
         paymentStatus: 'Received',
         daysOverdue: 0,
         notes: 'Initial compliance onboarding retainer fee received.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      // August 2026 Payments for granular report validation
+      {
+        id: 'DDI-PAY-003',
+        brand: 'Device Doctor India',
+        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        clientId: 'DDI-CL-001',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentMode: 'GST Invoice',
+        bankAccountId: 'DDI-BNK-001',
+        bankAccountName: 'HDFC Bank - Primary Operating Account (50200088921478)',
+        paymentDate: '2026-08-14',
+        dueDate: '2026-08-14',
+        amountReceived: 450000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 450000,
+        referenceUtr: 'HDFC-NEFT-20260814981',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'August milestone server overhaul billing credited into HDFC.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-PAY-004',
+        brand: 'Device Doctor India',
+        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        clientId: 'DDI-CL-001',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentMode: 'Non GST Online',
+        bankAccountId: 'DDI-BNK-001',
+        bankAccountName: 'HDFC Bank - Primary Operating Account (50200088921478)',
+        paymentDate: '2026-08-22',
+        dueDate: '2026-08-22',
+        amountReceived: 180000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 180000,
+        referenceUtr: 'HDFC-IMPS-20260822104',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'Emergency motherboard repair & on-site IT support payment received in HDFC.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-PAY-005',
+        brand: 'Device Doctor India',
+        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        clientId: 'DDI-CL-001',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        bankAccountName: '',
+        paymentDate: '2026-08-08',
+        dueDate: '2026-08-08',
+        amountReceived: 95000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 95000,
+        referenceUtr: 'CASH-RCPT-20260808-01',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'Hardware spare parts counter cash collection.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-PAY-006',
+        brand: 'Device Doctor India',
+        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        clientId: 'DDI-CL-001',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentMode: 'Non GST Online',
+        bankAccountId: 'DDI-BNK-003',
+        bankAccountName: 'Razorpay / Cashfree Settlement - Online Escrow & Payment Gateway (PG-DDI-SETTLE-88)',
+        paymentDate: '2026-08-29',
+        dueDate: '2026-08-29',
+        amountReceived: 125000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 125000,
+        referenceUtr: 'UPI-RAZORPAY-2026082987',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'Instant UPI settlement via payment gateway.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'FXL-PAY-002',
+        brand: 'FX Launch Pad',
+        projectId: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
+        clientId: 'FXL-CL-001',
+        clientName: 'AlphaEdge Quantitative Capital',
+        paymentMode: 'Crypto',
+        bankAccountId: 'FXL-BNK-002',
+        bankAccountName: 'Tether TRC-20 Institutional Wallet - USDT Corporate Treasury (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)',
+        paymentDate: '2026-08-18',
+        dueDate: '2026-08-18',
+        amountReceived: 18000,
+        currency: 'USDT',
+        exchangeRate: 86.5,
+        amountINR: 1557000,
+        referenceUtr: '0x3c99a818...usdt-august',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'August MT5 challenge platform evaluation fees settled in Crypto USDT.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'FXL-PAY-003',
+        brand: 'FX Launch Pad',
+        projectId: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
+        clientId: 'FXL-CL-001',
+        clientName: 'AlphaEdge Quantitative Capital',
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        bankAccountName: '',
+        paymentDate: '2026-08-25',
+        dueDate: '2026-08-25',
+        amountReceived: 350000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 350000,
+        referenceUtr: 'FXL-CASH-AUG2026-01',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'Dubai trading seminar VIP registration cash settlement.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-PAY-002',
+        brand: 'Codestro',
+        projectId: 'CDS - FINSCALE TECHNOLOGIES - MULTI-TENANT SAAS WEB APPLICATION - 1',
+        clientId: 'CDS-CL-001',
+        clientName: 'FinScale Technologies Inc',
+        paymentMode: 'GST Invoice',
+        bankAccountId: 'CDS-BNK-001',
+        bankAccountName: 'Axis Bank - Digital Product Operating A/C (921020054789123)',
+        paymentDate: '2026-08-10',
+        dueDate: '2026-08-10',
+        amountReceived: 520000,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 520000,
+        referenceUtr: 'AXIS-NEFT-20260810-91',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'Sprint 3 React/Next.js portal development billing.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DNS-PAY-002',
+        brand: 'DUNS',
+        projectId: 'DNS - VERTEX GLOBAL COMPLIANCE CORP - GLOBAL BUSINESS VERIFICATION & D-U-N-S CERTIFICATION - 1',
+        clientId: 'DNS-CL-001',
+        clientName: 'Vertex Global Compliance Corp',
+        paymentMode: 'Non GST Online',
+        bankAccountId: 'DNS-BNK-001',
+        bankAccountName: 'Standard Chartered Bank - Corporate Compliance Clearing (66201948291)',
+        paymentDate: '2026-08-16',
+        dueDate: '2026-08-16',
+        amountReceived: 10000,
+        currency: 'USD',
+        exchangeRate: 86.5,
+        amountINR: 865000,
+        referenceUtr: 'SCB-SWIFT-20260816-44',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: 'August corporate risk KYC scoring retainer fee.',
         createdAt: now,
         updatedAt: now,
       },
@@ -1171,6 +1506,46 @@ class MockStore {
     return created;
   }
 
+  // --- Bank Accounts ---
+  public getBankAccounts(brand?: string | null): BankAccount[] {
+    if (!brand || brand === 'All' || brand === 'All Brands' || brand === 'All Brands (Consolidated View)') {
+      return [...this.bankAccounts];
+    }
+    return this.bankAccounts.filter((b) => b.brand === brand);
+  }
+
+  public getBankAccountById(id: string): BankAccount | undefined {
+    return this.bankAccounts.find((b) => b.id === id);
+  }
+
+  public saveBankAccount(account: BankAccount): BankAccount {
+    const existingIndex = this.bankAccounts.findIndex((b) => b.id === account.id);
+    const now = new Date().toISOString();
+    const toSave: BankAccount = {
+      ...account,
+      updatedAt: now,
+      createdAt: account.createdAt || now,
+    };
+
+    if (existingIndex >= 0) {
+      this.bankAccounts[existingIndex] = toSave;
+    } else {
+      this.bankAccounts.unshift(toSave);
+    }
+    return toSave;
+  }
+
+  public deleteBankAccount(id: string): boolean {
+    const initial = this.bankAccounts.length;
+    const cleanId = (id || '').trim().toLowerCase();
+    this.bankAccounts = this.bankAccounts.filter((b) => {
+      const bId = (b.id || '').trim().toLowerCase();
+      if (bId === cleanId || b.id === id) return false;
+      return true;
+    });
+    return this.bankAccounts.length < initial;
+  }
+
   // --- Stats & Diagnostics ---
   public getTableCounts(): Record<string, number> {
     return {
@@ -1179,6 +1554,7 @@ class MockStore {
       services: this.services.length,
       projects: this.projects.length,
       payments: this.payments.length,
+      bank_accounts: this.bankAccounts.length,
       gst_invoices: this.gstInvoices.length,
       employee_roles: this.roles.length,
       employees: this.employees.length,
@@ -1197,6 +1573,7 @@ class MockStore {
     this.services = [];
     this.projects = [];
     this.payments = [];
+    this.bankAccounts = [];
     this.gstInvoices = [];
     this.roles = [];
     this.employees = [];
@@ -1224,6 +1601,7 @@ class MockStore {
         'employee_roles',
         'gst_invoices',
         'payments',
+        'bank_accounts',
         'projects',
         'services',
         'service_categories',

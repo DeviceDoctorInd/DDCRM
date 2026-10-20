@@ -161,13 +161,13 @@ export const UsersModule: React.FC = () => {
     switch (role) {
       case 'Super Admin':
       case 'Super Administrator':
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-800';
+        return 'bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700';
       case 'Brand Admin':
-        return 'bg-violet-100 text-violet-800 dark:bg-violet-950/70 dark:text-violet-300 border-violet-300 dark:border-violet-800';
+        return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700';
       case 'Project Manager':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300 dark:border-blue-800';
+        return 'bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700';
       case 'Accountant':
-        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800';
+        return 'bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700';
       default:
         return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700';
     }
@@ -176,24 +176,24 @@ export const UsersModule: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner: Azure SQL Integration Status & Admin Overview */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white border border-slate-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="p-5 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30">
+            <div className="p-1.5 rounded-lg bg-slate-500/20 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
               <Database className="w-5 h-5" />
             </div>
             <h1 className="text-xl font-bold tracking-tight">Admin & User Management</h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
+            <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-slate-500/20 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
               live app_users
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
             Role-Based Access Control (RBAC) backed by Microsoft Azure SQL Database (
-            <span className="font-mono text-cyan-300">{databaseStatus.server} / {databaseStatus.database}</span>) using <span className="font-semibold text-slate-200">{databaseStatus.authType}</span> as <span className="font-mono text-cyan-300">{databaseStatus.user}</span>.
+            <span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.server} / {databaseStatus.database}</span>) using <span className="font-semibold text-slate-200">{databaseStatus.authType}</span> as <span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.user}</span>.
             {databaseStatus.connected ? (
-              <span className="ml-2 text-emerald-400 font-semibold">● Connected</span>
+              <span className="ml-2 text-slate-800 dark:text-slate-200 font-semibold">● Connected</span>
             ) : (
-              <span className="ml-2 text-amber-400 font-semibold" title={databaseStatus.error || undefined}>
+              <span className="ml-2 text-slate-800 dark:text-slate-200 font-semibold" title={databaseStatus.error || undefined}>
                 ○ Disconnected (Live Azure SQL Required)
               </span>
             )}
@@ -214,17 +214,17 @@ export const UsersModule: React.FC = () => {
           <button
             onClick={handleClearDemo}
             disabled={isClearingDemo}
-            className="flex-1 md:flex-none px-3.5 py-2 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-xs font-semibold text-rose-200 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
+            className="flex-1 md:flex-none px-3.5 py-2 rounded-lg bg-black hover:bg-neutral-800 text-xs font-semibold text-white transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-xs"
             title="Purge all demo data from Azure SQL and server cache while preserving main admin accounts"
           >
-            <Trash2 className={`w-3.5 h-3.5 text-rose-400 ${isClearingDemo ? 'animate-spin' : ''}`} />
+            <Trash2 className={`w-3.5 h-3.5 text-slate-800 dark:text-slate-200 ${isClearingDemo ? 'animate-spin' : ''}`} />
             <span>{isClearingDemo ? 'Clearing...' : 'Remove Demo Data'}</span>
           </button>
 
           {isSuperAdmin && (
             <button
               onClick={handleOpenAdd}
-              className="px-3.5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Add App User</span>
@@ -235,22 +235,22 @@ export const UsersModule: React.FC = () => {
 
       {/* Live Azure SQL Diagnostics / Firewall Banner */}
       {!databaseStatus.connected && (
-        <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+            <div className="p-2 rounded-lg bg-slate-500/10 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0 mt-0.5">
               <AlertTriangle className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <div className="font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <span>Azure SQL Direct Connection Pending</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-mono">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-mono">
                   Strict Live SQL Mode
                 </span>
               </div>
-              <p className="text-amber-700 dark:text-amber-300 mt-1 leading-relaxed max-w-3xl">
+              <p className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mt-1 leading-relaxed max-w-3xl">
                 {databaseStatus.error || 'Connection to Azure SQL Database could not be established.'}
               </p>
-              <div className="mt-2 text-[11px] text-amber-800 dark:text-amber-300/90 font-medium">
+              <div className="mt-2 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200/90 font-medium">
                 💡 <span className="font-semibold">Quick Fix:</span> In the Azure Portal, open SQL server <span className="font-mono font-semibold">{databaseStatus.server.split('.')[0]}</span> &rarr; <span className="font-semibold">Networking</span> &rarr; Add Firewall rule for the server IP or check <span className="font-semibold">"Allow Azure services and resources to access this server"</span>.
               </div>
             </div>
@@ -258,7 +258,7 @@ export const UsersModule: React.FC = () => {
           <button
             onClick={handleSync}
             disabled={isSyncing}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>Test Connection</span>
@@ -269,7 +269,7 @@ export const UsersModule: React.FC = () => {
       {/* Brand Workspace Isolation & Session Settings */}
       <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/80 shrink-0 mt-0.5">
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 shrink-0 mt-0.5">
             <Layers className="w-5 h-5" />
           </div>
           <div>
@@ -277,18 +277,18 @@ export const UsersModule: React.FC = () => {
               <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
                 Brand Workspace & Data Isolation
               </h3>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 font-bold">
                 Session Locked
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Current active workspace: <span className="font-semibold text-slate-900 dark:text-white">{activeBrand}</span> (<span className="font-mono text-cyan-600 dark:text-cyan-400 font-bold">{brandPrefix}</span>). Top header switcher has been permanently removed to eliminate accidental cross-brand data contamination.
+              Current active workspace: <span className="font-semibold text-slate-900 dark:text-white">{activeBrand}</span> (<span className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-bold">{brandPrefix}</span>). Top header switcher has been permanently removed to eliminate accidental cross-brand data contamination.
             </p>
           </div>
         </div>
 
         <div className="shrink-0 flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 select-none">
-          <Lock className="w-3.5 h-3.5 text-amber-500" />
+          <Lock className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
           <span>Session Locked · Log out to change workspace</span>
         </div>
       </div>
@@ -296,7 +296,7 @@ export const UsersModule: React.FC = () => {
       {/* Role Privileges Reference Card */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-amber-700 dark:text-amber-400 mb-1">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mb-1">
             <Shield className="w-3.5 h-3.5" />
             <span>Super Admin</span>
           </div>
@@ -306,7 +306,7 @@ export const UsersModule: React.FC = () => {
         </div>
 
         <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-violet-700 dark:text-violet-400 mb-1">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mb-1">
             <Layers className="w-3.5 h-3.5" />
             <span>Brand Admin</span>
           </div>
@@ -316,7 +316,7 @@ export const UsersModule: React.FC = () => {
         </div>
 
         <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-blue-700 dark:text-blue-400 mb-1">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mb-1">
             <Briefcase className="w-3.5 h-3.5" />
             <span>Project Manager</span>
           </div>
@@ -326,7 +326,7 @@ export const UsersModule: React.FC = () => {
         </div>
 
         <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-700 dark:text-emerald-400 mb-1">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mb-1">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Accountant</span>
           </div>
@@ -355,7 +355,7 @@ export const UsersModule: React.FC = () => {
             placeholder="Search operator name or email address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
           />
         </div>
 
@@ -364,7 +364,7 @@ export const UsersModule: React.FC = () => {
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            className="w-full sm:w-auto px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
           >
             <option value="all">All Roles ({users.length})</option>
             <option value="Super Admin">Super Admin</option>
@@ -414,7 +414,7 @@ export const UsersModule: React.FC = () => {
                               className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-300 font-bold flex items-center justify-center text-xs">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-bold flex items-center justify-center text-xs">
                               {user.name.charAt(0).toUpperCase()}
                             </div>
                           )}
@@ -422,7 +422,7 @@ export const UsersModule: React.FC = () => {
                             <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                               <span>{user.name}</span>
                               {isCurrent && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 font-medium">
+                                <span className="px-1.5 py-0.2 rounded text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
                                   You
                                 </span>
                               )}
@@ -454,7 +454,7 @@ export const UsersModule: React.FC = () => {
 
                       <td className="py-3 px-4">
                         {user.status === 'Active' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Active</span>
                           </span>
@@ -471,7 +471,7 @@ export const UsersModule: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenEdit(user)}
-                              className="p-1 rounded text-slate-400 hover:text-cyan-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              className="p-1 rounded text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Edit user details and role"
                             >
                               <Edit2 className="w-4 h-4" />
@@ -479,7 +479,7 @@ export const UsersModule: React.FC = () => {
                             <button
                               onClick={() => handleDelete(user.id, user.name)}
                               disabled={isCurrent}
-                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-1 rounded text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                               title={isCurrent ? 'Cannot delete current session' : 'Delete user'}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -502,7 +502,7 @@ export const UsersModule: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-cyan-600" />
+                <KeyRound className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>{editingUser ? 'Edit App User & Role' : 'Create Azure SQL App User'}</span>
               </h3>
               <button
@@ -524,7 +524,7 @@ export const UsersModule: React.FC = () => {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. Hemant Rathore"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -538,7 +538,7 @@ export const UsersModule: React.FC = () => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="rathorehemant114@gmail.com"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-[11px]"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono text-[11px]"
                 />
               </div>
 
@@ -551,7 +551,7 @@ export const UsersModule: React.FC = () => {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Leave as Admin@2026 or set custom"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-[11px]"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono text-[11px]"
                 />
               </div>
 
@@ -563,7 +563,7 @@ export const UsersModule: React.FC = () => {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   >
                     <option value="Super Admin">Super Admin</option>
                     <option value="Brand Admin">Brand Admin</option>
@@ -580,7 +580,7 @@ export const UsersModule: React.FC = () => {
                   <select
                     value={formData.brand}
                     onChange={(e) => setFormData({ ...formData, brand: e.target.value as BrandName | 'All' })}
-                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   >
                     <option value="All">All Brands</option>
                     <option value="Device Doctor India">Device Doctor India</option>
@@ -601,7 +601,7 @@ export const UsersModule: React.FC = () => {
                       name="status"
                       checked={formData.status === 'Active'}
                       onChange={() => setFormData({ ...formData, status: 'Active' })}
-                      className="text-cyan-600 focus:ring-cyan-500"
+                      className="text-slate-800 dark:text-slate-200 focus:ring-slate-900"
                     />
                     <span>Active</span>
                   </label>
@@ -611,7 +611,7 @@ export const UsersModule: React.FC = () => {
                       name="status"
                       checked={formData.status === 'Inactive'}
                       onChange={() => setFormData({ ...formData, status: 'Inactive' })}
-                      className="text-cyan-600 focus:ring-cyan-500"
+                      className="text-slate-800 dark:text-slate-200 focus:ring-slate-900"
                     />
                     <span>Inactive</span>
                   </label>
@@ -628,7 +628,7 @@ export const UsersModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md cursor-pointer"
+                  className="px-4 py-2 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-md cursor-pointer"
                 >
                   {editingUser ? 'Save Changes' : 'Create User'}
                 </button>

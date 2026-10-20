@@ -5,6 +5,8 @@ import { BusinessReportSubModule } from './reports/BusinessReportSubModule';
 import { ClientReportSubModule } from './reports/ClientReportSubModule';
 import { EmployeeReportSubModule } from './reports/EmployeeReportSubModule';
 import { BusinessOverviewSubModule } from './reports/BusinessOverviewSubModule';
+import { BankAccountReportSubModule } from './reports/BankAccountReportSubModule';
+import { PaymentModeReportSubModule } from './reports/PaymentModeReportSubModule';
 import {
   BarChart3,
   TrendingUp,
@@ -14,6 +16,8 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Sparkles,
+  Landmark,
+  CreditCard,
 } from 'lucide-react';
 
 interface SubTabConfig {
@@ -58,6 +62,20 @@ export const ReportsModule: React.FC = () => {
       icon: <PieChart className="w-4 h-4" />,
       description: `${brandUpper} — Business Overview, 360° revenue, collections, project costs & profitability`,
     },
+    {
+      id: 'bank-accounts',
+      label: '5. Bank Account Report',
+      badge: 'Bank Reconciled',
+      icon: <Landmark className="w-4 h-4" />,
+      description: `${brandUpper} — Inflow breakdown by specific corporate bank accounts and crypto wallets`,
+    },
+    {
+      id: 'payment-modes',
+      label: '6. Payment Mode Report',
+      badge: 'Mode Audit',
+      icon: <CreditCard className="w-4 h-4" />,
+      description: `${brandUpper} — Revenue analysis by settlement method (Cash, Crypto, GST Invoice, UPI)`,
+    },
   ];
 
   const currentTabConfig = tabs.find((t) => t.id === activeReportsTab) || tabs[0];
@@ -67,13 +85,13 @@ export const ReportsModule: React.FC = () => {
       {/* Module Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md">
+          <div className="p-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
               <span>Executive Reports & Analytics</span>
-              <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+              <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
                 {isConsolidatedView ? 'Consolidated All Brands' : `${brandPrefix} Workspace`}
               </span>
             </h1>
@@ -90,17 +108,17 @@ export const ReportsModule: React.FC = () => {
             onClick={() => setIsConsolidatedView(!isConsolidatedView)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-xs cursor-pointer ${
               isConsolidatedView
-                ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-500'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                ? 'bg-black text-white border-black hover:bg-neutral-800'
+                : 'bg-white dark:bg-slate-850 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+            <Sparkles className="w-3.5 h-3.5 text-slate-400" />
             <span>{isConsolidatedView ? 'Consolidated View: ON' : 'All Brands (Consolidated View)'}</span>
           </button>
 
           <div className="hidden md:flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 border-l border-slate-200 dark:border-slate-700 pl-2.5">
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
               Live Sync
             </span>
             <span>·</span>
@@ -121,15 +139,15 @@ export const ReportsModule: React.FC = () => {
                 onClick={() => setActiveReportsTab(tab.id)}
                 className={`group relative flex items-center gap-2 py-3 px-3.5 sm:px-4 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
                   isActive
-                    ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400 dark:border-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/20 rounded-t-lg'
-                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:border-slate-300 dark:hover:border-slate-700'
+                    ? 'border-black text-black dark:border-white dark:text-white bg-slate-100/80 dark:bg-slate-800/80 rounded-t-lg'
+                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-700'
                 }`}
               >
                 <span
                   className={`${
                     isActive
-                      ? 'text-cyan-600 dark:text-cyan-400'
-                      : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                      ? 'text-black dark:text-white'
+                      : 'text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300'
                   }`}
                 >
                   {tab.icon}
@@ -141,8 +159,8 @@ export const ReportsModule: React.FC = () => {
                   <span
                     className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ${
                       isActive
-                        ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/60 dark:text-cyan-200'
-                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        ? 'bg-black text-white dark:bg-white dark:text-slate-900'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
                     }`}
                   >
                     {tab.badge}
@@ -170,6 +188,8 @@ export const ReportsModule: React.FC = () => {
         {activeReportsTab === 'client' && <ClientReportSubModule />}
         {activeReportsTab === 'employee' && <EmployeeReportSubModule />}
         {activeReportsTab === 'overview' && <BusinessOverviewSubModule />}
+        {activeReportsTab === 'bank-accounts' && <BankAccountReportSubModule />}
+        {activeReportsTab === 'payment-modes' && <PaymentModeReportSubModule />}
       </div>
     </div>
   );

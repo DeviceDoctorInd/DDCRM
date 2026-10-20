@@ -30,6 +30,7 @@ import {
   Building2,
   Globe,
   Database,
+  Landmark,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -55,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     services,
     projects,
     payments,
+    bankAccounts,
     gstInvoices,
     roles,
     employees,
@@ -112,6 +114,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: '4. Business Overview',
       icon: <PieChart className="w-3.5 h-3.5 shrink-0" />,
     },
+    {
+      id: 'bank-accounts',
+      label: '5. Bank Account Report',
+      icon: <Landmark className="w-3.5 h-3.5 shrink-0" />,
+    },
+    {
+      id: 'payment-modes',
+      label: '6. Payment Mode Report',
+      icon: <CreditCard className="w-3.5 h-3.5 shrink-0" />,
+    },
   ];
 
   const navItems: {
@@ -129,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'reports',
       label: 'Reports',
       icon: <BarChart3 className="w-4 h-4 shrink-0" />,
-      count: 4,
+      count: 6,
     },
     {
       id: 'clients',
@@ -160,6 +172,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Payments',
       icon: <CreditCard className="w-4 h-4 shrink-0" />,
       count: payments.length,
+    },
+    {
+      id: 'bank-accounts',
+      label: 'Bank Accounts',
+      icon: <Landmark className="w-4 h-4 shrink-0" />,
+      count: bankAccounts.length,
     },
     {
       id: 'gst-invoices',
@@ -234,12 +252,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="text-xs font-bold text-white tracking-tight truncate">
                   {activeBrand}
                 </span>
-                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
+                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-slate-800 text-slate-200 border border-slate-700 shrink-0">
                   {brandPrefix}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-[10px] text-slate-400 truncate mt-0.5">
-                <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                 <span>Locked Workspace</span>
               </div>
             </div>
@@ -279,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   title={isCollapsed ? item.label : undefined}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all group ${
                     isActive
-                      ? 'bg-cyan-600 text-white shadow-sm'
+                      ? 'bg-white/10 text-white font-semibold shadow-xs border border-white/10'
                       : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                   }`}
                 >
@@ -297,11 +315,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span
                         className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${
                           isActive
-                            ? 'bg-cyan-700/80 text-cyan-100'
+                            ? 'bg-white/20 text-white font-semibold'
                             : 'bg-slate-800 text-slate-400 group-hover:text-slate-300'
                         }`}
                       >
-                        4
+                        5
                       </span>
                       <ChevronDown
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${
@@ -327,15 +345,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           }}
                           className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all ${
                             isSubActive
-                              ? 'bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30'
+                              ? 'bg-white/10 text-white font-semibold border-l-2 border-white pl-2'
                               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
                           }`}
                         >
-                          <span className={isSubActive ? 'text-cyan-400' : 'text-slate-500'}>
+                          <span className={isSubActive ? 'text-white' : 'text-slate-500'}>
                             {sub.icon}
                           </span>
                           <span className="truncate flex-1 text-left">{sub.label}</span>
-                          {isSubActive && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
+                          {isSubActive && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />}
                         </button>
                       );
                     })}
@@ -352,7 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title={isCollapsed ? item.label : undefined}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all group ${
                 isActive
-                  ? 'bg-cyan-600 text-white shadow-sm'
+                  ? 'bg-white/10 text-white font-semibold shadow-xs border border-white/10'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
               }`}
             >
@@ -371,7 +389,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span
                       className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${
                         isActive
-                          ? 'bg-cyan-700/80 text-cyan-100'
+                          ? 'bg-white/20 text-white font-semibold'
                           : 'bg-slate-800 text-slate-400 group-hover:text-slate-300'
                       }`}
                     >
@@ -400,7 +418,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               onClick={logout}
               title="Sign Out"
-              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors shrink-0"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors shrink-0"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -409,7 +427,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={logout}
             title="Sign Out"
-            className="w-full flex justify-center p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+            className="w-full flex justify-center p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -419,25 +437,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {!isCollapsed ? (
           <div className="mt-2 p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-[10px]">
             <div className="flex items-center justify-between text-slate-300 font-semibold mb-0.5">
-              <div className="flex items-center gap-1.5 text-blue-400">
-                <Database className="w-3 h-3" />
+              <div className="flex items-center gap-1.5 text-slate-300">
+                <Database className="w-3 h-3 text-slate-400" />
                 <span>Azure SQL Database</span>
               </div>
               <span className="flex h-1.5 w-1.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-300"></span>
               </span>
             </div>
             <div className="text-[9px] text-slate-400 font-mono truncate">
               ddrcm.database.windows.net
             </div>
-            <div className="text-[9px] text-cyan-400/90 font-mono truncate">
+            <div className="text-[9px] text-slate-300 font-mono truncate">
               rathorehemant114@gmail.com
             </div>
           </div>
         ) : (
           <div className="flex justify-center my-1.5" title="Azure SQL: ddrcm.database.windows.net / DDCRM (rathorehemant114@gmail.com)">
-            <Database className="w-3.5 h-3.5 text-blue-400 hover:text-blue-300 transition-colors" />
+            <Database className="w-3.5 h-3.5 text-slate-400 hover:text-white transition-colors" />
           </div>
         )}
 

@@ -10,18 +10,18 @@ export const ToastContainer: React.FC = () => {
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none">
       {toasts.map((toast) => {
-        let icon = <Info className="w-5 h-5 text-blue-500 shrink-0" />;
-        let borderClass = 'border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
+        let icon = <Info className="w-5 h-5 text-slate-800 dark:text-slate-200 shrink-0" />;
+        let borderClass = 'border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
 
         if (toast.type === 'success') {
-          icon = <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />;
-          borderClass = 'border-emerald-200 dark:border-emerald-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
+          icon = <CheckCircle2 className="w-5 h-5 text-slate-800 dark:text-slate-200 shrink-0" />;
+          borderClass = 'border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
         } else if (toast.type === 'error') {
-          icon = <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />;
-          borderClass = 'border-rose-200 dark:border-rose-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
+          icon = <AlertCircle className="w-5 h-5 text-slate-800 dark:text-slate-200 shrink-0" />;
+          borderClass = 'border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
         } else if (toast.type === 'warning') {
-          icon = <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />;
-          borderClass = 'border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
+          icon = <AlertTriangle className="w-5 h-5 text-slate-800 dark:text-slate-200 shrink-0" />;
+          borderClass = 'border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100';
         }
 
         return (

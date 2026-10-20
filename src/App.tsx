@@ -28,6 +28,7 @@ import { ExpensesModule } from './components/modules/ExpensesModule';
 import { GstInvoicesModule } from './components/modules/GstInvoicesModule';
 import { ReportsModule } from './components/modules/ReportsModule';
 import { UsersModule } from './components/modules/UsersModule';
+import { BankAccountsModule } from './components/modules/BankAccountsModule';
 
 const MainLayout: React.FC = () => {
   const { authUser, activeModule, hasConfirmedWorkspace } = useCrm();
@@ -53,6 +54,8 @@ const MainLayout: React.FC = () => {
         return <ProjectsModule />;
       case 'payments':
         return <PaymentsModule />;
+      case 'bank-accounts':
+        return <BankAccountsModule />;
       case 'gst-invoices':
         return <GstInvoicesModule />;
       case 'roles':

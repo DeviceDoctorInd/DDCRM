@@ -63,19 +63,19 @@ export const ProjectsModule: React.FC = () => {
       label: 'Client Projects',
       value: totalProjects,
       subtext: 'Registered client contracts',
-      icon: <Briefcase className="w-4 h-4 text-cyan-600" />,
+      icon: <Briefcase className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'In Progress Sprints',
       value: inProgressProjects,
       subtext: 'Active design & dev sprints',
-      icon: <Clock className="w-4 h-4 text-blue-600" />,
+      icon: <Clock className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Pipeline / Proposals',
       value: contractedOrProposal,
       subtext: 'Proposals & signed contracts',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Total Contract Value',
@@ -240,22 +240,22 @@ export const ProjectsModule: React.FC = () => {
                   let statusBadge = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
                   if (project.status === 'Completed') {
                     statusBadge =
-                      'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (project.status === 'In Progress') {
                     statusBadge =
-                      'bg-cyan-50 text-cyan-700 border border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-400 dark:border-cyan-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (project.status === 'Contracted') {
                     statusBadge =
-                      'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (project.status === 'Proposal') {
                     statusBadge =
-                      'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   } else if (project.status === 'On Hold') {
                     statusBadge =
-                      'bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900/60';
+                      'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900';
                   } else if (project.status === 'Cancelled') {
                     statusBadge =
-                      'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900/60';
+                      'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
                   }
 
                   return (
@@ -263,7 +263,7 @@ export const ProjectsModule: React.FC = () => {
                       key={project.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         <button
                           type="button"
                           onClick={() => {
@@ -301,18 +301,18 @@ export const ProjectsModule: React.FC = () => {
                           <span>Committed: {formatDate(project.committedEndDate)}</span>
                           <span className="text-slate-400">({project.committedDays || 0}d)</span>
                           {isPastCommitted && (
-                            <span className="text-[10px] text-rose-500 font-semibold">Overdue</span>
+                            <span className="text-[10px] text-slate-800 dark:text-slate-200 font-semibold">Overdue</span>
                           )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-mono tabular-nums text-slate-900 dark:text-slate-100">
                         <div className="font-bold">{formatINR(project.contractValue || 0)}</div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                          <span className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
                             Rec: {formatINR(project.totalReceived || 0)}
                           </span>
                           <span>·</span>
-                          <span className="text-amber-600 dark:text-amber-400 font-medium">
+                          <span className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
                             Bal:{' '}
                             {formatINR(
                               project.balance !== undefined
@@ -341,10 +341,10 @@ export const ProjectsModule: React.FC = () => {
                                 <a
                                   href={project.proposalDocument.url}
                                   download={project.proposalDocument.name}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 transition-colors"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
                                   title={`Download Proposal: ${project.proposalDocument.name}`}
                                 >
-                                  <FileText className="w-3 h-3 text-cyan-600" />
+                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Proposal</span>
                                 </a>
                               ) : project.proposalDocument.externalUrl ? (
@@ -352,15 +352,15 @@ export const ProjectsModule: React.FC = () => {
                                   href={project.proposalDocument.externalUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 hover:bg-cyan-100 transition-colors"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
                                   title="Open Proposal Link"
                                 >
-                                  <FileText className="w-3 h-3 text-cyan-600" />
+                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Proposal</span>
                                 </a>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-cyan-50 text-cyan-700 border border-cyan-200">
-                                  <FileText className="w-3 h-3 text-cyan-600" />
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
+                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Proposal</span>
                                 </span>
                               )
@@ -371,10 +371,10 @@ export const ProjectsModule: React.FC = () => {
                                 <a
                                   href={project.contractDocument.url}
                                   download={project.contractDocument.name}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
                                   title={`Download Signed Contract: ${project.contractDocument.name}`}
                                 >
-                                  <FileCheck className="w-3 h-3 text-emerald-600" />
+                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Contract</span>
                                 </a>
                               ) : project.contractDocument.externalUrl ? (
@@ -382,15 +382,15 @@ export const ProjectsModule: React.FC = () => {
                                   href={project.contractDocument.externalUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
                                   title="Open Contract Link"
                                 >
-                                  <FileCheck className="w-3 h-3 text-emerald-600" />
+                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Contract</span>
                                 </a>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <FileCheck className="w-3 h-3 text-emerald-600" />
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
+                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
                                   <span>Contract</span>
                                 </span>
                               )
@@ -400,7 +400,7 @@ export const ProjectsModule: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => openEditProjectModal(project)}
-                                className="text-[10px] text-slate-400 hover:text-cyan-600 italic"
+                                className="text-[10px] text-slate-400 hover:text-slate-800 dark:text-slate-200 italic"
                               >
                                 + Attach Docs
                               </button>
@@ -415,10 +415,10 @@ export const ProjectsModule: React.FC = () => {
                                 setSelectedProjectForDetail(project);
                                 setIsDetailDrawerOpen(true);
                               }}
-                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                               title="Click to view Payment Milestones Schedule"
                             >
-                              <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                              <Layers className="w-3 h-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                               <span>
                                 {phases.length > 0
                                   ? `Phases (${receivedPhasesCount}/${phases.length} Paid)`
@@ -447,21 +447,21 @@ export const ProjectsModule: React.FC = () => {
                               setSelectedProjectForDetail(project);
                               setIsDetailDrawerOpen(true);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="View Project Details & Milestones Overview"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => openEditProjectModal(project)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Project"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteProject(project.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Project (Protected if payments exist)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

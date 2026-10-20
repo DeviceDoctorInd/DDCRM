@@ -48,14 +48,14 @@ export const getSqlConfig = (serverOverride?: string): sql.config => {
     options: {
       encrypt, // Explicitly enabled (true) for Azure SQL
       trustServerCertificate: false,
-      connectTimeout: 30000,
-      requestTimeout: 30000,
+      connectTimeout: 3000,
+      requestTimeout: 5000,
     },
     pool: {
       max: 15,
       min: 2,
       idleTimeoutMillis: 300000,
-      acquireTimeoutMillis: 30000,
+      acquireTimeoutMillis: 3000,
     },
   };
 
@@ -170,6 +170,8 @@ const DDL_STATEMENTS = [
      client_id NVARCHAR(50),
      client_name NVARCHAR(255),
      payment_mode NVARCHAR(50) DEFAULT 'GST Invoice',
+     bank_account_id NVARCHAR(100),
+     bank_account_name NVARCHAR(255),
      payment_date NVARCHAR(50),
      due_date NVARCHAR(50),
      amount_received FLOAT DEFAULT 0,
@@ -343,6 +345,24 @@ const DDL_STATEMENTS = [
      performed_by NVARCHAR(255),
      timestamp NVARCHAR(50)
    )`,
+
+  // 15. bank_accounts
+  `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='bank_accounts' AND xtype='U')
+   CREATE TABLE bank_accounts (
+     id NVARCHAR(50) PRIMARY KEY,
+     brand NVARCHAR(100) NOT NULL,
+     account_name NVARCHAR(255) NOT NULL,
+     bank_name NVARCHAR(255) NOT NULL,
+     account_number NVARCHAR(150) NOT NULL,
+     ifsc_code NVARCHAR(50),
+     branch_name NVARCHAR(100),
+     upi_id NVARCHAR(100),
+     account_type NVARCHAR(50) DEFAULT 'Current',
+     status NVARCHAR(50) DEFAULT 'Active',
+     notes NVARCHAR(MAX),
+     created_at NVARCHAR(50),
+     updated_at NVARCHAR(50)
+   )`,
 ];
 
 // Schema Migrations to add missing columns across all tables and ensure seamless compatibility
@@ -416,6 +436,8 @@ export const COLUMN_MIGRATIONS = [
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'client_id') ALTER TABLE payments ADD client_id NVARCHAR(50) DEFAULT '';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'client_name') ALTER TABLE payments ADD client_name NVARCHAR(255) DEFAULT '';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'payment_mode') ALTER TABLE payments ADD payment_mode NVARCHAR(50) DEFAULT 'GST Invoice';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'bank_account_id') ALTER TABLE payments ADD bank_account_id NVARCHAR(100);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'bank_account_name') ALTER TABLE payments ADD bank_account_name NVARCHAR(255);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'payment_date') ALTER TABLE payments ADD payment_date NVARCHAR(50) DEFAULT '';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'due_date') ALTER TABLE payments ADD due_date NVARCHAR(50) DEFAULT '';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'amount_received') ALTER TABLE payments ADD amount_received FLOAT DEFAULT 0;`,
@@ -586,6 +608,24 @@ export const COLUMN_MIGRATIONS = [
    BEGIN TRY ALTER TABLE projects ALTER COLUMN client_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
   `IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'projects' AND COLUMN_NAME = 'service_id' AND DATA_TYPE = 'uniqueidentifier')
    BEGIN TRY ALTER TABLE projects ALTER COLUMN service_id NVARCHAR(100); END TRY BEGIN CATCH END CATCH;`,
+
+  // payments bank account columns
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'bank_account_id') ALTER TABLE payments ADD bank_account_id NVARCHAR(50);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'bank_account_name') ALTER TABLE payments ADD bank_account_name NVARCHAR(255);`,
+
+  // 15. bank_accounts
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'account_name') ALTER TABLE bank_accounts ADD account_name NVARCHAR(255) DEFAULT '';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'bank_name') ALTER TABLE bank_accounts ADD bank_name NVARCHAR(255) DEFAULT '';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'account_number') ALTER TABLE bank_accounts ADD account_number NVARCHAR(150) DEFAULT '';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'ifsc_code') ALTER TABLE bank_accounts ADD ifsc_code NVARCHAR(50);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'branch_name') ALTER TABLE bank_accounts ADD branch_name NVARCHAR(100);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'upi_id') ALTER TABLE bank_accounts ADD upi_id NVARCHAR(100);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'account_type') ALTER TABLE bank_accounts ADD account_type NVARCHAR(50) DEFAULT 'Current';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'status') ALTER TABLE bank_accounts ADD status NVARCHAR(50) DEFAULT 'Active';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'notes') ALTER TABLE bank_accounts ADD notes NVARCHAR(MAX);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'brand') ALTER TABLE bank_accounts ADD brand NVARCHAR(100) DEFAULT 'Device Doctor India';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'created_at') ALTER TABLE bank_accounts ADD created_at NVARCHAR(50);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'updated_at') ALTER TABLE bank_accounts ADD updated_at NVARCHAR(50);`,
 ];
 
 // Data reconciliation statements to keep legacy and modern column names in sync
@@ -684,6 +724,7 @@ export async function migrateAzureSqlSchema(p?: sql.ConnectionPool): Promise<voi
     'expense_categories',
     'other_expenses',
     'app_users',
+    'bank_accounts',
   ];
 
   for (const tbl of backfillTables) {
@@ -849,6 +890,7 @@ export async function refreshTableCounts(): Promise<Record<string, number>> {
     'other_expenses',
     'app_users',
     'crm_audit_log',
+    'bank_accounts',
   ];
 
   const counts: Record<string, number> = {};

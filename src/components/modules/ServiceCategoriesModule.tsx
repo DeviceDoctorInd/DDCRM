@@ -44,19 +44,19 @@ export const ServiceCategoriesModule: React.FC = () => {
       label: 'Service Categories',
       value: totalCategories,
       subtext: 'Hardware taxonomy domains',
-      icon: <Layers className="w-4 h-4 text-cyan-600" />,
+      icon: <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Active Categories',
       value: activeCategories,
       subtext: 'Available for new services',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Catalog Services',
       value: totalServicesAcrossAll,
       subtext: 'Linked across categories',
-      icon: <Cpu className="w-4 h-4 text-blue-600" />,
+      icon: <Cpu className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Inactive Categories',
@@ -198,7 +198,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                       key={cat.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {cat.id}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
@@ -216,7 +216,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                         <span
                           className={`inline-block px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                             cat.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/60'
+                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
                               : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                           }`}
                         >
@@ -227,14 +227,14 @@ export const ServiceCategoriesModule: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => handleOpenEdit(cat)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Category"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteCategory(cat.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Category (Blocked if linked to services)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -260,7 +260,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                   {editingCategory.id ? `Edit Category: ${editingCategory.name}` : 'New Service Category'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Category ID: <span className="font-mono text-cyan-600 font-semibold">{editingCategory.id || 'Auto-generated (e.g. CAT-006)'}</span>
+                  Category ID: <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{editingCategory.id || 'Auto-generated (e.g. CAT-006)'}</span>
                 </p>
               </div>
               <button
@@ -274,14 +274,14 @@ export const ServiceCategoriesModule: React.FC = () => {
 
             <form onSubmit={handleSaveSubmit} className="mt-4 space-y-4">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">
+                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                   {formError}
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Category Name <span className="text-rose-500">* (Must be strictly unique)</span>
+                  Category Name <span className="text-slate-800 dark:text-slate-200">* (Must be strictly unique)</span>
                 </label>
                 <input
                   type="text"
@@ -289,7 +289,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                   value={editingCategory.name || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
                   placeholder="e.g. Web & Custom Software Development"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -302,7 +302,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                   value={editingCategory.description || ''}
                   onChange={(e) => setEditingCategory({ ...editingCategory, description: e.target.value })}
                   placeholder="Outline development stack, marketing channels, deliverable scope, or cloud architecture involved..."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -318,7 +318,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                       status: e.target.value as CategoryStatus,
                     })
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -335,7 +335,7 @@ export const ServiceCategoriesModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors"
                 >
                   Save Category
                 </button>

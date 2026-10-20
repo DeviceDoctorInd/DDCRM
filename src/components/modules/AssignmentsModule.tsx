@@ -84,25 +84,25 @@ export const AssignmentsModule: React.FC = () => {
       label: 'Total Assignments',
       value: totalAssignments,
       subtext: 'Project tasks & modules',
-      icon: <ClipboardCheck className="w-4 h-4 text-cyan-600" />,
+      icon: <ClipboardCheck className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Active Work Value',
       value: formatINR(activeWorkValue),
       subtext: 'Allocated budget for active tasks',
-      icon: <Layers className="w-4 h-4 text-blue-600" />,
+      icon: <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Total Paid to Employees',
       value: formatINR(totalAmountPaid),
       subtext: 'Disbursed compensations',
-      icon: <CreditCard className="w-4 h-4 text-emerald-600" />,
+      icon: <CreditCard className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Pending Employee Payouts',
       value: formatINR(pendingPayouts),
       subtext: 'Unsettled employee milestones',
-      icon: <Clock className="w-4 h-4 text-amber-500" />,
+      icon: <Clock className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
   ];
 
@@ -396,28 +396,28 @@ export const AssignmentsModule: React.FC = () => {
     switch (status) {
       case 'Paid':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <CheckCircle className="w-3 h-3" />
             Paid
           </span>
         );
       case 'Partially Paid':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <CreditCard className="w-3 h-3" />
             Partially Paid
           </span>
         );
       case 'Pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <Clock className="w-3 h-3" />
             Pending
           </span>
         );
       case 'On Hold':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
             <AlertOctagon className="w-3 h-3" />
             On Hold
           </span>
@@ -506,7 +506,7 @@ export const AssignmentsModule: React.FC = () => {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       {/* 1. Assignment ID */}
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400 whitespace-nowrap">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 whitespace-nowrap">
                         {asn.id}
                       </td>
 
@@ -531,7 +531,7 @@ export const AssignmentsModule: React.FC = () => {
                           <span className="text-[10px] font-mono text-slate-400">({asn.employeeId})</span>
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-900 dark:bg-white"></span>
                           <span>{liveRoleName || 'General Staff'}</span>
                         </div>
                       </td>
@@ -554,14 +554,14 @@ export const AssignmentsModule: React.FC = () => {
                       </td>
 
                       {/* 7. Paid (INR) */}
-                      <td className="py-3.5 px-4 text-right font-mono font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right font-mono font-medium text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 whitespace-nowrap">
                         {formatINR(asn.amountPaid)}
                       </td>
 
                       {/* 8. Balance Due */}
                       <td className="py-3.5 px-4 text-right font-mono whitespace-nowrap">
                         {balanceDue > 0 ? (
-                          <span className="font-semibold text-amber-600 dark:text-amber-400">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                             {formatINR(balanceDue)}
                           </span>
                         ) : (
@@ -598,7 +598,7 @@ export const AssignmentsModule: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(asn)}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Edit Assignment"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -606,7 +606,7 @@ export const AssignmentsModule: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setDeleteCandidate(asn)}
-                            className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Delete Assignment"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -629,7 +629,7 @@ export const AssignmentsModule: React.FC = () => {
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-cyan-600 text-white shadow-md">
+                <div className="p-2.5 rounded-xl bg-black text-white text-white shadow-md">
                   <ClipboardCheck className="w-5 h-5" />
                 </div>
                 <div>
@@ -653,8 +653,8 @@ export const AssignmentsModule: React.FC = () => {
             {/* Modal Body Form */}
             <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-6">
               {formError && (
-                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-800 dark:text-slate-200" />
                   <span>{formError}</span>
                 </div>
               )}
@@ -662,7 +662,7 @@ export const AssignmentsModule: React.FC = () => {
               {/* SECTION A: ASSIGNMENT ID & PROJECT LINKAGE */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-cyan-600" />
+                  <Briefcase className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   <span>1. Assignment & Project Details</span>
                 </div>
 
@@ -670,7 +670,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 1: Assignment ID (Auto-generated & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      1. Assignment ID <span className="text-[10px] text-cyan-600 font-normal">(Auto-generated)</span>
+                      1. Assignment ID <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-generated)</span>
                     </label>
                     <input
                       type="text"
@@ -683,7 +683,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 3: Client ID (Auto-filled & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      3. Client ID <span className="text-[10px] text-emerald-600 font-normal">(Auto-filled)</span>
+                      3. Client ID <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-filled)</span>
                     </label>
                     <input
                       type="text"
@@ -697,7 +697,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 4: Client Name (Auto-filled & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      4. Client Name <span className="text-[10px] text-emerald-600 font-normal">(Auto-filled)</span>
+                      4. Client Name <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-filled)</span>
                     </label>
                     <input
                       type="text"
@@ -712,13 +712,13 @@ export const AssignmentsModule: React.FC = () => {
                 {/* Field 2: Project ID (Dropdown populated dynamically from all Projects) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    2. Project ID <span className="text-rose-500">*</span>
+                    2. Project ID <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <select
                     value={formData.projectId || ''}
                     onChange={(e) => handleProjectChange(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100 font-medium"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100 font-medium"
                   >
                     <option value="" disabled>
                       -- Select Project from Projects Module --
@@ -738,20 +738,20 @@ export const AssignmentsModule: React.FC = () => {
               {/* SECTION B: EMPLOYEE & ROLE ALLOCATION */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-blue-600" />
+                  <User className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   <span>2. Employee & Role Allocation</span>
                 </div>
 
                 {/* Field 5: Employee Dropdown */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    5. Employee <span className="text-rose-500">*</span>
+                    5. Employee <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <select
                     value={formData.employeeId || ''}
                     onChange={(e) => handleEmployeeChange(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100 font-medium"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100 font-medium"
                   >
                     <option value="" disabled>
                       -- Select Active Employee --
@@ -771,7 +771,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 6: Employee ID (Auto-filled & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      6. Employee ID <span className="text-[10px] text-emerald-600 font-normal">(Auto-filled)</span>
+                      6. Employee ID <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-filled)</span>
                     </label>
                     <input
                       type="text"
@@ -785,7 +785,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 7: Employee Name (Auto-filled & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      7. Employee Name <span className="text-[10px] text-emerald-600 font-normal">(Auto-filled)</span>
+                      7. Employee Name <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-filled)</span>
                     </label>
                     <input
                       type="text"
@@ -799,7 +799,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 8: Role (Auto-filled & read-only) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      8. Role <span className="text-[10px] text-emerald-600 font-normal">(Auto-filled)</span>
+                      8. Role <span className="text-[10px] text-slate-800 dark:text-slate-200 font-normal">(Auto-filled)</span>
                     </label>
                     <input
                       type="text"
@@ -817,21 +817,21 @@ export const AssignmentsModule: React.FC = () => {
                 {/* Field 9: Assigned Date */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    9. Assigned Date <span className="text-rose-500">*</span>
+                    9. Assigned Date <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <input
                     type="date"
                     value={formData.assignedDate || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, assignedDate: e.target.value }))}
                     required
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
                   />
                 </div>
 
                 {/* Field 10: Work / Module Assigned */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    10. Work / Module Assigned <span className="text-rose-500">*</span>
+                    10. Work / Module Assigned <span className="text-slate-800 dark:text-slate-200">*</span>
                   </label>
                   <input
                     type="text"
@@ -839,7 +839,7 @@ export const AssignmentsModule: React.FC = () => {
                     onChange={(e) => setFormData((prev) => ({ ...prev, workAssigned: e.target.value }))}
                     required
                     placeholder="e.g., Frontend UI Development, Backend API Integration, SEO On-Page Setup"
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -847,7 +847,7 @@ export const AssignmentsModule: React.FC = () => {
               {/* SECTION D: FINANCIAL COMPENSATION & STATUS */}
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-4">
                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                  <CreditCard className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                   <span>3. Financial Allocation & Payout Status</span>
                 </div>
 
@@ -855,7 +855,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 11: Amount (INR) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      11. Amount (INR) <span className="text-rose-500">*</span>
+                      11. Amount (INR) <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <div className="relative">
                       <span className="absolute left-3 top-2 text-slate-400 text-xs font-medium">₹</span>
@@ -867,7 +867,7 @@ export const AssignmentsModule: React.FC = () => {
                         onChange={(e) => handleAmountChange(Number(e.target.value))}
                         required
                         placeholder="Total allocated task amount"
-                        className="w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100"
+                        className="w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
                       />
                     </div>
                   </div>
@@ -886,15 +886,15 @@ export const AssignmentsModule: React.FC = () => {
                         value={formData.amountPaid ?? ''}
                         onChange={(e) => handleAmountPaidChange(Number(e.target.value))}
                         placeholder="Amount paid to date"
-                        className={`w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100 ${
+                        className={`w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100 ${
                           (formData.amountPaid || 0) > (formData.amount || 0)
-                            ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500'
+                            ? 'border-slate-300 dark:border-slate-700 focus:border-slate-900 focus:ring-slate-900'
                             : 'border-slate-300 dark:border-slate-700'
                         }`}
                       />
                     </div>
                     {(formData.amountPaid || 0) > (formData.amount || 0) && (
-                      <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 font-medium">
+                      <p className="text-[10px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 mt-1 font-medium">
                         Amount Paid cannot exceed Amount (₹{(formData.amount || 0).toLocaleString('en-IN')})
                       </p>
                     )}
@@ -903,7 +903,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 13: Payment Status */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      13. Payment Status <span className="text-rose-500">*</span>
+                      13. Payment Status <span className="text-slate-800 dark:text-slate-200">*</span>
                     </label>
                     <select
                       value={formData.paymentStatus || 'Pending'}
@@ -913,7 +913,7 @@ export const AssignmentsModule: React.FC = () => {
                           paymentStatus: e.target.value as AssignmentPaymentStatus,
                         }))
                       }
-                      className="w-full px-3 py-2 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100"
+                      className="w-full px-3 py-2 text-xs font-medium bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
                     >
                       {STATUS_OPTIONS.map((st) => (
                         <option key={st} value={st}>
@@ -927,7 +927,7 @@ export const AssignmentsModule: React.FC = () => {
                 {/* Balance preview card */}
                 <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
                   <span className="text-slate-500 dark:text-slate-400">Calculated Unsettled Payout:</span>
-                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                     {formatINR(Math.max(0, (formData.amount || 0) - (formData.amountPaid || 0)))}
                   </span>
                 </div>
@@ -942,7 +942,7 @@ export const AssignmentsModule: React.FC = () => {
                   {/* Field 15: Last Note Update (Auto-generated & read-only) */}
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     <span className="font-semibold text-slate-600 dark:text-slate-300">15. Last Note Update: </span>
-                    <span className="font-mono text-cyan-600 dark:text-cyan-400">
+                    <span className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                       {formData.lastNoteUpdate || '(Will update upon saving notes)'}
                     </span>
                   </div>
@@ -952,7 +952,7 @@ export const AssignmentsModule: React.FC = () => {
                   value={formData.employeeNotes || ''}
                   onChange={(e) => handleNotesChange(e.target.value)}
                   placeholder="Record deliverable progress, milestone reviews, repository links, or payout clearance notes..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 dark:text-slate-100"
+                  className="w-full px-3.5 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
                 />
               </div>
 
@@ -968,7 +968,7 @@ export const AssignmentsModule: React.FC = () => {
                 <button
                   type="submit"
                   disabled={(formData.amountPaid || 0) > (formData.amount || 0)}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black text-white hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>{isEditing ? 'Save Changes' : 'Confirm Assignment'}</span>
@@ -984,7 +984,7 @@ export const AssignmentsModule: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>
@@ -1017,7 +1017,7 @@ export const AssignmentsModule: React.FC = () => {
                   deleteAssignment(deleteCandidate.id);
                   setDeleteCandidate(null);
                 }}
-                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors"
+                className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
               >
                 Delete Assignment
               </button>

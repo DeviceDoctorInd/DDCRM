@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { storageService } from '../../services/storageService';
 import {
@@ -94,6 +94,8 @@ export const ProjectModal: React.FC = () => {
     saveProject,
     clients,
     services,
+    employees,
+    getRoleById,
     activeBrand,
   } = useCrm();
 
@@ -101,6 +103,11 @@ export const ProjectModal: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [pendingProjectPayload, setPendingProjectPayload] = useState<Project | null>(null);
+
+  // Active employees for Project Manager dropdown
+  const activeEmployees = useMemo(() => {
+    return employees.filter((e) => e.status === 'Active');
+  }, [employees]);
 
   // Sync form data when modal opens
   useEffect(() => {
@@ -533,14 +540,14 @@ export const ProjectModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-600/10 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-black/10 dark:bg-slate-500/20 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0">
               <Briefcase className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <span>{isProjectModalEditing ? `Edit Project` : 'New Project'}</span>
                 {formData.id && (
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-semibold truncate max-w-xs">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 font-semibold truncate max-w-xs">
                     {formData.id}
                   </span>
                 )}
@@ -563,7 +570,7 @@ export const ProjectModal: React.FC = () => {
         {/* Form Container */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
           {formError && (
-            <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 flex items-center gap-2">
+            <div className="p-3 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{formError}</span>
             </div>
@@ -591,20 +598,20 @@ export const ProjectModal: React.FC = () => {
                   type="text"
                   readOnly
                   value={formData.id || 'PRJ-Auto'}
-                  className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-cyan-600 dark:text-cyan-400 cursor-not-allowed select-all"
+                  className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed select-all"
                   title="Auto-generated Project ID (Read-only)"
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Client <span className="text-rose-500">*</span>
+                  Client <span className="text-slate-800 dark:text-slate-200">*</span>
                 </label>
                 <select
                   required
                   value={formData.clientId || ''}
                   onChange={(e) => handleClientChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="" disabled>-- Select Client --</option>
                   {clients.map((c) => (
@@ -649,13 +656,13 @@ export const ProjectModal: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Service Type <span className="text-rose-500">*</span>
+                  Service Type <span className="text-slate-800 dark:text-slate-200">*</span>
                 </label>
                 <select
                   required
                   value={formData.serviceId || ''}
                   onChange={(e) => handleServiceChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="" disabled>-- Select Service Type --</option>
                   {services.map((s) => (
@@ -668,16 +675,35 @@ export const ProjectModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Project Manager <span className="text-rose-500">*</span>
+                  Project Manager <span className="text-slate-800 dark:text-slate-200">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={formData.projectManager || ''}
                   onChange={(e) => setFormData({ ...formData, projectManager: e.target.value })}
-                  placeholder="e.g. Karthik Ramanathan"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="" disabled>-- Select Project Manager from Employees --</option>
+                  {/* Preserve existing PM if not in active employee list */}
+                  {formData.projectManager && !activeEmployees.some((e: any) => e.name === formData.projectManager) && (
+                    <option value={formData.projectManager}>
+                      {formData.projectManager} (Currently Assigned)
+                    </option>
+                  )}
+                  {activeEmployees.map((emp: any) => {
+                    const role = getRoleById(emp.roleId);
+                    return (
+                      <option key={emp.id} value={emp.name}>
+                        {emp.name} ({emp.id} · {role?.roleName || emp.employeeType})
+                      </option>
+                    );
+                  })}
+                </select>
+                {activeEmployees.length === 0 && (
+                  <p className="mt-1 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                    No active employees registered. Please add employees in the Employees module.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -689,7 +715,7 @@ export const ProjectModal: React.FC = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, status: e.target.value as ProjectStatus })
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   {PROJECT_STATUSES.map((st) => (
                     <option key={st} value={st}>
@@ -708,7 +734,7 @@ export const ProjectModal: React.FC = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, paymentMode: e.target.value as PaymentMode })
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   {PAYMENT_MODES.map((mode) => (
                     <option key={mode} value={mode}>
@@ -734,7 +760,7 @@ export const ProjectModal: React.FC = () => {
                   type="date"
                   value={formData.proposalDate || ''}
                   onChange={(e) => setFormData({ ...formData, proposalDate: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -746,13 +772,13 @@ export const ProjectModal: React.FC = () => {
                   type="date"
                   value={formData.contractDate || ''}
                   onChange={(e) => setFormData({ ...formData, contractDate: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Project Start Date <span className="text-rose-500">*</span>
+                  Project Start Date <span className="text-slate-800 dark:text-slate-200">*</span>
                 </label>
                 <input
                   type="date"
@@ -761,7 +787,7 @@ export const ProjectModal: React.FC = () => {
                   onChange={(e) =>
                     handleStartDateOrDaysChange(e.target.value, formData.committedDays ?? 30)
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -780,7 +806,7 @@ export const ProjectModal: React.FC = () => {
                       parseInt(e.target.value, 10) || 0
                     )
                   }
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -792,7 +818,7 @@ export const ProjectModal: React.FC = () => {
                   type="date"
                   readOnly
                   value={formData.committedEndDate || ''}
-                  className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-cyan-700 dark:text-cyan-300 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed"
                 />
               </div>
 
@@ -804,7 +830,7 @@ export const ProjectModal: React.FC = () => {
                   type="date"
                   value={formData.actualEndDate || ''}
                   onChange={(e) => setFormData({ ...formData, actualEndDate: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
             </div>
@@ -814,7 +840,7 @@ export const ProjectModal: React.FC = () => {
           <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                <FileText className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                 <span>Project Documents (Proposal & Contract Uploads)</span>
               </div>
               <span className="text-[10px] text-slate-500">PDF, DOC, DOCX, Images, or Cloud Links</span>
@@ -826,11 +852,11 @@ export const ProjectModal: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                      <FileText className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                       <span>Proposal Document</span>
                     </span>
                     {formData.proposalDocument ? (
-                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                      <span className="text-[10px] font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex items-center gap-1">
                         <Check className="w-3 h-3" /> Attached
                       </span>
                     ) : (
@@ -859,7 +885,7 @@ export const ProjectModal: React.FC = () => {
                               download={formData.proposalDocument.name}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1 rounded text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 transition-colors"
+                              className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                               title="Download / View Proposal"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -868,7 +894,7 @@ export const ProjectModal: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleRemoveDocument('proposalDocument')}
-                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                            className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Remove Document"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -878,7 +904,7 @@ export const ProjectModal: React.FC = () => {
                     </div>
                   ) : (
                     <div className="mb-3">
-                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-cyan-500 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
                         <Upload className="w-5 h-5 text-slate-400 mb-1" />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                           Click to upload Proposal
@@ -918,7 +944,7 @@ export const ProjectModal: React.FC = () => {
                           }));
                         }}
                         placeholder="https://drive.google.com/file/d/..."
-                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono text-[11px]"
+                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
                       />
                       <ExternalLink className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
                     </div>
@@ -936,7 +962,7 @@ export const ProjectModal: React.FC = () => {
                         setFormData({ ...formData, proposalDocumentNotes: e.target.value })
                       }
                       placeholder="e.g. Approved scope baseline, version v2.1 with revised infrastructure milestones..."
-                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                     />
                   </div>
                 </div>
@@ -947,11 +973,11 @@ export const ProjectModal: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
                       <span>Contract / Agreement Document</span>
                     </span>
                     {formData.contractDocument ? (
-                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                      <span className="text-[10px] font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex items-center gap-1">
                         <Check className="w-3 h-3" /> Signed
                       </span>
                     ) : (
@@ -980,7 +1006,7 @@ export const ProjectModal: React.FC = () => {
                               download={formData.contractDocument.name}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1 rounded text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-950/60 transition-colors"
+                              className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                               title="Download / View Contract"
                             >
                               <Download className="w-3.5 h-3.5" />
@@ -989,7 +1015,7 @@ export const ProjectModal: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleRemoveDocument('contractDocument')}
-                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors"
+                            className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Remove Document"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -999,7 +1025,7 @@ export const ProjectModal: React.FC = () => {
                     </div>
                   ) : (
                     <div className="mb-3">
-                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
+                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 rounded-lg cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 transition-colors">
                         <Upload className="w-5 h-5 text-slate-400 mb-1" />
                         <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                           Click to upload Signed Contract
@@ -1039,7 +1065,7 @@ export const ProjectModal: React.FC = () => {
                           }));
                         }}
                         placeholder="https://drive.google.com/file/d/..."
-                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-[11px]"
+                        className="w-full pl-7 pr-3 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
                       />
                       <ExternalLink className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
                     </div>
@@ -1057,7 +1083,7 @@ export const ProjectModal: React.FC = () => {
                         setFormData({ ...formData, contractDocumentNotes: e.target.value })
                       }
                       placeholder="e.g. 99.9% uptime SLA, 2-hour bug turnaround, 3-month free bug warranty..."
-                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                     />
                   </div>
                 </div>
@@ -1078,7 +1104,7 @@ export const ProjectModal: React.FC = () => {
                 <select
                   value={formData.currency || 'INR'}
                   onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   {CURRENCIES.map((curr) => (
                     <option key={curr} value={curr}>
@@ -1103,7 +1129,7 @@ export const ProjectModal: React.FC = () => {
                       formData.exchangeRate ?? 1
                     )
                   }
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -1122,7 +1148,7 @@ export const ProjectModal: React.FC = () => {
                       parseFloat(e.target.value) || 1
                     )
                   }
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -1130,7 +1156,7 @@ export const ProjectModal: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Contract Value (INR, Read-only)
                 </label>
-                <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/60 text-cyan-700 dark:text-cyan-300 truncate">
+                <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 truncate">
                   {formatINR(formData.contractValue || 0)}
                 </div>
               </div>
@@ -1142,7 +1168,7 @@ export const ProjectModal: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
                   <span>Phases of Payment & Milestone Schedule</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
@@ -1162,7 +1188,7 @@ export const ProjectModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleAddPhase}
-                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shadow-xs"
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg transition-colors shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Payment Phase</span>
@@ -1179,7 +1205,7 @@ export const ProjectModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAddPhase}
-                    className="mt-2 text-indigo-600 hover:underline font-semibold"
+                    className="mt-2 text-slate-800 dark:text-slate-200 hover:underline font-semibold"
                   >
                     + Click to add first phase
                   </button>
@@ -1202,7 +1228,7 @@ export const ProjectModal: React.FC = () => {
                           value={phase.name}
                           onChange={(e) => handlePhaseChange(phase.id, 'name', e.target.value)}
                           placeholder="e.g. Phase 1 - Advance / Kickoff"
-                          className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                         />
                       </div>
 
@@ -1221,7 +1247,7 @@ export const ProjectModal: React.FC = () => {
                             onChange={(e) =>
                               handlePhaseChange(phase.id, 'percentage', parseFloat(e.target.value) || 0)
                             }
-                            className="w-full pr-6 pl-2.5 py-1.5 text-xs font-mono font-bold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full pr-6 pl-2.5 py-1.5 text-xs font-mono font-bold rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                           />
                           <span className="absolute right-2 top-1.5 text-xs text-slate-400 font-bold">%</span>
                         </div>
@@ -1240,7 +1266,7 @@ export const ProjectModal: React.FC = () => {
                           onChange={(e) =>
                             handlePhaseChange(phase.id, 'amount', parseFloat(e.target.value) || 0)
                           }
-                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                         />
                         {formData.currency !== 'INR' && (
                           <div className="text-[10px] font-mono text-slate-400 mt-0.5 truncate">
@@ -1258,7 +1284,7 @@ export const ProjectModal: React.FC = () => {
                           type="date"
                           value={phase.dueDate || ''}
                           onChange={(e) => handlePhaseChange(phase.id, 'dueDate', e.target.value)}
-                          className="w-full px-2 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          className="w-full px-2 py-1.5 text-xs font-mono rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
                         />
                       </div>
 
@@ -1275,12 +1301,12 @@ export const ProjectModal: React.FC = () => {
                             }
                             className={`w-full px-2 py-1.5 text-[11px] font-semibold rounded-md border text-slate-900 dark:text-slate-100 focus:outline-none ${
                               phase.status === 'Received'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                                ? 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
                                 : phase.status === 'Invoiced'
-                                ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-800 dark:text-blue-300'
+                                ? 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
                                 : phase.status === 'Overdue'
-                                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-                                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                                ? 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
+                                : 'bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
                             }`}
                           >
                             {PHASE_STATUS_OPTIONS.map((st) => (
@@ -1294,7 +1320,7 @@ export const ProjectModal: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleRemovePhase(phase.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mt-4"
+                          className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mt-4"
                           title="Remove Phase"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1309,7 +1335,7 @@ export const ProjectModal: React.FC = () => {
                         value={phase.notes || ''}
                         onChange={(e) => handlePhaseChange(phase.id, 'notes', e.target.value)}
                         placeholder="Phase notes: deliverables required, client sign-off conditions, or invoice references..."
-                        className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900"
                       />
                     </div>
                   </div>
@@ -1322,12 +1348,12 @@ export const ProjectModal: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2">
                   {isAllocationBalanced ? (
-                    <span className="flex items-center gap-1.5 text-emerald-600 font-semibold">
+                    <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-semibold">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Total Allocated Across Phases: {totalPhasePercentage.toFixed(1)}%</span>
                     </span>
                   ) : totalPhasePercentage < 100 ? (
-                    <span className="flex items-center gap-1.5 text-amber-600 font-semibold">
+                    <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-semibold">
                       <AlertTriangle className="w-4 h-4" />
                       <span>
                         Total Allocated: {totalPhasePercentage.toFixed(1)}% ({formatINR(totalPhaseAmountINR)} /{' '}
@@ -1335,7 +1361,7 @@ export const ProjectModal: React.FC = () => {
                       </span>
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1.5 text-rose-600 font-semibold">
+                    <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-semibold">
                       <AlertCircle className="w-4 h-4" />
                       <span>
                         Total Allocated: {totalPhasePercentage.toFixed(1)}% — Exceeds Contract Value by{' '}
@@ -1356,12 +1382,12 @@ export const ProjectModal: React.FC = () => {
                   const width = `${Math.min(100, phase.percentage)}%`;
                   const color =
                     phase.status === 'Received'
-                      ? 'bg-emerald-500'
+                      ? 'bg-slate-500'
                       : phase.status === 'Invoiced'
-                      ? 'bg-blue-500'
+                      ? 'bg-slate-500'
                       : phase.status === 'Overdue'
-                      ? 'bg-rose-500'
-                      : 'bg-indigo-400';
+                      ? 'bg-slate-500'
+                      : 'bg-slate-400';
                   return (
                     <div
                       key={phase.id || idx}
@@ -1385,7 +1411,7 @@ export const ProjectModal: React.FC = () => {
               value={formData.notes || ''}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Outline project deliverables, staging URLs, milestone terms, or client specifications..."
-              className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
           </div>
 
@@ -1400,7 +1426,7 @@ export const ProjectModal: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
               <span>{isProjectModalEditing ? 'Save Project Changes' : 'Add Project'}</span>

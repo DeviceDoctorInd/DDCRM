@@ -38,15 +38,15 @@ import {
 type DatePreset = 'this-month' | 'last-6-months' | 'this-year' | 'all-time' | 'custom';
 
 const PALETTE = {
-  assigned: '#3b82f6', // blue-500
-  paid: '#10b981', // emerald-500
-  pending: '#f59e0b', // amber-500
-  epayments: '#8b5cf6', // purple-500
-  cyan: '#06b6d4',
-  pink: '#ec4899',
+  assigned: '#000000',
+  paid: '#0f172a',
+  pending: '#64748b',
+  epayments: '#334155',
+  cyan: '#475569',
+  pink: '#94a3b8',
 };
 
-const DONUT_COLORS = ['#3b82f6', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#64748b'];
+const DONUT_COLORS = ['#0f172a', '#1e293b', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'];
 
 export const EmployeeReportSubModule: React.FC = () => {
   const { employees, roles, assignments, employeePayments, projects, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
@@ -287,7 +287,7 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             {/* Employee Dropdown */}
             <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <UserCheck className="w-4 h-4 text-slate-700 dark:text-slate-300 shrink-0" />
               <label htmlFor="employee-select" className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                 Employee:
               </label>
@@ -295,7 +295,7 @@ export const EmployeeReportSubModule: React.FC = () => {
                 id="employee-select"
                 value={selectedEmployeeId}
                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 max-w-[280px] truncate cursor-pointer"
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-slate-900 max-w-[280px] truncate cursor-pointer"
               >
                 <option value="ALL">All Employees (Consolidated)</option>
                 {employees.map((e) => (
@@ -354,7 +354,7 @@ export const EmployeeReportSubModule: React.FC = () => {
                     onClick={() => handlePresetSelect(preset.id)}
                     className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                       isSelected
-                        ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs font-semibold'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs font-semibold'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
@@ -372,7 +372,7 @@ export const EmployeeReportSubModule: React.FC = () => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-xs"
               title="Export Employee Dashboard to CSV"
             >
-              <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <Download className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
               <span>Export CSV</span>
             </button>
 
@@ -392,7 +392,7 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2">
             <span>
-              Target Employee: <strong className="text-indigo-700 dark:text-indigo-400 font-semibold">{employeeDisplayName}</strong>
+              Target Employee: <strong className="text-slate-900 dark:text-white font-semibold">{employeeDisplayName}</strong>
             </span>
             {employeeRole && (
               <>
@@ -419,7 +419,7 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Assignments</span>
-            <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <Briefcase className="w-4 h-4" />
             </div>
           </div>
@@ -435,11 +435,11 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Assigned Amount</span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <IndianRupee className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalAssignedAmountINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -451,11 +451,11 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Paid Amount</span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalPaidAmountINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -467,11 +467,11 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Pending Amount</span>
-            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-amber-600 dark:text-amber-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(pendingAssignmentAmountINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -483,11 +483,11 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Employee Payments</span>
-            <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+            <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
               <Wallet className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-xl font-bold font-mono text-purple-600 dark:text-purple-400">
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900 dark:text-white">
             {formatINR(totalEmployeePaymentsINR)}
           </div>
           <div className="mt-1 text-[11px] text-slate-400">
@@ -502,7 +502,7 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>{reportTitle}</span>
-              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-black text-white dark:bg-white dark:text-black">
                 AUDITED PAYROLL LEDGER
               </span>
             </h3>
@@ -530,7 +530,7 @@ export const EmployeeReportSubModule: React.FC = () => {
               {/* Row 1: Assignments */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-400" />
                   <span>Assignments</span>
                 </td>
                 <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-slate-100 text-sm">
@@ -543,29 +543,29 @@ export const EmployeeReportSubModule: React.FC = () => {
                   Total count of task modules assigned to {employeeDisplayName} in Assignments module
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                     Active Tasks
                   </span>
                 </td>
               </tr>
 
               {/* Row 2: Assigned Amount */}
-              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-indigo-50/20 dark:bg-indigo-950/10">
-                <td className="py-3.5 px-4 font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-indigo-500" />
+              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-slate-50/60 dark:bg-slate-800/30">
+                <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" />
                   <span>Assigned Amount</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-indigo-700 dark:text-indigo-300 text-base">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-base">
                   {formatINR(totalAssignedAmountINR)}
                 </td>
-                <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-700 dark:text-indigo-400">
+                <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
                   100.0%
                 </td>
                 <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
                   Sum of <code className="font-mono text-[11px]">Amount (INR)</code> allocated in Assignments module
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-bold text-slate-900 dark:text-white bg-black text-white px-2 py-0.5 rounded">
                     Total Contracted
                   </span>
                 </td>
@@ -574,20 +574,20 @@ export const EmployeeReportSubModule: React.FC = () => {
               {/* Row 3: Paid Amount */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-600" />
                   <span>Paid Amount</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-emerald-600 dark:text-emerald-400 text-sm">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-sm">
                   {formatINR(totalPaidAmountINR)}
                 </td>
-                <td className="py-3.5 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                <td className="py-3.5 px-4 text-right font-mono text-slate-900 dark:text-white font-bold">
                   {payoutRatePercent.toFixed(1)}%
                 </td>
                 <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
                   Sum of <code className="font-mono text-[11px]">Amount Paid (INR)</code> recorded on Assignments
                 </td>
                 <td className="py-3.5 px-4 text-center">
-                  <span className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-medium text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                     Task Cleared
                   </span>
                 </td>
@@ -596,10 +596,10 @@ export const EmployeeReportSubModule: React.FC = () => {
               {/* Row 4: Pending Assignment Amount */}
               <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  <div className="w-2 h-2 rounded-full bg-slate-500" />
                   <span>Pending Assignment Amount</span>
                 </td>
-                <td className="py-3.5 px-4 font-mono font-bold text-right text-amber-600 dark:text-amber-400 text-sm">
+                <td className="py-3.5 px-4 font-mono font-bold text-right text-slate-900 dark:text-white text-sm">
                   {formatINR(pendingAssignmentAmountINR)}
                 </td>
                 <td className="py-3.5 px-4 text-right font-mono text-slate-500 dark:text-slate-400">
@@ -612,8 +612,8 @@ export const EmployeeReportSubModule: React.FC = () => {
                   <span
                     className={`text-[11px] font-medium px-2 py-0.5 rounded ${
                       pendingAssignmentAmountINR === 0
-                        ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50'
-                        : 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50'
+                        ? 'text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800'
+                        : 'text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800'
                     }`}
                   >
                     {pendingAssignmentAmountINR === 0 ? 'Fully Settled' : 'Payable'}
@@ -622,9 +622,9 @@ export const EmployeeReportSubModule: React.FC = () => {
               </tr>
 
               {/* Row 5: Employee Payments */}
-              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-purple-50/20 dark:bg-purple-950/10 font-bold">
-                <td className="py-4 px-4 text-sm text-purple-900 dark:text-purple-300 flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-purple-500" />
+              <tr className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors bg-slate-100 dark:bg-slate-800 border-t-2 border-black dark:border-white font-bold">
+                <td className="py-4 px-4 text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-slate-400" />
                   <div>
                     <span>Employee Payments</span>
                     <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
@@ -632,17 +632,17 @@ export const EmployeeReportSubModule: React.FC = () => {
                     </div>
                   </div>
                 </td>
-                <td className="py-4 px-4 font-mono text-right text-lg text-purple-700 dark:text-purple-300">
+                <td className="py-4 px-4 font-mono text-right text-lg text-slate-900 dark:text-white">
                   {formatINR(totalEmployeePaymentsINR)}
                 </td>
-                <td className="py-4 px-4 text-right font-mono text-sm text-purple-700 dark:text-purple-300">
+                <td className="py-4 px-4 text-right font-mono text-sm text-slate-900 dark:text-white">
                   {totalAssignedAmountINR > 0 ? `${((totalEmployeePaymentsINR / totalAssignedAmountINR) * 100).toFixed(1)}%` : '—'}
                 </td>
                 <td className="py-4 px-4 text-xs font-normal text-slate-600 dark:text-slate-400">
                   Sum of <code className="font-mono text-[11px]">Amount Paid (INR)</code> from Employee Payments ledger
                 </td>
                 <td className="py-4 px-4 text-center">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/80 dark:text-purple-200">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-black text-white dark:bg-white dark:text-black">
                     Disbursed Ledger
                   </span>
                 </td>
@@ -659,14 +659,14 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <BarChart2 className="w-4 h-4 text-slate-700 dark:text-slate-300" />
                 <span>Employee Payout Summary (Bar Chart)</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Comparison of Assigned, Paid, Pending & Disbursed Payments for {employeeDisplayName}
               </p>
             </div>
-            <span className="text-[11px] font-mono text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
               Payout Audit
             </span>
           </div>
@@ -690,7 +690,7 @@ export const EmployeeReportSubModule: React.FC = () => {
                     fontSize: '12px',
                     color: '#f8fafc',
                   }}
-                  itemStyle={{ color: '#a78bfa' }}
+                  itemStyle={{ color: '#ffffff' }}
                 />
                 <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
                   {payoutSummaryBarData.map((entry, index) => (
@@ -707,7 +707,7 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Assignment-Wise & Client-Wise Breakdown</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
@@ -759,9 +759,9 @@ export const EmployeeReportSubModule: React.FC = () => {
                       val === 'assigned' ? 'Assigned' : val === 'paid' ? 'Paid' : 'Pending'
                     }
                   />
-                  <Bar dataKey="assigned" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="paid" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="pending" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="assigned" fill="#000000" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="paid" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pending" fill="#64748b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -773,14 +773,14 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <TrendingUp className="w-4 h-4 text-slate-900 dark:text-white" />
                 <span>Monthly Earnings & Disbursement Timeline</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Month-by-month payout clearance history for {employeeDisplayName}
               </p>
             </div>
-            <span className="text-[11px] font-mono text-purple-600 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
               {formatINR(totalEmployeePaymentsINR)} Cleared
             </span>
           </div>
@@ -811,8 +811,8 @@ export const EmployeeReportSubModule: React.FC = () => {
                       color: '#f8fafc',
                     }}
                   />
-                  <Bar dataKey="earnings" name="earnings" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
-                  <Line type="monotone" dataKey="earnings" stroke="#6d28d9" strokeWidth={2} dot={{ r: 4 }} />
+                  <Bar dataKey="earnings" name="earnings" fill="#0f172a" radius={[6, 6, 0, 0]} />
+                  <Line type="monotone" dataKey="earnings" stroke="#000000" strokeWidth={2} dot={{ r: 4 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -824,14 +824,14 @@ export const EmployeeReportSubModule: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
                 <span>Client & Project Workload Share</span>
               </h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 Distribution of assigned work value across client accounts
               </p>
             </div>
-            <span className="text-[11px] font-mono text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
               {workloadShareData.length} Accounts
             </span>
           </div>
@@ -878,7 +878,7 @@ export const EmployeeReportSubModule: React.FC = () => {
         <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <Briefcase className="w-4 h-4 text-slate-700 dark:text-slate-300" />
               <span>Employee Assignment & Payment Ledger</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -899,9 +899,9 @@ export const EmployeeReportSubModule: React.FC = () => {
                 <th className="py-3 px-3.5 whitespace-nowrap">Project ID</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">Work / Module Assigned</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">Assigned Date</th>
-                <th className="py-3 px-3.5 whitespace-nowrap text-right text-indigo-700 dark:text-indigo-400">Assigned Amount</th>
-                <th className="py-3 px-3.5 whitespace-nowrap text-right text-emerald-700 dark:text-emerald-400">Paid Amount</th>
-                <th className="py-3 px-3.5 whitespace-nowrap text-right text-amber-700 dark:text-amber-400">Pending Amount</th>
+                <th className="py-3 px-3.5 whitespace-nowrap text-right text-slate-900 dark:text-white">Assigned Amount</th>
+                <th className="py-3 px-3.5 whitespace-nowrap text-right text-slate-700 dark:text-slate-300">Paid Amount</th>
+                <th className="py-3 px-3.5 whitespace-nowrap text-right text-slate-700 dark:text-slate-300">Pending Amount</th>
                 <th className="py-3 px-3.5 whitespace-nowrap text-center">Status</th>
               </tr>
             </thead>
@@ -922,7 +922,7 @@ export const EmployeeReportSubModule: React.FC = () => {
 
                   return (
                     <tr key={a.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-3.5 font-mono font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {a.id}
                       </td>
                       <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
@@ -937,25 +937,23 @@ export const EmployeeReportSubModule: React.FC = () => {
                       <td className="py-3 px-3.5 whitespace-nowrap font-mono text-slate-600 dark:text-slate-400">
                         {formatDate(a.assignedDate)}
                       </td>
-                      <td className="py-3 px-3.5 font-mono font-bold text-right text-indigo-700 dark:text-indigo-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono font-bold text-right text-slate-900 dark:text-white whitespace-nowrap">
                         {formatINR(assigned)}
                       </td>
-                      <td className="py-3 px-3.5 font-mono font-bold text-right text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono font-bold text-right text-slate-900 dark:text-white whitespace-nowrap">
                         {formatINR(paid)}
                       </td>
-                      <td className="py-3 px-3.5 font-mono font-semibold text-right text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono font-semibold text-right text-slate-900 dark:text-white whitespace-nowrap">
                         {formatINR(pending)}
                       </td>
                       <td className="py-3 px-3.5 whitespace-nowrap text-center">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                             a.paymentStatus === 'Paid'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              ? 'bg-black text-white'
                               : a.paymentStatus === 'Partially Paid'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                              : a.paymentStatus === 'On Hold'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                              : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                              ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700'
+                              : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900'
                           }`}
                         >
                           {a.paymentStatus}

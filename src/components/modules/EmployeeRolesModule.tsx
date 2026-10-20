@@ -44,19 +44,19 @@ export const EmployeeRolesModule: React.FC = () => {
       label: 'Defined Positions',
       value: totalRoles,
       subtext: 'Engineering & marketing roles',
-      icon: <ShieldCheck className="w-4 h-4 text-cyan-600" />,
+      icon: <ShieldCheck className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Active Roles',
       value: activeRoles,
       subtext: 'Assignable designations',
-      icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
+      icon: <CheckCircle className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Assigned Staff',
       value: totalEmployeesAssigned,
       subtext: 'Active team members',
-      icon: <Users className="w-4 h-4 text-blue-600" />,
+      icon: <Users className="w-4 h-4 text-slate-800 dark:text-slate-200" />,
     },
     {
       label: 'Departments',
@@ -201,7 +201,7 @@ export const EmployeeRolesModule: React.FC = () => {
                       key={role.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-cyan-600 dark:text-cyan-400">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                         {role.id}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
@@ -222,7 +222,7 @@ export const EmployeeRolesModule: React.FC = () => {
                         <span
                           className={`inline-block px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                             role.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400'
+                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200'
                               : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                           }`}
                         >
@@ -233,14 +233,14 @@ export const EmployeeRolesModule: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => handleOpenEdit(role)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Role"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => deleteRole(role.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Role (Protected if staff assigned)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -266,7 +266,7 @@ export const EmployeeRolesModule: React.FC = () => {
                   {editingRole.id ? `Edit Role: ${editingRole.roleName}` : 'Add Employee Role'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Role ID: <span className="font-mono text-cyan-600 font-semibold">{editingRole.id || 'Auto-generated (e.g. ROL-006)'}</span>
+                  Role ID: <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{editingRole.id || 'Auto-generated (e.g. ROL-006)'}</span>
                 </p>
               </div>
               <button
@@ -280,14 +280,14 @@ export const EmployeeRolesModule: React.FC = () => {
 
             <form onSubmit={handleSaveSubmit} className="mt-4 space-y-4">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300">
+                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
                   {formError}
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Role Designation Title <span className="text-rose-500">* (Unique)</span>
+                  Role Designation Title <span className="text-slate-800 dark:text-slate-200">* (Unique)</span>
                 </label>
                 <input
                   type="text"
@@ -295,7 +295,7 @@ export const EmployeeRolesModule: React.FC = () => {
                   value={editingRole.roleName || ''}
                   onChange={(e) => setEditingRole({ ...editingRole, roleName: e.target.value })}
                   placeholder="e.g. Full-Stack Developer"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -309,7 +309,7 @@ export const EmployeeRolesModule: React.FC = () => {
                   value={editingRole.department || ''}
                   onChange={(e) => setEditingRole({ ...editingRole, department: e.target.value })}
                   placeholder="e.g. Software Engineering"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -322,7 +322,7 @@ export const EmployeeRolesModule: React.FC = () => {
                   value={editingRole.description || ''}
                   onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })}
                   placeholder="Key technical responsibilities, stack requirements, and deliverables..."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 />
               </div>
 
@@ -338,7 +338,7 @@ export const EmployeeRolesModule: React.FC = () => {
                       status: e.target.value as CategoryStatus,
                     })
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -355,7 +355,7 @@ export const EmployeeRolesModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors"
                 >
                   Save Role
                 </button>
