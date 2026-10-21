@@ -457,12 +457,15 @@ export const BankAccountsModule: React.FC = () => {
 
       {/* Add / Edit Bank Account Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
-          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-slate-900 dark:text-slate-100 my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in overflow-y-auto"
+          style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
+        >
+          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl border border-[#e2e8f0] dark:border-slate-800 shadow-2xl p-6 text-slate-900 dark:text-slate-100 my-8">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-[#e2e8f0] dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs">
+                <div className="p-2 rounded-xl bg-black dark:bg-white text-white dark:text-black shadow-xs">
                   <Landmark className="w-4 h-4" />
                 </div>
                 <div>
@@ -477,7 +480,7 @@ export const BankAccountsModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -485,7 +488,7 @@ export const BankAccountsModule: React.FC = () => {
 
             {/* Error Banner */}
             {formError && (
-              <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <div className="mt-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 shrink-0 text-slate-800 dark:text-slate-200" />
                 <span>{formError}</span>
               </div>
@@ -497,7 +500,7 @@ export const BankAccountsModule: React.FC = () => {
                 {/* Account Name / Label */}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Account Label / Name <span className="text-slate-800 dark:text-slate-200">*</span>
+                    Account Label / Name <span className="text-slate-900 dark:text-slate-100">*</span>
                   </label>
                   <input
                     type="text"
@@ -505,14 +508,14 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.accountName || ''}
                     onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
                     placeholder="e.g. Primary Operating Account"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
                 {/* Bank or Provider Name */}
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Bank / Institution Name <span className="text-slate-800 dark:text-slate-200">*</span>
+                    Bank / Institution Name <span className="text-slate-900 dark:text-slate-100">*</span>
                   </label>
                   <input
                     type="text"
@@ -520,14 +523,14 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.bankName || ''}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
                     placeholder="e.g. HDFC Bank, ICICI Bank, Tether TRC20"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
                 {/* Account / Wallet Number */}
                 <div className="sm:col-span-2">
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Account Number / Wallet Address <span className="text-slate-800 dark:text-slate-200">*</span>
+                    Account Number / Wallet Address <span className="text-slate-900 dark:text-slate-100">*</span>
                   </label>
                   <input
                     type="text"
@@ -535,7 +538,7 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.accountNumber || ''}
                     onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
                     placeholder="e.g. 50200012345678 or TR7NHqjeKQxGTCi8q8ZY..."
-                    className="w-full px-3 py-2 font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 font-mono rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
@@ -549,7 +552,7 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.ifscCode || ''}
                     onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value.toUpperCase() })}
                     placeholder="e.g. HDFC0001234"
-                    className="w-full px-3 py-2 font-mono uppercase rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 font-mono uppercase rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
@@ -563,7 +566,7 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.upiId || ''}
                     onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
                     placeholder="e.g. devicedoctor@hdfcbank"
-                    className="w-full px-3 py-2 font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 font-mono rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
@@ -577,7 +580,7 @@ export const BankAccountsModule: React.FC = () => {
                     value={formData.branchName || ''}
                     onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
                     placeholder="e.g. Connaught Place, New Delhi or TRC20"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   />
                 </div>
 
@@ -589,7 +592,7 @@ export const BankAccountsModule: React.FC = () => {
                   <select
                     value={formData.accountType || 'Current'}
                     onChange={(e) => setFormData({ ...formData, accountType: e.target.value as BankAccountType })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   >
                     {ACCOUNT_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -607,7 +610,7 @@ export const BankAccountsModule: React.FC = () => {
                   <select
                     value={formData.brand || activeBrand}
                     onChange={(e) => setFormData({ ...formData, brand: e.target.value as BrandName })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   >
                     <option value="Device Doctor India">Device Doctor India</option>
                     <option value="Codestro">Codestro</option>
@@ -624,7 +627,7 @@ export const BankAccountsModule: React.FC = () => {
                   <select
                     value={formData.status || 'Active'}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as BankAccountStatus })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
                   >
                     {ACCOUNT_STATUSES.map((st) => (
                       <option key={st} value={st}>
@@ -645,24 +648,26 @@ export const BankAccountsModule: React.FC = () => {
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="e.g. Primary INR client collections account for GST invoices"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-[#e2e8f0] dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors resize-none"
                 />
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#e2e8f0] dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors"
+                  className="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium transition-colors shadow-xs cursor-pointer"
+                  style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 font-semibold shadow-xs transition-colors"
+                  className="px-5 py-2 rounded-lg bg-black hover:bg-neutral-800 active:bg-neutral-900 text-white font-medium shadow-xs transition-colors cursor-pointer"
+                  style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                 >
-                  {isEditing ? 'Update Account' : 'Save Account'}
+                  {isEditing ? 'Update Bank Account' : 'Save Bank Account'}
                 </button>
               </div>
             </form>

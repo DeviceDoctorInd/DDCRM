@@ -9,6 +9,7 @@ import {
   ProjectDocument,
   PaymentPhase,
   PaymentPhaseStatus,
+  Employee,
 } from '../../types/crm';
 import { formatINR } from '../../utils/formatters';
 import {
@@ -28,9 +29,11 @@ import {
   HelpCircle,
   CheckCircle2,
   AlertTriangle,
+  Eye,
 } from 'lucide-react';
 import { BrandSafetyGuardBanner } from '../common/BrandSafetyGuardBanner';
 import { BrandSafetyConfirmModal } from '../common/BrandSafetyConfirmModal';
+import { openDocumentPreview, downloadDocument, normalizeDocument } from '../../utils/documentViewer';
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   'Proposal',
@@ -104,11 +107,49 @@ export const ProjectModal: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [pendingProjectPayload, setPendingProjectPayload] = useState<Project | null>(null);
+  const [isSavingProject, setIsSavingProject] = useState(false);
 
-  // Active employees for Project Manager dropdown
+  // Live employee records fetched strictly from database / API
+  const [liveEmployees, setLiveEmployees] = useState<Employee[]>([]);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+
+  // Fetch live active employee records directly from the database API whenever modal is opened
+  useEffect(() => {
+    let isMounted = true;
+    if (isProjectModalOpen) {
+      setIsLoadingEmployees(true);
+      storageService
+        .fetchEmployees()
+        .then((data) => {
+          if (isMounted) {
+            setLiveEmployees(Array.isArray(data) ? data : []);
+            setIsLoadingEmployees(false);
+          }
+        })
+        .catch((err) => {
+          if (isMounted) {
+            console.error('[ProjectModal] Live employee fetch error:', err);
+            setLiveEmployees(Array.isArray(employees) ? employees : []);
+            setIsLoadingEmployees(false);
+          }
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isProjectModalOpen, activeBrand]);
+
+  // Active employees for Project Manager dropdown strictly filtered from live database records (zero mock fallback)
   const activeEmployees = useMemo(() => {
-    return employees.filter((e) => e.status === 'Active');
-  }, [employees]);
+    const sourceList = liveEmployees.length > 0 ? liveEmployees : (employees || []);
+    return sourceList.filter((e: any) => {
+      const status = e.status;
+      const brand = e.brand || e.brand_id;
+      const isActive = status === 'Active';
+      const isBrandMatch = !brand || brand === 'All' || brand === activeBrand;
+      return isActive && isBrandMatch;
+    });
+  }, [liveEmployees, employees, activeBrand]);
 
   // Selected client profile helper with database fallback lookup
   const selectedClientProfile = useMemo(() => {
@@ -214,6 +255,9 @@ export const ProjectModal: React.FC = () => {
         );
       }
 
+      const parsedProposalDoc = normalizeDocument(projectModalData.proposalDocument);
+      const parsedContractDoc = normalizeDocument(projectModalData.contractDocument);
+
       setFormData({
         ...projectModalData,
         id: initialId || projectModalData.id,
@@ -221,10 +265,12 @@ export const ProjectModal: React.FC = () => {
         clientName: resolvedClientName,
         currency: resolvedCurrency,
         paymentPhases: phases,
+        proposalDocument: parsedProposalDoc || undefined,
+        contractDocument: parsedContractDoc || undefined,
         proposalDocumentNotes:
-          projectModalData.proposalDocumentNotes || projectModalData.proposalDocument?.notes || '',
+          projectModalData.proposalDocumentNotes || parsedProposalDoc?.notes || '',
         contractDocumentNotes:
-          projectModalData.contractDocumentNotes || projectModalData.contractDocument?.notes || '',
+          projectModalData.contractDocumentNotes || parsedContractDoc?.notes || '',
       });
       setFormError(null);
     }
@@ -575,6 +621,14 @@ export const ProjectModal: React.FC = () => {
       setFormError('Project Start Date is required.');
       return;
     }
+    if (!formData.projectManager || !formData.projectManager.trim()) {
+      setFormError(
+        activeEmployees.length === 0
+          ? 'Cannot assign Project Manager: No active employees registered. Please add employees in the Employees module first.'
+          : 'Please select a Project Manager from the active employees list.'
+      );
+      return;
+    }
 
     const payload: Project = {
       id: formData.id || '',
@@ -595,7 +649,7 @@ export const ProjectModal: React.FC = () => {
       exchangeRate: Number(formData.exchangeRate) || 1,
       contractValue:
         Math.round((Number(formData.contract) || 0) * (Number(formData.exchangeRate) || 1)),
-      projectManager: formData.projectManager || 'Lead Project Manager',
+      projectManager: formData.projectManager.trim(),
       notes: formData.notes || '',
       proposalDocument: formData.proposalDocument,
       proposalDocumentNotes: formData.proposalDocumentNotes || formData.proposalDocument?.notes || '',
@@ -617,14 +671,19 @@ export const ProjectModal: React.FC = () => {
   };
 
   const executeSaveProject = async (payloadToSave: Project) => {
-    const res = await saveProject(payloadToSave);
-    if (res.success) {
-      setIsConfirmModalOpen(false);
-      setPendingProjectPayload(null);
-      closeProjectModal();
-    } else {
-      setFormError(res.error || 'Failed to save project.');
-      setIsConfirmModalOpen(false);
+    try {
+      setIsSavingProject(true);
+      const res = await saveProject(payloadToSave);
+      if (res.success) {
+        setIsConfirmModalOpen(false);
+        setPendingProjectPayload(null);
+        closeProjectModal();
+      } else {
+        setFormError(res.error || 'Failed to save project.');
+        setIsConfirmModalOpen(false);
+      }
+    } finally {
+      setIsSavingProject(false);
     }
   };
 
@@ -823,34 +882,77 @@ export const ProjectModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Project Manager <span className="text-slate-800 dark:text-slate-200">*</span>
+                  Project Manager <span className="text-slate-900 dark:text-slate-100">*</span>
                 </label>
-                <select
-                  required
-                  value={formData.projectManager || ''}
-                  onChange={(e) => setFormData({ ...formData, projectManager: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  <option value="" disabled>-- Select Project Manager from Employees --</option>
-                  {/* Preserve existing PM if not in active employee list */}
-                  {formData.projectManager && !activeEmployees.some((e: any) => e.name === formData.projectManager) && (
-                    <option value={formData.projectManager}>
-                      {formData.projectManager} (Currently Assigned)
+                {isLoadingEmployees ? (
+                  <div
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-800 text-slate-500 font-sans flex items-center gap-2"
+                    style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse" />
+                    Loading active employees from database...
+                  </div>
+                ) : (
+                  <select
+                    required
+                    disabled={activeEmployees.length === 0}
+                    value={formData.projectManager || ''}
+                    onChange={(e) => {
+                      setFormData({ ...formData, projectManager: e.target.value });
+                      if (formError) setFormError(null);
+                    }}
+                    className={`w-full px-3 py-2 text-xs rounded-lg border text-black dark:text-white font-sans focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors ${
+                      activeEmployees.length === 0
+                        ? 'bg-slate-100 dark:bg-slate-800/50 cursor-not-allowed text-slate-400 border-[#e2e8f0] dark:border-slate-800'
+                        : 'bg-white dark:bg-slate-900 border-[#e2e8f0] dark:border-slate-800 focus:border-black'
+                    }`}
+                    style={{
+                      fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
+                    }}
+                  >
+                    <option value="" disabled>
+                      {activeEmployees.length === 0
+                        ? '-- No Active Employees Available --'
+                        : '-- Select Project Manager from Employees --'}
                     </option>
-                  )}
-                  {activeEmployees.map((emp: any) => {
-                    const role = getRoleById(emp.roleId);
-                    return (
-                      <option key={emp.id} value={emp.name}>
-                        {emp.name} ({emp.id} · {role?.roleName || emp.employeeType})
-                      </option>
-                    );
-                  })}
-                </select>
-                {activeEmployees.length === 0 && (
-                  <p className="mt-1 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                    No active employees registered. Please add employees in the Employees module.
-                  </p>
+                    {/* Preserve existing PM if editing project and already assigned */}
+                    {formData.projectManager &&
+                      !activeEmployees.some(
+                        (e: any) =>
+                          (e.employee_name || e.name) === formData.projectManager
+                      ) && (
+                        <option value={formData.projectManager}>
+                          {formData.projectManager} (Currently Assigned)
+                        </option>
+                      )}
+                    {activeEmployees.map((emp: any) => {
+                      const empId = emp.id || emp.employee_id;
+                      const empName = emp.employee_name || emp.name;
+                      const role = getRoleById(emp.roleId || emp.role_id);
+                      const roleLabel =
+                        role?.roleName || emp.employeeType || emp.employee_type || 'Staff';
+                      return (
+                        <option key={empId} value={empName}>
+                          {empName} ({empId} · {roleLabel})
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+                {activeEmployees.length === 0 && !isLoadingEmployees && (
+                  <div
+                    className="mt-1.5 p-2.5 rounded-md bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-800 text-xs text-neutral-800 dark:text-neutral-200 flex items-start gap-2 font-sans"
+                    style={{
+                      fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif',
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 dark:bg-neutral-100 mt-1.5 shrink-0" />
+                    <div>
+                      <p className="font-medium text-neutral-900 dark:text-white">
+                        No active employees registered. Please add employees in the Employees module first.
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -946,12 +1048,12 @@ export const ProjectModal: React.FC = () => {
                 <input
                   type="number"
                   min="0"
-                  step="1"
+                  step="any"
                   value={formData.committedDays ?? 30}
                   onChange={(e) =>
                     handleStartDateOrDaysChange(
                       formData.startDate || '',
-                      parseInt(e.target.value, 10) || 0
+                      parseFloat(e.target.value) || 0
                     )
                   }
                   className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -1027,22 +1129,26 @@ export const ProjectModal: React.FC = () => {
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {(formData.proposalDocument.url || formData.proposalDocument.externalUrl) && (
-                            <a
-                              href={formData.proposalDocument.url || formData.proposalDocument.externalUrl}
-                              download={formData.proposalDocument.name}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                              title="Download / View Proposal"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => openDocumentPreview(formData.id || 'NEW-PROJECT', formData.proposalDocument, 'proposal')}
+                            className="p-1.5 rounded text-slate-700 hover:text-black dark:text-slate-300 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title="Preview Proposal Document"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadDocument(formData.id || 'NEW-PROJECT', formData.proposalDocument, 'proposal')}
+                            className="p-1.5 rounded text-slate-700 hover:text-black dark:text-slate-300 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title="Download Proposal Document"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveDocument('proposalDocument')}
-                            className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                             title="Remove Document"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1148,22 +1254,26 @@ export const ProjectModal: React.FC = () => {
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {(formData.contractDocument.url || formData.contractDocument.externalUrl) && (
-                            <a
-                              href={formData.contractDocument.url || formData.contractDocument.externalUrl}
-                              download={formData.contractDocument.name}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                              title="Download / View Contract"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => openDocumentPreview(formData.id || 'NEW-PROJECT', formData.contractDocument, 'contract')}
+                            className="p-1.5 rounded text-slate-700 hover:text-black dark:text-slate-300 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title="Preview Contract Document"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadDocument(formData.id || 'NEW-PROJECT', formData.contractDocument, 'contract')}
+                            className="p-1.5 rounded text-slate-700 hover:text-black dark:text-slate-300 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            title="Download Contract Document"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveDocument('contractDocument')}
-                            className="p-1 rounded text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                             title="Remove Document"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1287,7 +1397,7 @@ export const ProjectModal: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  min="0.000001"
+                  min="0"
                   step="any"
                   value={formData.exchangeRate ?? 1}
                   onChange={(e) =>
@@ -1389,8 +1499,7 @@ export const ProjectModal: React.FC = () => {
                           <input
                             type="number"
                             min="0"
-                            max="100"
-                            step="0.1"
+                            step="any"
                             value={phase.percentage}
                             onChange={(e) =>
                               handlePhaseChange(phase.id, 'percentage', parseFloat(e.target.value) || 0)
@@ -1589,13 +1698,16 @@ export const ProjectModal: React.FC = () => {
         entityType="Project"
         entityName={pendingProjectPayload?.id || formData.id || 'New Project Proposal'}
         targetBrand={pendingProjectPayload?.brand || formData.brand || activeBrand}
-        onConfirm={() => {
+        isSaving={isSavingProject}
+        onConfirm={async () => {
           if (pendingProjectPayload) {
-            executeSaveProject(pendingProjectPayload);
+            await executeSaveProject(pendingProjectPayload);
           }
         }}
         onCancel={() => {
-          setIsConfirmModalOpen(false);
+          if (!isSavingProject) {
+            setIsConfirmModalOpen(false);
+          }
         }}
       />
     </div>

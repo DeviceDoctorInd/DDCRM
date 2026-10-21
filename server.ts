@@ -1,17 +1,46 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
-import express from 'express';
-import { createServer as createViteServer } from 'vite';
+import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import apiRouter from './server/routes/api';
-import { initAzureSql } from './server/db/azureSql';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
+// Ensure execution under tsx loader for TypeScript and ESM resolution support
+const isTsxRunning =
+  process.execArgv.some((arg) => arg.includes('tsx')) ||
+  process.env.__TSX_BOOTSTRAPPED__ === '1';
+
+if (!isTsxRunning) {
+  process.env.__TSX_BOOTSTRAPPED__ = '1';
+  const tsxBin = path.resolve(process.cwd(), 'node_modules/.bin/tsx');
+  const child = spawn(tsxBin, [__filename, ...process.argv.slice(2)], {
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+    } else {
+      process.exit(code ?? 0);
+    }
+  });
+} else {
+  startAppServer().catch((err) => {
+    console.error('[Server] Fatal server startup error:', err);
+    process.exit(1);
+  });
+}
+
+async function startAppServer() {
+  const express = (await import('express')).default;
+  const { createServer: createViteServer } = await import('vite');
+  const apiRouter = (await import('./server/routes/api')).default;
+  const { initAzureSql } = await import('./server/db/azureSql');
+
   const app = express();
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProd = process.env.NODE_ENV === 'production';
@@ -47,8 +76,3 @@ async function startServer() {
     console.log(`[Server] Device Doctor India CRM server running on http://0.0.0.0:${PORT}`);
   });
 }
-
-startServer().catch((err) => {
-  console.error('[Server] Fatal server startup error:', err);
-  process.exit(1);
-});

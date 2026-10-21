@@ -1289,6 +1289,10 @@ class MockStore {
     return created;
   }
 
+  public getProjectById(id: string): Project | undefined {
+    return this.projects.find((p) => p.id === id);
+  }
+
   public deleteProject(id: string): boolean {
     const initial = this.projects.length;
     this.projects = this.projects.filter((p) => p.id !== id);
@@ -1387,10 +1391,16 @@ class MockStore {
 
   // --- Employees ---
   public getEmployees(brand?: string | null): Employee[] {
-    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.employees.filter((e) => e.brand === brand);
-    }
-    return [...this.employees];
+    const list = (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)')
+      ? this.employees.filter((e) => e.brand === brand)
+      : this.employees;
+    return list.map((e) => ({
+      ...e,
+      employee_id: e.id,
+      employee_name: e.name,
+      brand_id: e.brand,
+      role_id: e.roleId,
+    }));
   }
 
   public saveEmployee(emp: Employee): Employee {

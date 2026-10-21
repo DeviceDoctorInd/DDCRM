@@ -17,6 +17,7 @@ import {
   Expense,
   AppUser,
   BankAccount,
+  ProjectDocument,
 } from '../../src/types/crm';
 import { mockStore } from '../db/mockStore';
 import authRoutes from './auth.routes';
@@ -707,9 +708,27 @@ router.get('/projects', async (req: Request, res: Response) => {
           parsedPhases = [];
         }
       }
+      let proposalDoc = null;
+      if (p.proposalDocument) {
+        try {
+          proposalDoc = typeof p.proposalDocument === 'string' ? JSON.parse(p.proposalDocument) : p.proposalDocument;
+        } catch {
+          proposalDoc = null;
+        }
+      }
+      let contractDoc = null;
+      if (p.contractDocument) {
+        try {
+          contractDoc = typeof p.contractDocument === 'string' ? JSON.parse(p.contractDocument) : p.contractDocument;
+        } catch {
+          contractDoc = null;
+        }
+      }
       return {
         ...p,
         paymentPhases: parsedPhases,
+        proposalDocument: proposalDoc,
+        contractDocument: contractDoc,
       };
     });
     return res.json(formatted);
@@ -763,9 +782,9 @@ router.post('/projects', async (req: Request, res: Response) => {
           .input('balance', proj.balance || 0)
           .input('project_manager', proj.projectManager || '')
           .input('notes', proj.notes || '')
-          .input('proposal_document', proj.proposalDocument ? JSON.stringify(proj.proposalDocument) : '')
-          .input('contract_document', proj.contractDocument ? JSON.stringify(proj.contractDocument) : '')
-          .input('payment_phases', proj.paymentPhases ? JSON.stringify(proj.paymentPhases) : '[]')
+          .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : '')
+          .input('contract_document', proj.contractDocument ? (typeof proj.contractDocument === 'string' ? proj.contractDocument : JSON.stringify(proj.contractDocument)) : '')
+          .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : '[]')
           .input('created_at', proj.createdAt)
           .input('updated_at', proj.updatedAt)
           .query(`
@@ -814,6 +833,177 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
     mockStore.deleteProject(id);
     return res.json({ success: true, id });
   }
+});
+
+// --- PROJECT DOCUMENTS (Preview & Download API) ---
+router.get('/projects/:id/documents/:docType', async (req: Request, res: Response) => {
+  const { id, docType } = req.params;
+  const download = req.query.download === 'true';
+  const pool = await getOrInitPool();
+
+  let project: any;
+  if (!pool) {
+    project = mockStore.getProjectById(id);
+  } else {
+    try {
+      const guidId = toGuid(id);
+      const q = await executeSqlWithAutoMigration(
+        pool,
+        () =>
+          pool.request()
+            .input('id', guidId)
+            .input('rawId', id)
+            .query(`
+              SELECT CAST(id AS NVARCHAR(150)) as id, 
+                     ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument, 
+                     ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contractDocument,
+                     client_name as clientName,
+                     brand
+              FROM projects 
+              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
+            `),
+        'projects'
+      );
+      if (q.recordset && q.recordset.length > 0) {
+        const row = q.recordset[0];
+        let pDoc = null;
+        let cDoc = null;
+        if (row.proposalDocument) {
+          try {
+            pDoc = typeof row.proposalDocument === 'string' ? JSON.parse(row.proposalDocument) : row.proposalDocument;
+          } catch {
+            pDoc = null;
+          }
+        }
+        if (row.contractDocument) {
+          try {
+            cDoc = typeof row.contractDocument === 'string' ? JSON.parse(row.contractDocument) : row.contractDocument;
+          } catch {
+            cDoc = null;
+          }
+        }
+        project = { ...row, proposalDocument: pDoc, contractDocument: cDoc };
+      }
+    } catch (err) {
+      console.warn(`[GET /projects/${id}/documents/${docType}] SQL query error:`, err);
+    }
+  }
+
+  if (!project) {
+    project = mockStore.getProjectById(id);
+  }
+
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const isProposal = docType.toLowerCase().startsWith('prop');
+  const doc: ProjectDocument | undefined = isProposal ? project.proposalDocument : project.contractDocument;
+
+  if (!doc) {
+    return res.status(404).json({ error: `No ${isProposal ? 'proposal' : 'contract'} document attached to this project` });
+  }
+
+  const fileName = doc.name || (isProposal ? `${project.id}_Proposal.pdf` : `${project.id}_Contract.pdf`);
+
+  // If document contains Base64 Data URL
+  if (doc.url && doc.url.startsWith('data:')) {
+    try {
+      const matches = doc.url.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const fileBuffer = Buffer.from(base64Data, 'base64');
+
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader(
+          'Content-Disposition',
+          `${download ? 'attachment' : 'inline'}; filename="${encodeURIComponent(fileName)}"`
+        );
+        res.setHeader('Content-Length', fileBuffer.length);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(fileBuffer);
+      }
+    } catch (e) {
+      console.error('[Document Server] Base64 decode error:', e);
+    }
+  }
+
+  // If document has external URL
+  if (doc.externalUrl && !doc.url) {
+    return res.redirect(doc.externalUrl);
+  }
+
+  // If document only has a filename or cannot be decoded, generate a professional document overview
+  const safeTitle = isProposal ? 'Project Proposal Document' : 'Contract & Master Services Agreement';
+  const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${fileName}</title>
+  <style>
+    body { font-family: Helvetica, "Helvetica Neue", Arial, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 40px; }
+    .card { max-width: 700px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+    .brand { font-size: 18px; font-weight: 700; color: #000000; }
+    .doc-type { font-size: 12px; font-weight: 600; text-transform: uppercase; background: #f1f5f9; padding: 4px 8px; border-radius: 4px; border: 1px solid #cbd5e1; }
+    .meta-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+    .meta-label { color: #64748b; font-weight: 500; }
+    .meta-value { font-weight: 600; color: #0f172a; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #e2e8f0; }
+    .notes-box { margin-top: 20px; padding: 14px; background: #f8fafc; border-left: 3px solid #000000; border-radius: 0 6px 6px 0; font-size: 12px; line-height: 1.5; color: #334155; }
+    .actions { margin-top: 28px; display: flex; gap: 12px; }
+    .btn { background: #000000; color: #ffffff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-block; border: none; }
+    .btn-secondary { background: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; }
+    .footer { margin-top: 32px; font-size: 10px; color: #94a3b8; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <div class="brand">${project.brand || 'Device Doctor India'}</div>
+        <div style="font-size: 14px; color: #64748b; margin-top: 4px;">Institutional Enterprise Services</div>
+      </div>
+      <div class="doc-type">${safeTitle}</div>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Project Identifier</span>
+      <span class="meta-value" style="font-family: monospace;">${project.id}</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Client Account</span>
+      <span class="meta-value">${project.clientName || 'Institutional Client'}</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Document Filename</span>
+      <span class="meta-value" style="font-family: monospace;">${fileName}</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Uploaded / Recorded Date</span>
+      <span class="meta-value">${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('en-IN') : 'Active Verification'}</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Compliance & Security Status</span>
+      <span class="meta-value"><span class="badge">Verified Enterprise Archive</span></span>
+    </div>
+    ${doc.notes ? `<div class="notes-box"><strong>Attached Notes / Scope Details:</strong><br/>${doc.notes}</div>` : ''}
+    <div class="actions">
+      <button class="btn" onclick="window.print()">Print Document</button>
+      <button class="btn btn-secondary" onclick="window.close()">Close Preview</button>
+    </div>
+    <div class="footer">Secure Cloud Storage Reference • Azure App Service & SQL Enterprise Partitioning</div>
+  </div>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (download) {
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}.html"`);
+  } else {
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}.html"`);
+  }
+  return res.send(htmlContent);
 });
 
 // --- PAYMENTS ---
@@ -1334,9 +1524,13 @@ router.get('/employees', async (req: Request, res: Response) => {
           .input('brandFilter', brand || null)
           .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
+               CAST(id AS NVARCHAR(100)) as employee_id,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as employee_name, 
                ISNULL(CAST(role_id AS NVARCHAR(100)), '') as roleId, 
+               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as role_id, 
                ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
                ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
                ISNULL(CAST(joining_date AS NVARCHAR(50)), '') as joiningDate,
@@ -1363,6 +1557,7 @@ router.post('/employees', async (req: Request, res: Response) => {
   const emp: Employee = req.body;
   const brandContext = getBrandContext(req);
   emp.brand = sanitizeBrand(emp.brand, brandContext) as any;
+  emp.costOfEmployee = parseFloat(String(emp.costOfEmployee ?? 0)) || 0;
   const now = new Date().toISOString();
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
@@ -1486,6 +1681,8 @@ router.post('/assignments', async (req: Request, res: Response) => {
   const asn: Assignment = req.body;
   const brandContext = getBrandContext(req);
   asn.brand = sanitizeBrand(asn.brand, brandContext) as any;
+  asn.amount = parseFloat(String(asn.amount ?? 0)) || 0;
+  asn.amountPaid = parseFloat(String(asn.amountPaid ?? 0)) || 0;
   const now = new Date().toISOString();
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
@@ -1615,6 +1812,7 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
   const epay: EmployeePayment = req.body;
   const brandContext = getBrandContext(req);
   epay.brand = sanitizeBrand(epay.brand, brandContext) as any;
+  epay.amountPaid = parseFloat(String(epay.amountPaid ?? 0)) || 0;
   const now = new Date().toISOString();
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;

@@ -677,8 +677,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveClient(client);
     if (res.success) {
+      const savedClient = res.client || client;
+      setRawClients((prev) => {
+        const idx = prev.findIndex((c) => c.id === savedClient.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedClient;
+          return updated;
+        }
+        return [savedClient, ...prev];
+      });
       showToast(`Client "${client.name}" saved under ${client.brand} workspace.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveClient]', err));
     } else {
       showToast(res.error || 'Failed to save client to Azure SQL.', 'error');
     }
@@ -851,8 +861,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveProject(project);
     if (res.success) {
+      const savedProject = res.project || project;
+      setRawProjects((prev) => {
+        const idx = prev.findIndex((p) => p.id === savedProject.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedProject;
+          return updated;
+        }
+        return [savedProject, ...prev];
+      });
       showToast(`Project "${project.id}" saved under ${project.brand} workspace.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveProject]', err));
     } else {
       showToast(res.error || 'Failed to save project.', 'error');
     }
@@ -908,8 +928,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.savePayment(payment);
     if (res.success) {
+      const savedPayment = res.payment || payment;
+      setRawPayments((prev) => {
+        const idx = prev.findIndex((p) => p.id === savedPayment.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedPayment;
+          return updated;
+        }
+        return [savedPayment, ...prev];
+      });
       showToast(`Payment voucher "${payment.id}" recorded in Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after savePayment]', err));
     } else {
       showToast(res.error || 'Failed to record payment in Azure SQL.', 'error');
     }
@@ -1305,7 +1335,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       contract,
       exchangeRate: rate,
       contractValue: Math.round(contract * rate),
-      projectManager: activeBrand === 'Codestro' ? 'Rohan Malhotra' : (activeBrand === 'FX Launch Pad' ? 'Sameer Saxena' : (activeBrand === 'DUNS' ? 'Arjun Mehta' : 'Karthik Ramanathan')),
+      projectManager: '',
       notes: '',
     });
     setIsProjectModalOpen(true);

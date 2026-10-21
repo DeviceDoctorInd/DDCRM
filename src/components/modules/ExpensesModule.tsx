@@ -782,7 +782,7 @@ export const ExpensesModule: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    min="0.0001"
+                    min="0"
                     step="any"
                     value={formData.exchangeRate ?? 1}
                     onChange={(e) => handleRateChange(parseFloat(e.target.value) || 1)}

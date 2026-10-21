@@ -299,7 +299,31 @@ class StorageService {
   }
 
   public async fetchProjects(): Promise<Project[]> {
-    return this.apiCall<Project[]>('/api/projects');
+    const list = await this.apiCall<Project[]>('/api/projects');
+    if (!Array.isArray(list)) return [];
+    return list.map((p) => {
+      let pDoc = p.proposalDocument;
+      let cDoc = p.contractDocument;
+      if (typeof pDoc === 'string') {
+        try {
+          pDoc = JSON.parse(pDoc);
+        } catch {
+          pDoc = undefined;
+        }
+      }
+      if (typeof cDoc === 'string') {
+        try {
+          cDoc = JSON.parse(cDoc);
+        } catch {
+          cDoc = undefined;
+        }
+      }
+      return {
+        ...p,
+        proposalDocument: pDoc || undefined,
+        contractDocument: cDoc || undefined,
+      };
+    });
   }
 
   public async saveProject(proj: Project): Promise<{ success: boolean; project?: Project; error?: string }> {

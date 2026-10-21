@@ -521,7 +521,7 @@ export const EmployeesModule: React.FC = () => {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Karthik Ramanathan"
+                    placeholder="e.g. Employee Full Name"
                     className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-shadow"
                   />
                 </div>
@@ -617,15 +617,16 @@ export const EmployeesModule: React.FC = () => {
                     <input
                       type="number"
                       min="0"
-                      step="1000"
+                      step="any"
                       required
-                      value={formData.costOfEmployee || ''}
+                      value={formData.costOfEmployee ?? ''}
                       onChange={(e) => {
-                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        const val = e.target.value === '' ? ('' as any) : Math.max(0, parseFloat(e.target.value) || 0);
                         setFormData({ ...formData, costOfEmployee: val });
                       }}
-                      placeholder="e.g. 105000"
-                      className="w-full pl-8 pr-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 transition-shadow font-semibold"
+                      placeholder="e.g. 17500"
+                      className="w-full pl-8 pr-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-700 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-shadow font-semibold"
+                      style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                     />
                     <IndianRupee className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
                   </div>

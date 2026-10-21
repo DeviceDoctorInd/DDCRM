@@ -1032,7 +1032,7 @@ export const PaymentsModule: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      min="0.000001"
+                      min="0"
                       step="any"
                       value={formData.exchangeRate ?? 1}
                       onChange={(e) =>

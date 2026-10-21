@@ -19,7 +19,10 @@ import {
   Edit2,
   Copy,
   Check,
+  Eye,
 } from 'lucide-react';
+import { normalizeDocument, downloadDocument, openDocumentPreview } from '../../utils/documentViewer';
+import { DocumentPreviewModal } from '../common/DocumentPreviewModal';
 
 interface ProjectDetailDrawerProps {
   project: Project | null;
@@ -41,8 +44,20 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
   onEdit,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [previewState, setPreviewState] = React.useState<{
+    isOpen: boolean;
+    doc: any;
+    docType: 'proposal' | 'contract';
+  }>({
+    isOpen: false,
+    doc: null,
+    docType: 'proposal',
+  });
 
   if (!isOpen || !project) return null;
+
+  const proposalDoc = normalizeDocument(project.proposalDocument);
+  const contractDoc = normalizeDocument(project.contractDocument);
 
   const copyId = () => {
     navigator.clipboard.writeText(project.id);
@@ -203,15 +218,15 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Proposal Document Card */}
-              <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+              <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-800 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+                    <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-black dark:text-white" />
                       <span>Proposal Document</span>
                     </span>
-                    {project.proposalDocument ? (
-                      <span className="text-[10px] font-medium text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
+                    {proposalDoc ? (
+                      <span className="text-[10px] font-semibold text-black bg-slate-100 dark:bg-slate-800 dark:text-slate-200 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-slate-700">
                         Proposal v1
                       </span>
                     ) : (
@@ -219,76 +234,88 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
                     )}
                   </div>
 
-                  {project.proposalDocument ? (
-                    <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 mb-3">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
-                        {project.proposalDocument.name}
+                  {proposalDoc ? (
+                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-[#e2e8f0] dark:border-slate-800 mb-3">
+                      <p className="text-xs font-semibold text-black dark:text-white truncate" title={proposalDoc.name}>
+                        {proposalDoc.name}
                       </p>
-                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                        <span>{formatFileSize(project.proposalDocument.size)}</span>
+                      <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                        <span>{formatFileSize(proposalDoc.size)}</span>
                         <span>•</span>
                         <span>
-                          {project.proposalDocument.uploadedAt
-                            ? new Date(project.proposalDocument.uploadedAt).toLocaleDateString('en-IN')
+                          {proposalDoc.uploadedAt
+                            ? new Date(proposalDoc.uploadedAt).toLocaleDateString('en-IN')
                             : 'Uploaded'}
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400 mb-3">
+                    <div className="p-4 rounded-lg bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-[#e2e8f0] dark:border-slate-700 text-center text-xs text-slate-400 mb-3">
                       No proposal document file uploaded
                     </div>
                   )}
 
                   {/* Proposal Notes */}
-                  {(project.proposalDocumentNotes || project.proposalDocument?.notes) && (
-                    <div className="text-xs text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 mb-3">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300 block text-[10px] uppercase tracking-wider mb-0.5">
+                  {(project.proposalDocumentNotes || proposalDoc?.notes) && (
+                    <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-[#e2e8f0] dark:border-slate-800 mb-3">
+                      <span className="font-semibold text-black dark:text-white block text-[10px] uppercase tracking-wider mb-0.5">
                         Proposal Scope & Notes:
                       </span>
-                      {project.proposalDocumentNotes || project.proposalDocument?.notes}
+                      {project.proposalDocumentNotes || proposalDoc?.notes}
                     </div>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                  {project.proposalDocument?.url && (
-                    <a
-                      href={project.proposalDocument.url}
-                      download={project.proposalDocument.name}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
+                {proposalDoc && (
+                  <div className="flex items-center gap-2 pt-2.5 border-t border-[#e2e8f0] dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewState({ isOpen: true, doc: proposalDoc, docType: 'proposal' })}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 transition-colors shadow-xs"
+                      title="Preview Proposal Document"
                     >
-                      <Download className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                      <span>Download File</span>
-                    </a>
-                  )}
+                      <Eye className="w-3.5 h-3.5 text-slate-800" />
+                      <span>Preview</span>
+                    </button>
 
-                  {project.proposalDocument?.externalUrl && (
-                    <a
-                      href={project.proposalDocument.externalUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
+                    <button
+                      type="button"
+                      onClick={() => downloadDocument(project.id, proposalDoc, 'proposal')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-black text-white hover:bg-neutral-800 transition-colors shadow-xs"
+                      title="Download Proposal Document"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Open Drive Link</span>
-                    </a>
-                  )}
-                </div>
+                      <Download className="w-3.5 h-3.5 text-white" />
+                      <span>Download</span>
+                    </button>
+
+                    {proposalDoc.externalUrl && (
+                      <a
+                        href={proposalDoc.externalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-xs ml-auto"
+                        title="Open external Drive storage"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Drive</span>
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Contract Document Card */}
-              <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+              <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-800 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <FileCheck className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+                    <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                      <FileCheck className="w-4 h-4 text-black dark:text-white" />
                       <span>Contract / Agreement Document</span>
                     </span>
-                    {project.contractDocument ? (
-                      <span className="text-[10px] font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-slate-800 dark:text-slate-200" />
+                    {contractDoc ? (
+                      <span className="text-[10px] font-semibold text-black bg-slate-100 dark:bg-slate-800 dark:text-slate-200 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-slate-700 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-black dark:text-white" />
                         Signed MSA
                       </span>
                     ) : (
@@ -296,63 +323,75 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
                     )}
                   </div>
 
-                  {project.contractDocument ? (
-                    <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 mb-3">
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
-                        {project.contractDocument.name}
+                  {contractDoc ? (
+                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-[#e2e8f0] dark:border-slate-800 mb-3">
+                      <p className="text-xs font-semibold text-black dark:text-white truncate" title={contractDoc.name}>
+                        {contractDoc.name}
                       </p>
-                      <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                        <span>{formatFileSize(project.contractDocument.size)}</span>
+                      <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2">
+                        <span>{formatFileSize(contractDoc.size)}</span>
                         <span>•</span>
                         <span>
-                          {project.contractDocument.uploadedAt
-                            ? new Date(project.contractDocument.uploadedAt).toLocaleDateString('en-IN')
+                          {contractDoc.uploadedAt
+                            ? new Date(contractDoc.uploadedAt).toLocaleDateString('en-IN')
                             : 'Uploaded'}
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400 mb-3">
+                    <div className="p-4 rounded-lg bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-[#e2e8f0] dark:border-slate-700 text-center text-xs text-slate-400 mb-3">
                       No signed contract document uploaded
                     </div>
                   )}
 
                   {/* Contract Notes */}
-                  {(project.contractDocumentNotes || project.contractDocument?.notes) && (
-                    <div className="text-xs text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900/60 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 mb-3">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300 block text-[10px] uppercase tracking-wider mb-0.5">
+                  {(project.contractDocumentNotes || contractDoc?.notes) && (
+                    <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-[#e2e8f0] dark:border-slate-800 mb-3">
+                      <span className="font-semibold text-black dark:text-white block text-[10px] uppercase tracking-wider mb-0.5">
                         Terms & SLA Notes:
                       </span>
-                      {project.contractDocumentNotes || project.contractDocument?.notes}
+                      {project.contractDocumentNotes || contractDoc?.notes}
                     </div>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                  {project.contractDocument?.url && (
-                    <a
-                      href={project.contractDocument.url}
-                      download={project.contractDocument.name}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
+                {contractDoc && (
+                  <div className="flex items-center gap-2 pt-2.5 border-t border-[#e2e8f0] dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewState({ isOpen: true, doc: contractDoc, docType: 'contract' })}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 transition-colors shadow-xs"
+                      title="Preview Contract Agreement"
                     >
-                      <Download className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                      <span>Download File</span>
-                    </a>
-                  )}
+                      <Eye className="w-3.5 h-3.5 text-slate-800" />
+                      <span>Preview</span>
+                    </button>
 
-                  {project.contractDocument?.externalUrl && (
-                    <a
-                      href={project.contractDocument.externalUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-colors shadow-xs"
+                    <button
+                      type="button"
+                      onClick={() => downloadDocument(project.id, contractDoc, 'contract')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-black text-white hover:bg-neutral-800 transition-colors shadow-xs"
+                      title="Download Contract Document"
                     >
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Open Drive Link</span>
-                    </a>
-                  )}
-                </div>
+                      <Download className="w-3.5 h-3.5 text-white" />
+                      <span>Download</span>
+                    </button>
+
+                    {contractDoc.externalUrl && (
+                      <a
+                        href={contractDoc.externalUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors shadow-xs ml-auto"
+                        title="Open external Drive storage"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Drive</span>
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -481,6 +520,16 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* High-contrast Monochrome Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={previewState.isOpen}
+        onClose={() => setPreviewState((prev) => ({ ...prev, isOpen: false }))}
+        document={previewState.doc}
+        documentType={previewState.docType}
+        projectId={project.id}
+        clientName={project.clientName}
+      />
     </div>
   );
 };

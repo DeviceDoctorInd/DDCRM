@@ -21,6 +21,8 @@ import {
   Download,
   ExternalLink,
 } from 'lucide-react';
+import { normalizeDocument, downloadDocument } from '../../utils/documentViewer';
+import { DocumentPreviewModal } from '../common/DocumentPreviewModal';
 
 const STATUS_OPTIONS: { label: string; value: string }[] = [
   { label: 'All Statuses', value: 'ALL' },
@@ -50,6 +52,19 @@ export const ProjectsModule: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedProjectForDetail, setSelectedProjectForDetail] = useState<Project | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [docPreviewState, setDocPreviewState] = useState<{
+    isOpen: boolean;
+    doc: any;
+    docType: 'proposal' | 'contract';
+    projectId: string;
+    clientName?: string;
+  }>({
+    isOpen: false,
+    doc: null,
+    docType: 'proposal',
+    projectId: '',
+    clientName: '',
+  });
 
   // KPIs
   const totalProjects = projects.length;
@@ -334,100 +349,106 @@ export const ProjectsModule: React.FC = () => {
 
                       {/* Docs & Phases Column */}
                       <td className="py-3.5 px-4">
-                        <div className="flex flex-col gap-1">
-                          {/* Document Badges */}
-                          <div className="flex items-center gap-1.5">
-                            {project.proposalDocument ? (
-                              project.proposalDocument.url ? (
-                                <a
-                                  href={project.proposalDocument.url}
-                                  download={project.proposalDocument.name}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
-                                  title={`Download Proposal: ${project.proposalDocument.name}`}
-                                >
-                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Proposal</span>
-                                </a>
-                              ) : project.proposalDocument.externalUrl ? (
-                                <a
-                                  href={project.proposalDocument.externalUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
-                                  title="Open Proposal Link"
-                                >
-                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Proposal</span>
-                                </a>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
-                                  <FileText className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Proposal</span>
-                                </span>
-                              )
-                            ) : null}
+                        {(() => {
+                          const pDoc = normalizeDocument(project.proposalDocument);
+                          const cDoc = normalizeDocument(project.contractDocument);
+                          return (
+                            <div className="flex flex-col gap-1.5">
+                              {/* Document Badges */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {pDoc && (
+                                  <div className="inline-flex items-center rounded border border-[#e2e8f0] dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setDocPreviewState({
+                                          isOpen: true,
+                                          doc: pDoc,
+                                          docType: 'proposal',
+                                          projectId: project.id,
+                                          clientName: project.clientName,
+                                        })
+                                      }
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                      title={`Preview Proposal: ${pDoc.name}`}
+                                    >
+                                      <FileText className="w-3 h-3 text-black dark:text-white" />
+                                      <span>Proposal</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadDocument(project.id, pDoc, 'proposal')}
+                                      className="p-1 text-slate-500 hover:text-black dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 border-l border-[#e2e8f0] dark:border-slate-700 transition-colors"
+                                      title="Download Proposal Document"
+                                    >
+                                      <Download className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                )}
 
-                            {project.contractDocument ? (
-                              project.contractDocument.url ? (
-                                <a
-                                  href={project.contractDocument.url}
-                                  download={project.contractDocument.name}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
-                                  title={`Download Signed Contract: ${project.contractDocument.name}`}
-                                >
-                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Contract</span>
-                                </a>
-                              ) : project.contractDocument.externalUrl ? (
-                                <a
-                                  href={project.contractDocument.externalUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 transition-colors"
-                                  title="Open Contract Link"
-                                >
-                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Contract</span>
-                                </a>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
-                                  <FileCheck className="w-3 h-3 text-slate-800 dark:text-slate-200" />
-                                  <span>Contract</span>
-                                </span>
-                              )
-                            ) : null}
+                                {cDoc && (
+                                  <div className="inline-flex items-center rounded border border-[#e2e8f0] dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setDocPreviewState({
+                                          isOpen: true,
+                                          doc: cDoc,
+                                          docType: 'contract',
+                                          projectId: project.id,
+                                          clientName: project.clientName,
+                                        })
+                                      }
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                      title={`Preview Contract: ${cDoc.name}`}
+                                    >
+                                      <FileCheck className="w-3 h-3 text-black dark:text-white" />
+                                      <span>Contract</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadDocument(project.id, cDoc, 'contract')}
+                                      className="p-1 text-slate-500 hover:text-black dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 border-l border-[#e2e8f0] dark:border-slate-700 transition-colors"
+                                      title="Download Contract Document"
+                                    >
+                                      <Download className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                )}
 
-                            {!project.proposalDocument && !project.contractDocument && (
-                              <button
-                                type="button"
-                                onClick={() => openEditProjectModal(project)}
-                                className="text-[10px] text-slate-400 hover:text-slate-800 dark:text-slate-200 italic"
-                              >
-                                + Attach Docs
-                              </button>
-                            )}
-                          </div>
+                                {!pDoc && !cDoc && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditProjectModal(project)}
+                                    className="text-[10px] text-slate-400 hover:text-black dark:hover:text-white italic"
+                                  >
+                                    + Attach Docs
+                                  </button>
+                                )}
+                              </div>
 
-                          {/* Payment Phases Quick Badge */}
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedProjectForDetail(project);
-                                setIsDetailDrawerOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                              title="Click to view Payment Milestones Schedule"
-                            >
-                              <Layers className="w-3 h-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
-                              <span>
-                                {phases.length > 0
-                                  ? `Phases (${receivedPhasesCount}/${phases.length} Paid)`
-                                  : 'Setup Phases'}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
+                              {/* Payment Phases Quick Badge */}
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProjectForDetail(project);
+                                    setIsDetailDrawerOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                                  title="Click to view Payment Milestones Schedule"
+                                >
+                                  <Layers className="w-3 h-3 text-slate-800 dark:text-slate-200" />
+                                  <span>
+                                    {phases.length > 0
+                                      ? `Phases (${receivedPhasesCount}/${phases.length} Paid)`
+                                      : 'Setup Phases'}
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
@@ -500,6 +521,16 @@ export const ProjectsModule: React.FC = () => {
           setIsDetailDrawerOpen(false);
           openEditProjectModal(proj);
         }}
+      />
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={docPreviewState.isOpen}
+        onClose={() => setDocPreviewState((prev) => ({ ...prev, isOpen: false }))}
+        document={docPreviewState.doc}
+        documentType={docPreviewState.docType}
+        projectId={docPreviewState.projectId}
+        clientName={docPreviewState.clientName}
       />
     </div>
   );

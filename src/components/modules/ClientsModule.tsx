@@ -33,6 +33,7 @@ export const ClientsModule: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [pendingClientSave, setPendingClientSave] = useState<Client | null>(null);
+  const [isSavingClient, setIsSavingClient] = useState(false);
 
   // KPIs
   const totalClients = clients.length;
@@ -167,16 +168,21 @@ export const ClientsModule: React.FC = () => {
   };
 
   const executeSaveClient = async (clientToSave: Client) => {
-    const res = await saveClient(clientToSave);
-    if (res.success) {
-      setIsModalOpen(false);
-      setIsConfirmModalOpen(false);
-      setEditingClient(null);
-      setPendingClientSave(null);
-      setFormError(null);
-    } else {
-      setFormError(res.error || 'Failed to save client');
-      setIsConfirmModalOpen(false);
+    try {
+      setIsSavingClient(true);
+      const res = await saveClient(clientToSave);
+      if (res.success) {
+        setIsModalOpen(false);
+        setIsConfirmModalOpen(false);
+        setEditingClient(null);
+        setPendingClientSave(null);
+        setFormError(null);
+      } else {
+        setFormError(res.error || 'Failed to save client');
+        setIsConfirmModalOpen(false);
+      }
+    } finally {
+      setIsSavingClient(false);
     }
   };
 
@@ -594,13 +600,16 @@ export const ClientsModule: React.FC = () => {
         entityType="Client"
         entityName={pendingClientSave?.name || editingClient?.name || ''}
         targetBrand={pendingClientSave?.brand || editingClient?.brand || activeBrand}
-        onConfirm={() => {
+        isSaving={isSavingClient}
+        onConfirm={async () => {
           if (pendingClientSave) {
-            executeSaveClient(pendingClientSave);
+            await executeSaveClient(pendingClientSave);
           }
         }}
         onCancel={() => {
-          setIsConfirmModalOpen(false);
+          if (!isSavingClient) {
+            setIsConfirmModalOpen(false);
+          }
         }}
       />
     </div>

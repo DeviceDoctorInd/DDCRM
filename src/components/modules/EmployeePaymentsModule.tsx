@@ -829,18 +829,23 @@ export const EmployeePaymentsModule: React.FC = () => {
                   </div>
                   <input
                     type="number"
-                    min="1"
-                    max={modalRemainingBalance > 0 ? modalRemainingBalance : undefined}
-                    step="500"
+                    min="0"
+                    step="any"
                     required
                     value={formData.amountPaid ?? ''}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, amountPaid: Number(e.target.value) || 0 }))
-                    }
-                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-slate-900 outline-none"
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value) || 0;
+                      setFormData((prev) => ({ ...prev, amountPaid: val }));
+                    }}
+                    placeholder="e.g. 3502"
+                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-[#e2e8f0] dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none"
+                    style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                   />
                   {Number(formData.amountPaid) > modalRemainingBalance && (
-                    <p className="text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-medium">
+                    <p
+                      className="text-[11px] text-amber-700 dark:text-amber-400 font-medium"
+                      style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
+                    >
                       Amount Paid exceeds remaining balance of {formatINR(modalRemainingBalance)}.
                     </p>
                   )}

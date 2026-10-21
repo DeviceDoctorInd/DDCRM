@@ -875,12 +875,16 @@ export const AssignmentsModule: React.FC = () => {
                       <input
                         type="number"
                         min="0"
-                        step="1000"
+                        step="any"
                         value={formData.amount ?? ''}
-                        onChange={(e) => handleAmountChange(Number(e.target.value))}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value) || 0;
+                          handleAmountChange(val);
+                        }}
                         required
-                        placeholder="Total allocated task amount"
-                        className="w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100"
+                        placeholder="e.g. 17250"
+                        className="w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-black dark:focus:ring-white focus:border-black text-slate-900 dark:text-slate-100"
+                        style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                       />
                     </div>
                   </div>
@@ -895,15 +899,19 @@ export const AssignmentsModule: React.FC = () => {
                       <input
                         type="number"
                         min="0"
-                        step="1000"
+                        step="any"
                         value={formData.amountPaid ?? ''}
-                        onChange={(e) => handleAmountPaidChange(Number(e.target.value))}
-                        placeholder="Amount paid to date"
-                        className={`w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-slate-900 text-slate-900 dark:text-slate-100 ${
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value) || 0;
+                          handleAmountPaidChange(val);
+                        }}
+                        placeholder="e.g. 3502"
+                        className={`w-full pl-7 pr-3 py-2 text-xs font-mono font-semibold bg-white dark:bg-slate-900 border rounded-lg focus:ring-1 focus:ring-black dark:focus:ring-white text-slate-900 dark:text-slate-100 ${
                           (formData.amountPaid || 0) > (formData.amount || 0)
-                            ? 'border-slate-300 dark:border-slate-700 focus:border-slate-900 focus:ring-slate-900'
-                            : 'border-slate-300 dark:border-slate-700'
+                            ? 'border-amber-400 dark:border-amber-600'
+                            : 'border-[#e2e8f0] dark:border-slate-700'
                         }`}
+                        style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                       />
                     </div>
                     {(formData.amountPaid || 0) > (formData.amount || 0) && (

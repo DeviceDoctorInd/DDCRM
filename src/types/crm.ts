@@ -297,7 +297,11 @@ export interface Employee {
   notes?: string; // Textarea
   createdAt: string;
   updatedAt: string;
-  // Compatibility aliases
+  // Compatibility and database schema aliases
+  employee_id?: string;
+  employee_name?: string;
+  brand_id?: string;
+  role_id?: string;
   salary?: number;
   monthlyCost?: number;
   joinedDate?: string;
