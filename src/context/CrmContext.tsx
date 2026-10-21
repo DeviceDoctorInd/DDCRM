@@ -20,6 +20,8 @@ import {
   ExpenseCategoryStatus,
   ToastMessage,
   ReferentialBlockState,
+  DeleteConfirmState,
+  DeleteConfirmOptions,
   BrandMeta,
   BrandPrefix,
   BRAND_CONFIG,
@@ -155,6 +157,11 @@ interface CrmContextType {
   closeReferentialModal: () => void;
   openReferentialBlock: (options: Omit<ReferentialBlockState, 'isOpen'>) => void;
 
+  // Global Delete Confirmation Modal
+  deleteConfirmModal: DeleteConfirmState;
+  confirmDelete: (options: DeleteConfirmOptions) => void;
+  closeDeleteConfirm: () => void;
+
   // Global Project Modal
   isProjectModalOpen: boolean;
   isProjectModalEditing: boolean;
@@ -237,6 +244,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     linkedCount: 0,
   });
 
+  // Global Delete Confirmation Modal State
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmState>({
+    isOpen: false,
+    recordTitle: '',
+    moduleName: 'Record',
+    onConfirm: () => {},
+  });
+
   // Global Project Modal State
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isProjectModalEditing, setIsProjectModalEditing] = useState(false);
@@ -301,6 +316,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
+  const closeDeleteConfirm = () => {
+    setDeleteConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const confirmDelete = (options: DeleteConfirmOptions) => {
+    setDeleteConfirmModal({
+      ...options,
+      isOpen: true,
+    });
+  };
+
   // --- Strict Live SQL Loader ---
   const loadAll = async () => {
     try {
@@ -315,7 +341,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       const currentAuthUser = storageService.getAuthUser();
-      setAuthUserState(currentAuthUser);
+      const currentToken = storageService.getAuthToken();
+      if (currentAuthUser && currentToken) {
+        setAuthUserState(currentAuthUser);
+        storageService.verifySession().then((verifiedUser) => {
+          if (verifiedUser) {
+            setAuthUserState(verifiedUser);
+          } else {
+            setAuthUserState(null);
+            setHasConfirmedWorkspaceState(false);
+          }
+        }).catch(() => {});
+      } else if (!currentToken) {
+        setAuthUserState(null);
+        storageService.setAuthUser(null);
+      }
 
       const [
         clients,
@@ -457,6 +497,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = () => {
+    storageService.apiCall('/api/auth/logout', 'POST').catch(() => {});
+    storageService.setAuthToken(null);
     storageService.setAuthUser(null);
     storageService.setHasConfirmedWorkspace(false);
     setHasConfirmedWorkspaceState(false);
@@ -1231,10 +1273,26 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const contract = 100000;
     const rate = 1;
 
+    // Filter clients and services for active brand context
+    const brandClients = isConsolidatedView
+      ? rawClients
+      : rawClients.filter((c) => (c.brand || 'Device Doctor India') === activeBrand);
+    const defaultClient = brandClients.length > 0 ? brandClients[0] : null;
+
+    const brandServices = isConsolidatedView
+      ? rawServices
+      : rawServices.filter((s) => (s.brand || 'Device Doctor India') === activeBrand);
+    const defaultService = brandServices.length > 0 ? brandServices[0] : null;
+
+    const clientId = defaultClient ? defaultClient.id : '';
+    const clientName = defaultClient ? (defaultClient.name || defaultClient.client_name || '') : '';
+    const serviceId = defaultService ? defaultService.id : '';
+
     setProjectModalData({
       brand: activeBrand,
-      clientId: rawClients.length > 0 ? rawClients[0].id : '',
-      serviceId: rawServices.length > 0 ? rawServices[0].id : '',
+      clientId,
+      clientName,
+      serviceId,
       proposalDate: today,
       contractDate: today,
       startDate: today,
@@ -1243,7 +1301,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       actualEndDate: '',
       status: 'In Progress',
       paymentMode: 'GST Invoice',
-      currency,
+      currency: defaultClient?.preferredCurrency || currency,
       contract,
       exchangeRate: rate,
       contractValue: Math.round(contract * rate),
@@ -1360,6 +1418,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         referentialModal,
         closeReferentialModal,
         openReferentialBlock,
+        deleteConfirmModal,
+        confirmDelete,
+        closeDeleteConfirm,
         isProjectModalOpen,
         isProjectModalEditing,
         projectModalData,

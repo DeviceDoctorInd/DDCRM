@@ -93,6 +93,7 @@ export const ProjectModal: React.FC = () => {
     closeProjectModal,
     saveProject,
     clients,
+    getClientById,
     services,
     employees,
     getRoleById,
@@ -109,11 +110,54 @@ export const ProjectModal: React.FC = () => {
     return employees.filter((e) => e.status === 'Active');
   }, [employees]);
 
+  // Selected client profile helper with database fallback lookup
+  const selectedClientProfile = useMemo(() => {
+    const targetId = formData.clientId;
+    if (!targetId) return null;
+    const fromList = clients.find(
+      (c) =>
+        c.id === targetId ||
+        (c as any).client_id === targetId ||
+        (c as any).client_id_code === targetId
+    );
+    if (fromList) return fromList;
+    if (getClientById) {
+      return getClientById(targetId) || null;
+    }
+    return null;
+  }, [clients, formData.clientId, getClientById]);
+
   // Sync form data when modal opens
   useEffect(() => {
     if (isProjectModalOpen && projectModalData) {
       const contract = Number(projectModalData.contract) || 0;
       const rate = Number(projectModalData.exchangeRate) || 1;
+
+      // Resolve initial client identification from live database clients
+      let resolvedClientId = projectModalData.clientId || '';
+      let resolvedClientName = projectModalData.clientName || '';
+      let resolvedCurrency = projectModalData.currency || 'INR';
+
+      if (resolvedClientId) {
+        const found =
+          clients.find(
+            (c) =>
+              c.id === resolvedClientId ||
+              (c as any).client_id === resolvedClientId ||
+              (c as any).client_id_code === resolvedClientId
+          ) || (getClientById ? getClientById(resolvedClientId) : undefined);
+
+        if (found) {
+          resolvedClientId = found.id || (found as any).client_id || resolvedClientId;
+          resolvedClientName = found.name || (found as any).client_name || resolvedClientName;
+          resolvedCurrency = found.preferredCurrency || resolvedCurrency;
+        }
+      } else if (!isProjectModalEditing && clients.length > 0) {
+        const first = clients[0];
+        resolvedClientId = first.id || (first as any).client_id || '';
+        resolvedClientName = first.name || (first as any).client_name || '';
+        resolvedCurrency = first.preferredCurrency || 'INR';
+      }
 
       // Ensure default payment phases exist if empty
       let phases = projectModalData.paymentPhases;
@@ -156,8 +200,26 @@ export const ProjectModal: React.FC = () => {
         ];
       }
 
+      // Auto-generate project ID if not already assigned
+      let initialId = projectModalData.id;
+      if (!initialId && resolvedClientName) {
+        const matchedService = services.find((s) => s.id === projectModalData.serviceId);
+        initialId = storageService.generateSmartProjectId(
+          resolvedClientName,
+          matchedService?.name || 'SERVICE',
+          resolvedClientId,
+          projectModalData.serviceId,
+          undefined,
+          projectModalData.brand || activeBrand
+        );
+      }
+
       setFormData({
         ...projectModalData,
+        id: initialId || projectModalData.id,
+        clientId: resolvedClientId,
+        clientName: resolvedClientName,
+        currency: resolvedCurrency,
         paymentPhases: phases,
         proposalDocumentNotes:
           projectModalData.proposalDocumentNotes || projectModalData.proposalDocument?.notes || '',
@@ -166,16 +228,38 @@ export const ProjectModal: React.FC = () => {
       });
       setFormError(null);
     }
-  }, [isProjectModalOpen, projectModalData]);
+  }, [isProjectModalOpen, projectModalData, clients, services, activeBrand, isProjectModalEditing, getClientById]);
 
   if (!isProjectModalOpen) return null;
 
   // Handlers for dynamic calculations & reactive client sync
   const handleClientChange = (selectedClientId: string) => {
-    const matchedClient = clients.find((c) => c.id === selectedClientId);
-    if (!matchedClient) return;
+    if (!selectedClientId) {
+      setFormData((prev) => ({
+        ...prev,
+        clientId: '',
+        clientName: '',
+      }));
+      return;
+    }
 
-    const newCurrency = matchedClient.preferredCurrency || 'INR';
+    const matchedClient =
+      clients.find(
+        (c) =>
+          c.id === selectedClientId ||
+          (c as any).client_id === selectedClientId ||
+          (c as any).client_id_code === selectedClientId
+      ) || (getClientById ? getClientById(selectedClientId) : undefined);
+
+    const actualClientId = matchedClient
+      ? (matchedClient.id || (matchedClient as any).client_id || (matchedClient as any).client_id_code || selectedClientId)
+      : selectedClientId;
+
+    const actualClientName = matchedClient
+      ? (matchedClient.name || (matchedClient as any).client_name || '')
+      : '';
+
+    const newCurrency = matchedClient?.preferredCurrency || formData.currency || 'INR';
     const newRate = newCurrency === 'INR' ? 1 : (DEFAULT_EXCHANGE_RATES[newCurrency] || 1);
     const currentContract = Number(formData.contract) || 0;
     const newContractValue = Math.round(currentContract * newRate);
@@ -184,11 +268,11 @@ export const ProjectModal: React.FC = () => {
     const matchedService = services.find((s) => s.id === currentServiceId);
 
     let nextId = formData.id;
-    if (!isProjectModalEditing) {
+    if (!isProjectModalEditing && actualClientName) {
       nextId = storageService.generateSmartProjectId(
-        matchedClient.name,
+        actualClientName,
         matchedService?.name || 'SERVICE',
-        matchedClient.id,
+        actualClientId,
         currentServiceId,
         undefined,
         formData.brand || activeBrand
@@ -198,8 +282,8 @@ export const ProjectModal: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       id: nextId,
-      clientId: matchedClient.id,
-      clientName: matchedClient.name,
+      clientId: actualClientId,
+      clientName: actualClientName,
       currency: newCurrency,
       exchangeRate: newRate,
       contractValue: newContractValue,
@@ -208,14 +292,24 @@ export const ProjectModal: React.FC = () => {
 
   const handleServiceChange = (selectedServiceId: string) => {
     const matchedService = services.find((s) => s.id === selectedServiceId);
-    const matchedClient = clients.find((c) => c.id === formData.clientId);
+    const currentClientId = formData.clientId;
+    const matchedClient =
+      clients.find(
+        (c) =>
+          c.id === currentClientId ||
+          (c as any).client_id === currentClientId ||
+          (c as any).client_id_code === currentClientId
+      ) || (currentClientId && getClientById ? getClientById(currentClientId) : undefined);
+
+    const clientName = matchedClient?.name || (matchedClient as any)?.client_name || formData.clientName || '';
+    const clientId = matchedClient?.id || (matchedClient as any)?.client_id || currentClientId;
 
     let nextId = formData.id;
-    if (!isProjectModalEditing && matchedClient && matchedService) {
+    if (!isProjectModalEditing && clientName && matchedService) {
       nextId = storageService.generateSmartProjectId(
-        matchedClient.name,
+        clientName,
         matchedService.name,
-        matchedClient.id,
+        clientId,
         matchedService.id,
         undefined,
         formData.brand || activeBrand
@@ -604,47 +698,101 @@ export const ProjectModal: React.FC = () => {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Client <span className="text-slate-800 dark:text-slate-200">*</span>
+                <label className="block text-xs font-semibold text-neutral-900 dark:text-neutral-100 mb-1 font-['Helvetica',sans-serif]">
+                  Client <span className="text-black dark:text-white font-bold">*</span>
                 </label>
                 <select
                   required
                   value={formData.clientId || ''}
                   onChange={(e) => handleClientChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full px-3 py-2 text-xs rounded-md bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-['Helvetica',sans-serif]"
                 >
-                  <option value="" disabled>-- Select Client --</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.id})
-                    </option>
-                  ))}
+                  <option value="" disabled>-- Select Client from Database --</option>
+                  {clients.map((c) => {
+                    const idCode = c.id || (c as any).client_id || (c as any).client_id_code;
+                    const cName = c.name || (c as any).client_name;
+                    return (
+                      <option key={idCode} value={idCode}>
+                        {cName} ({idCode})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1 font-['Helvetica',sans-serif]">
                   Client ID (Auto-filled, Read-only)
                 </label>
                 <input
                   type="text"
                   readOnly
                   value={formData.clientId || '—'}
-                  className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-xs font-mono font-medium rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 cursor-not-allowed select-all font-['Helvetica',sans-serif]"
+                  title="Auto-filled Client ID from Azure SQL Database"
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1 font-['Helvetica',sans-serif]">
                   Client Name (Auto-filled, Read-only)
                 </label>
                 <input
                   type="text"
                   readOnly
                   value={formData.clientName || '—'}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 cursor-not-allowed font-['Helvetica',sans-serif]"
+                  title="Auto-filled Client Name from Azure SQL Database"
                 />
               </div>
+
+              {/* Selected Client Database Metadata Card with Fallback & Null Safety */}
+              {selectedClientProfile && (
+                <div className="md:col-span-3 p-3 rounded-md bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-['Helvetica',sans-serif] space-y-1.5 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-neutral-900 dark:text-neutral-100">
+                        {selectedClientProfile.name || (selectedClientProfile as any).client_name}
+                      </span>
+                      <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-bold">
+                        {selectedClientProfile.id || (selectedClientProfile as any).client_id}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-300 dark:border-neutral-700">
+                        {selectedClientProfile.status || 'Active'}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-neutral-500 dark:text-neutral-400">
+                      Currency: {selectedClientProfile.preferredCurrency || 'INR'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-neutral-600 dark:text-neutral-400">
+                    <div>
+                      <span className="text-neutral-400 dark:text-neutral-500 block">Contact Person:</span>
+                      <span className="font-medium text-neutral-800 dark:text-neutral-200 truncate block">
+                        {selectedClientProfile.contactPerson || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 dark:text-neutral-500 block">Billing Email:</span>
+                      <span className="font-medium text-neutral-800 dark:text-neutral-200 truncate block">
+                        {selectedClientProfile.email || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 dark:text-neutral-500 block">Mobile / Phone:</span>
+                      <span className="font-medium text-neutral-800 dark:text-neutral-200 truncate block">
+                        {selectedClientProfile.phone || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-400 dark:text-neutral-500 block">GST Number:</span>
+                      <span className="font-mono font-medium text-neutral-800 dark:text-neutral-200 truncate block">
+                        {selectedClientProfile.gstNumber || '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1453,3 +1601,6 @@ export const ProjectModal: React.FC = () => {
     </div>
   );
 };
+
+export const NewProjectModal = ProjectModal;
+

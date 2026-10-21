@@ -28,6 +28,7 @@ export const EmployeesModule: React.FC = () => {
     roles,
     saveEmployee,
     deleteEmployee,
+    confirmDelete,
     getRoleById,
     activeBrand,
     brandPrefix,
@@ -427,9 +428,15 @@ export const EmployeesModule: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (window.confirm(`Are you sure you want to remove employee "${emp.name}" (${emp.id})?`)) {
-                                deleteEmployee(emp.id);
-                              }
+                              confirmDelete({
+                                moduleName: 'Employee',
+                                recordTitle: `${emp.name} (${emp.email})`,
+                                recordId: emp.id,
+                                warningNote: `Deleting employee record "${emp.name}" will verify referential integrity against logged project assignments and payout vouchers in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteEmployee(emp.id);
+                                },
+                              });
                             }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Employee"

@@ -26,6 +26,7 @@ export const UsersModule: React.FC = () => {
     users,
     saveUser,
     deleteUser,
+    confirmDelete,
     authUser,
     hasPermission,
     databaseStatus,
@@ -122,13 +123,19 @@ export const UsersModule: React.FC = () => {
   };
 
   const handleDelete = (userId: string, userName: string) => {
-    if (userId === authUser?.id || formData.email === authUser?.email) {
+    if (userId === authUser?.id) {
       showToast('You cannot delete your own active session.', 'error');
       return;
     }
-    if (window.confirm(`Are you sure you want to delete user "${userName}" from Azure SQL app_users?`)) {
-      deleteUser(userId);
-    }
+    confirmDelete({
+      moduleName: 'User',
+      recordTitle: `${userName} (${userId})`,
+      recordId: userId,
+      warningNote: `Deleting user account "${userName}" will revoke all role-based CRM access permissions and purge user credentials from Azure SQL app_users.`,
+      onConfirm: async () => {
+        await deleteUser(userId);
+      },
+    });
   };
 
   const handleSync = async () => {
@@ -140,21 +147,21 @@ export const UsersModule: React.FC = () => {
     }
   };
 
-  const handleClearDemo = async () => {
-    const confirmed = window.confirm(
-      '⚠️ WARNING: Are you sure you want to remove all demo data?\n\n' +
-      '• This will permanently delete demo clients, projects, invoices, expenses, services, and staff records from Azure SQL Database and server cache.\n' +
-      '• Main admin accounts ("rathorehemant114@gmail.com" & "devicedoctorindia.in@gmail.com") will be strictly protected.\n\n' +
-      'Click OK to proceed with demo data cleanup.'
-    );
-    if (!confirmed) return;
-
-    setIsClearingDemo(true);
-    try {
-      await clearDemoData();
-    } finally {
-      setIsClearingDemo(false);
-    }
+  const handleClearDemo = () => {
+    confirmDelete({
+      moduleName: 'Demo Data',
+      recordTitle: 'All Demo Clients, Projects, and Financial Records',
+      warningNote: 'This will permanently purge demo records from Azure SQL Database and server cache. Primary admin accounts rathorehemant114@gmail.com and devicedoctorindia.in@gmail.com will remain strictly protected.',
+      confirmLabel: 'Purge Demo Data',
+      onConfirm: async () => {
+        setIsClearingDemo(true);
+        try {
+          await clearDemoData();
+        } finally {
+          setIsClearingDemo(false);
+        }
+      },
+    });
   };
 
   const getRoleBadgeColor = (role: UserRole | string) => {

@@ -21,7 +21,7 @@ const CURRENCIES: CurrencyCode[] = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'A
 const STATUS_OPTIONS: ClientStatus[] = ['Active', 'Prospect', 'Inactive', 'Blocked'];
 
 export const ClientsModule: React.FC = () => {
-  const { clients, saveClient, deleteClient, getClientProjectsCount, activeBrand, brandPrefix } = useCrm();
+  const { clients, saveClient, deleteClient, getClientProjectsCount, activeBrand, brandPrefix, confirmDelete } = useCrm();
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -318,7 +318,17 @@ export const ClientsModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteClient(client.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Client',
+                                recordTitle: client.name,
+                                recordId: client.id,
+                                warningNote: `Deleting client "${client.name}" will verify referential integrity against active projects in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteClient(client.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Client (Protected if projects exist)"
                           >

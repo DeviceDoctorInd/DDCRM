@@ -20,6 +20,7 @@ export const EmployeeRolesModule: React.FC = () => {
     employees,
     saveRole,
     deleteRole,
+    confirmDelete,
     getRoleEmployeesCount,
     activeBrand,
     brandPrefix,
@@ -239,7 +240,17 @@ export const EmployeeRolesModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteRole(role.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Role',
+                                recordTitle: role.roleName,
+                                recordId: role.id,
+                                warningNote: `Deleting role "${role.roleName}" will verify referential integrity against active employees in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteRole(role.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Role (Protected if staff assigned)"
                           >

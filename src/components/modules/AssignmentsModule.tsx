@@ -41,6 +41,7 @@ export const AssignmentsModule: React.FC = () => {
     clients,
     saveAssignment,
     deleteAssignment,
+    confirmDelete,
     getProjectById,
     getEmployeeById,
     getRoleById,
@@ -57,9 +58,6 @@ export const AssignmentsModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Assignment>>({});
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Delete confirmation modal state
-  const [deleteCandidate, setDeleteCandidate] = useState<Assignment | null>(null);
 
   // Active employees for the dropdown
   const activeEmployees = useMemo(() => {
@@ -605,7 +603,22 @@ export const AssignmentsModule: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteCandidate(asn)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Assignment',
+                                recordTitle: `${asn.employeeName} · Project ${asn.projectId}`,
+                                recordId: asn.id,
+                                details: (
+                                  <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+                                    Allocation: {formatINR(asn.amount)}
+                                  </div>
+                                ),
+                                warningNote: 'Deleting this assignment will verify referential integrity against payout records in Azure SQL.',
+                                onConfirm: async () => {
+                                  await deleteAssignment(asn.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Delete Assignment"
                           >
@@ -975,53 +988,6 @@ export const AssignmentsModule: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Delete Assignment Record
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Assignment ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{deleteCandidate.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to remove the assignment for{' '}
-              <strong className="text-slate-900 dark:text-white">{deleteCandidate.employeeName}</strong> on project{' '}
-              <strong className="text-slate-900 dark:text-white">{deleteCandidate.projectId}</strong>? This will remove the recorded task allocation of {formatINR(deleteCandidate.amount)}.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-              >
-                Keep Record
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deleteAssignment(deleteCandidate.id);
-                  setDeleteCandidate(null);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
-              >
-                Delete Assignment
-              </button>
-            </div>
           </div>
         </div>
       )}

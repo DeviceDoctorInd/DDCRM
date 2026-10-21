@@ -14,6 +14,7 @@ import {
   AppUser,
   BankAccount,
 } from '../../src/types/crm';
+import bcrypt from 'bcryptjs';
 
 export interface AuditLogEntry {
   id: number;
@@ -120,6 +121,18 @@ class MockStore {
         password: 'Viewer@2026',
         role: 'Viewer',
         brand: 'All',
+        status: 'Active',
+        avatar: '',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'USR-007',
+        name: 'DUNS Brand Admin',
+        email: 'admin@duns.com',
+        password: 'Duns@2026',
+        role: 'Brand Admin',
+        brand: 'DUNS',
         status: 'Active',
         avatar: '',
         createdAt: now,
@@ -1113,13 +1126,20 @@ class MockStore {
   }
 
   public saveUser(user: AppUser): AppUser {
-    const idx = this.users.findIndex((u) => u.id === user.id);
+    const idx = this.users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === (user.email || '').toLowerCase());
     if (idx >= 0) {
-      this.users[idx] = { ...this.users[idx], ...user, updatedAt: new Date().toISOString() };
+      const existing = this.users[idx];
+      this.users[idx] = {
+        ...existing,
+        ...user,
+        password: user.password && user.password.trim() ? user.password.trim() : existing.password,
+        updatedAt: new Date().toISOString(),
+      };
       return this.users[idx];
     }
     const created: AppUser = {
       ...user,
+      password: user.password || 'Admin@2026',
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1140,24 +1160,31 @@ class MockStore {
       return null;
     }
 
-    const passwordMatch =
-      user.password === pass ||
-      (cleanEmail === 'rathorehemant114@gmail.com' && (pass === 'Hemant@1318' || pass === 'Admin@2026')) ||
-      (cleanEmail === 'devicedoctorindia.in@gmail.com' && pass === 'Admin@2026') ||
-      (cleanEmail === 'admin@codestro.com' && pass === 'Codestro@2026') ||
-      (cleanEmail === 'karthik.pm@devicedoctor.in' && pass === 'Project@2026') ||
-      (cleanEmail === 'finance@devicedoctor.in' && pass === 'Finance@2026') ||
-      (cleanEmail === 'viewer@devicedoctor.in' && pass === 'Viewer@2026');
+    if (!user.password || !pass) {
+      return null;
+    }
+
+    // Strict credential check against user's stored password (no hardcoded demo fallbacks)
+    const isBcrypt = user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$');
+    const passwordMatch = isBcrypt
+      ? bcrypt.compareSync(pass, user.password)
+      : user.password === pass;
 
     return passwordMatch ? user : null;
   }
 
   // --- Clients ---
   public getClients(brand?: string | null): Client[] {
-    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.clients.filter((c) => c.brand === brand);
-    }
-    return [...this.clients];
+    const list = (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)')
+      ? this.clients.filter((c) => c.brand === brand)
+      : this.clients;
+    return list.map((c) => ({
+      ...c,
+      client_id: c.id,
+      client_id_code: c.id,
+      client_name: c.name,
+      brand_id: c.brand,
+    }));
   }
 
   public saveClient(client: Client): Client {

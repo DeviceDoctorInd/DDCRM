@@ -21,6 +21,7 @@ export const ServicesModule: React.FC = () => {
     categories,
     saveService,
     deleteService,
+    confirmDelete,
     getCategoryById,
     getServiceProjectsCount,
     activeBrand,
@@ -289,7 +290,17 @@ export const ServicesModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteService(srv.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Service',
+                                recordTitle: srv.name,
+                                recordId: srv.id,
+                                warningNote: `Deleting service "${srv.name}" will verify referential integrity against active projects in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteService(srv.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Service (Protected if active in projects)"
                           >

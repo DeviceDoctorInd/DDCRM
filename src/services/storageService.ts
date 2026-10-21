@@ -35,6 +35,7 @@ const PREFERENCE_KEYS = {
   ACTIVE_BRAND: 'ddi_crm_active_brand',
   THEME: 'ddi_crm_theme',
   AUTH_USER: 'ddi_crm_auth_user',
+  AUTH_TOKEN: 'ddi_crm_auth_token',
   CONSOLIDATED: 'ddi_crm_is_consolidated',
   WORKSPACE_CONFIRMED: 'ddi_crm_workspace_confirmed_session',
 };
@@ -73,7 +74,7 @@ class StorageService {
     }
   }
 
-  // --- Strict Live API Call Helper with Active Brand Context Header ---
+  // --- Strict Live API Call Helper with Active Brand Context and JWT Bearer Header ---
   public async apiCall<T = any>(
     url: string,
     method: string = 'GET',
@@ -82,10 +83,12 @@ class StorageService {
   ): Promise<T> {
     const isConsolidated = this.getIsConsolidated();
     const activeBrand = isConsolidated ? 'All' : this.getActiveBrand();
+    const token = this.getAuthToken();
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Active-Brand': activeBrand,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...customHeaders,
     };
 
@@ -98,6 +101,11 @@ class StorageService {
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
+      if (res.status === 401 && !url.includes('/api/auth/login')) {
+        console.warn('[StorageService] Session expired or unauthorized (401). Clearing session token.');
+        this.setAuthToken(null);
+        this.setAuthUser(null);
+      }
       const errMsg = data?.error || data?.message || `HTTP ${res.status}: Request to ${url} failed.`;
       throw new Error(errMsg);
     }
@@ -153,26 +161,67 @@ class StorageService {
   }
 
   // --- Live Azure SQL Authentication ---
-  public async login(email: string, pass: string): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
+  public async login(email: string, pass: string): Promise<{ success: boolean; user?: AuthUser; token?: string; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; user: AuthUser }>('/api/auth/login', 'POST', {
+      const res = await this.apiCall<{ success: boolean; user: AuthUser; token?: string; error?: string }>('/api/auth/login', 'POST', {
         email,
         password: pass,
       });
       if (res.success && res.user) {
+        if (res.token) {
+          this.setAuthToken(res.token);
+        }
         this.setAuthUser(res.user);
-        return { success: true, user: res.user };
+        return { success: true, user: res.user, token: res.token };
       }
-      return { success: false, error: 'Login verification failed.' };
+      return { success: false, error: res.error || 'Login verification failed.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
     }
   }
 
+  // --- Strict Live Session Verification ---
+  public async verifySession(): Promise<AuthUser | null> {
+    const token = this.getAuthToken();
+    if (!token) {
+      this.setAuthUser(null);
+      return null;
+    }
+
+    try {
+      const res = await this.apiCall<{ success: boolean; user: AuthUser }>('/api/auth/me', 'GET');
+      if (res.success && res.user) {
+        this.setAuthUser(res.user);
+        return res.user;
+      }
+    } catch (err) {
+      console.warn('[StorageService] Session verification against database failed:', err);
+      this.setAuthToken(null);
+      this.setAuthUser(null);
+    }
+    return null;
+  }
+
   // --- Strict Live Entity Queries (Direct from Azure SQL) ---
   public async fetchClients(): Promise<Client[]> {
-    return this.apiCall<Client[]>('/api/clients');
+    const raw = await this.apiCall<any[]>('/api/clients');
+    if (!Array.isArray(raw)) return [];
+    return raw.map((c) => {
+      const id = String(c.id || c.client_id || c.client_id_code || '').trim();
+      const name = String(c.name || c.client_name || '').trim();
+      const brand = c.brand || c.brand_id || 'Device Doctor India';
+      return {
+        ...c,
+        id,
+        client_id: id,
+        client_id_code: id,
+        name,
+        client_name: name,
+        brand,
+        brand_id: brand,
+      };
+    });
   }
 
   public async saveClient(client: Client): Promise<{ success: boolean; client?: Client; error?: string }> {
@@ -765,6 +814,20 @@ class StorageService {
     localStorage.setItem(PREFERENCE_KEYS.THEME, theme);
   }
 
+  public getAuthToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(PREFERENCE_KEYS.AUTH_TOKEN);
+  }
+
+  public setAuthToken(token: string | null) {
+    if (typeof window === 'undefined') return;
+    if (token) {
+      localStorage.setItem(PREFERENCE_KEYS.AUTH_TOKEN, token);
+    } else {
+      localStorage.removeItem(PREFERENCE_KEYS.AUTH_TOKEN);
+    }
+  }
+
   public getAuthUser(): AuthUser | null {
     if (typeof window === 'undefined') return null;
     try {
@@ -781,6 +844,7 @@ class StorageService {
       localStorage.setItem(PREFERENCE_KEYS.AUTH_USER, JSON.stringify(user));
     } else {
       localStorage.removeItem(PREFERENCE_KEYS.AUTH_USER);
+      this.setAuthToken(null);
       this.setHasConfirmedWorkspace(false);
     }
   }

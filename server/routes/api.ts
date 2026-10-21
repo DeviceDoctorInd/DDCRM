@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema } from '../db/azureSql';
+import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema, isTransientError } from '../db/azureSql';
 import sql from 'mssql';
 import crypto from 'crypto';
 import {
@@ -19,6 +19,9 @@ import {
   BankAccount,
 } from '../../src/types/crm';
 import { mockStore } from '../db/mockStore';
+import authRoutes from './auth.routes';
+import { authController } from '../controllers/auth.controller';
+import { authenticateToken, hashPassword } from '../middleware/auth';
 
 const router = Router();
 
@@ -71,38 +74,50 @@ export function sanitizeBrand(brand: any, fallbackBrand: string | null = 'Device
   return 'Device Doctor India';
 }
 
-// Auto-healing query executor: if Azure SQL throws "Invalid column name" or uniqueidentifier conversion error, automatically runs schema migration and retries
+// Auto-healing and transient-retry query executor
 async function executeSqlWithAutoMigration<T>(
   pool: sql.ConnectionPool,
-  queryFn: () => Promise<T>,
+  queryFn: (activePool?: sql.ConnectionPool) => Promise<T>,
   tableName?: string
 ): Promise<T> {
   try {
-    return await queryFn();
+    return await (queryFn.length > 0 ? queryFn(pool) : (queryFn as any)());
   } catch (err: any) {
     const msg = String(err?.message || err);
-    if (
-      msg.includes('Invalid column name') || 
-      msg.includes('Invalid object name') ||
-      msg.includes('uniqueidentifier')
-    ) {
-      console.warn(`[Azure SQL Auto-Heal] Schema or data type issue detected: "${msg}". Triggering database schema migration...`);
-      const colMatch = msg.match(/Invalid column name '([^']+)'/i);
-      if (colMatch && colMatch[1] && tableName) {
-        const colName = colMatch[1];
+
+    // 1. Transient connection retry using global pool reconnection
+    if (isTransientError(err)) {
+      console.warn(`[Azure SQL Transient Retry] Network glitch detected: ${msg}. Re-acquiring connection pool...`);
+      const reconnectedPool = await getOrInitPool();
+      if (reconnectedPool) {
         try {
-          await pool.request().query(`
-            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
-            AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
-            ALTER TABLE ${tableName} ADD [${colName}] NVARCHAR(MAX);
-          `);
-        } catch {
-          // Ignore
+          return await (queryFn.length > 0 ? queryFn(reconnectedPool) : (queryFn as any)());
+        } catch (retryErr) {
+          console.warn('[Azure SQL Transient Retry] Retry attempt failed:', retryErr);
         }
       }
-      await migrateAzureSqlSchema(pool);
-      return await queryFn();
     }
+
+    // 2. Targeted column auto-heal
+    if (msg.includes('Invalid column name') && tableName) {
+      const colMatch = msg.match(/Invalid column name '([^']+)'/i);
+      if (colMatch && colMatch[1]) {
+        const colName = colMatch[1];
+        try {
+          console.warn(`[Azure SQL Auto-Heal] Auto-adding missing column [${colName}] to table [${tableName}]...`);
+          const activePool = getPool() || pool;
+          await activePool.request().query(`
+            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
+            AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
+            ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
+          `);
+          return await (queryFn.length > 0 ? queryFn(activePool) : (queryFn as any)());
+        } catch {
+          // If auto-heal fails, rethrow original error
+        }
+      }
+    }
+
     throw err;
   }
 }
@@ -283,104 +298,12 @@ router.post('/db/clear-demo', async (_req: Request, res: Response) => {
   }
 });
 
-// --- Authentication & RBAC ---
-router.post('/auth/login', async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Email and password are required.' });
-  }
+// --- Authentication & RBAC Routes ---
+router.use('/auth', authRoutes);
 
-  const cleanEmail = email.trim().toLowerCase();
-  const pool = await getOrInitPool();
-  if (!pool) {
-    const user = mockStore.authenticate(cleanEmail, password);
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
-    }
-    return res.json({
-      success: true,
-      user: {
-        id: String(user.id),
-        name: user.name || 'User',
-        email: user.email,
-        role: user.role,
-        brand: user.brand || 'All',
-        avatar: user.avatar || '',
-      },
-    });
-  }
-
-  try {
-    const q = await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('email', cleanEmail)
-        .query('SELECT * FROM app_users WHERE LOWER(email) = @email')
-    );
-
-    if (q.recordset.length === 0) {
-      const user = mockStore.authenticate(cleanEmail, password);
-      if (user) {
-        return res.json({
-          success: true,
-          user: {
-            id: String(user.id),
-            name: user.name || 'User',
-            email: user.email,
-            role: user.role,
-            brand: user.brand || 'All',
-            avatar: user.avatar || '',
-          },
-        });
-      }
-      return res.status(401).json({ success: false, error: 'User not found in app_users.' });
-    }
-
-    const u = q.recordset[0];
-    if (u.status !== 'Active') {
-      return res.status(403).json({ success: false, error: 'User account is deactivated.' });
-    }
-
-    const passwordMatch =
-      u.password_hash === password ||
-      (cleanEmail === 'rathorehemant114@gmail.com' && (password === 'Hemant@1318' || password === 'Admin@2026')) ||
-      (cleanEmail === 'devicedoctorindia.in@gmail.com' && password === 'Admin@2026') ||
-      (cleanEmail === 'admin@codestro.com' && password === 'Codestro@2026') ||
-      (cleanEmail === 'karthik.pm@devicedoctor.in' && password === 'Project@2026') ||
-      (cleanEmail === 'finance@devicedoctor.in' && password === 'Finance@2026') ||
-      (cleanEmail === 'viewer@devicedoctor.in' && password === 'Viewer@2026');
-
-    if (!passwordMatch) {
-      return res.status(401).json({ success: false, error: 'Invalid password.' });
-    }
-
-    return res.json({
-      success: true,
-      user: {
-        id: String(u.id),
-        name: u.name || u.full_name || 'User',
-        email: u.email,
-        role: u.role,
-        brand: u.brand || 'All',
-        avatar: u.avatar || '',
-      },
-    });
-  } catch (err) {
-    const user = mockStore.authenticate(cleanEmail, password);
-    if (user) {
-      return res.json({
-        success: true,
-        user: {
-          id: String(user.id),
-          name: user.name || 'User',
-          email: user.email,
-          role: user.role,
-          brand: user.brand || 'All',
-          avatar: user.avatar || '',
-        },
-      });
-    }
-    return handleDbError(res, err, 'auth/login');
-  }
+// Backward-compatible fallback for direct /auth/login POST requests
+router.post('/auth/login', (req: Request, res: Response) => {
+  authController.login(req, res);
 });
 
 // --- CLIENTS ---
@@ -399,8 +322,12 @@ router.get('/clients', async (req: Request, res: Response) => {
           .input('brandFilter', brand || null)
           .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id, 
+               CAST(id AS NVARCHAR(100)) as client_id,
+               CAST(id AS NVARCHAR(100)) as client_id_code,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id,
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as client_name, 
                ISNULL(CAST(contact_person AS NVARCHAR(255)), '') as contactPerson, 
                ISNULL(CAST(phone AS NVARCHAR(50)), '') as phone, 
                ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
@@ -932,46 +859,6 @@ router.get('/payments', async (req: Request, res: Response) => {
       `),
       'payments'
     );
-    if (!q.recordset || q.recordset.length === 0) {
-      const seeds = mockStore.getPayments();
-      for (const p of seeds) {
-        try {
-          const guidId = toGuid(p.id);
-          await pool.request()
-            .input('id', guidId)
-            .input('rawId', p.id)
-            .input('brand', p.brand || 'Device Doctor India')
-            .input('project_id', toGuidOrNull(p.projectId))
-            .input('client_id', toGuidOrNull(p.clientId))
-            .input('client_name', p.clientName || '')
-            .input('payment_mode', p.paymentMode || 'GST Invoice')
-            .input('bank_account_id', p.bankAccountId || '')
-            .input('bank_account_name', p.bankAccountName || '')
-            .input('payment_date', p.paymentDate || '')
-            .input('due_date', p.dueDate || '')
-            .input('amount_received', p.amountReceived || 0)
-            .input('currency', p.currency || 'INR')
-            .input('exchange_rate', p.exchangeRate || 1)
-            .input('amount_inr', p.amountINR || 0)
-            .input('reference_utr', p.referenceUtr || '')
-            .input('payment_status', p.paymentStatus || 'Received')
-            .input('days_overdue', p.daysOverdue || 0)
-            .input('notes', p.notes || '')
-            .input('payment_proof', p.paymentProof ? JSON.stringify(p.paymentProof) : '')
-            .input('payment_proof_notes', p.paymentProofNotes || '')
-            .input('created_at', p.createdAt)
-            .input('updated_at', p.updatedAt)
-            .query(`
-              IF NOT EXISTS (SELECT 1 FROM payments WHERE reference_utr = @reference_utr OR CAST(id AS NVARCHAR(100)) = @rawId)
-                INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-                VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
-            `);
-        } catch {
-          // ignore duplicate
-        }
-      }
-      return res.json(mockStore.getPayments(brand));
-    }
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /payments] Falling back to mock store:', err);
@@ -1105,45 +992,6 @@ router.get('/bank-accounts', async (req: Request, res: Response) => {
       `),
       'bank_accounts'
     );
-    if (!q.recordset || q.recordset.length === 0) {
-      try {
-        const countCheck = await pool.request().query('SELECT COUNT(*) as total FROM bank_accounts');
-        const totalCount = countCheck.recordset?.[0]?.total || 0;
-        if (totalCount === 0) {
-          const seeds = mockStore.getBankAccounts();
-          for (const acc of seeds) {
-            try {
-              const guidId = toGuid(acc.id);
-              await pool.request()
-                .input('id', guidId)
-                .input('rawId', acc.id)
-                .input('brand', acc.brand)
-                .input('account_name', acc.accountName)
-                .input('bank_name', acc.bankName)
-                .input('account_number', acc.accountNumber)
-                .input('ifsc_code', acc.ifscCode || '')
-                .input('branch_name', acc.branchName || '')
-                .input('upi_id', acc.upiId || '')
-                .input('account_type', acc.accountType)
-                .input('status', acc.status)
-                .input('notes', acc.notes || '')
-                .input('created_at', acc.createdAt)
-                .input('updated_at', acc.updatedAt)
-                .query(`
-                  IF NOT EXISTS (SELECT 1 FROM bank_accounts WHERE account_number = @account_number AND brand = @brand)
-                    INSERT INTO bank_accounts (id, brand, account_name, bank_name, account_number, ifsc_code, branch_name, upi_id, account_type, status, notes, created_at, updated_at)
-                    VALUES (@id, @brand, @account_name, @bank_name, @account_number, @ifsc_code, @branch_name, @upi_id, @account_type, @status, @notes, @created_at, @updated_at)
-                `);
-            } catch {
-              // ignore duplicate
-            }
-          }
-          return res.json(mockStore.getBankAccounts(brand));
-        }
-      } catch {
-        // ignore
-      }
-    }
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /bank-accounts] Falling back to mock store:', err);
@@ -2146,6 +1994,12 @@ router.post('/users', async (req: Request, res: Response) => {
   user.updatedAt = now;
   user.createdAt = user.createdAt || now;
 
+  // Hash new password if provided
+  let hashedPassword = '';
+  if (user.password && user.password.trim()) {
+    hashedPassword = await hashPassword(user.password.trim());
+  }
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveUser(user);
@@ -2165,7 +2019,7 @@ router.post('/users', async (req: Request, res: Response) => {
           .input('rawId', user.id || '')
           .input('name', userName)
           .input('email', userEmail)
-          .input('password_hash', user.password || 'Admin@2026')
+          .input('password_hash', hashedPassword)
           .input('role', user.role || 'Viewer')
           .input('brand', user.brand || 'All')
           .input('status', user.status || 'Active')
@@ -2175,12 +2029,13 @@ router.post('/users', async (req: Request, res: Response) => {
           .query(`
             IF EXISTS (SELECT 1 FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email)
               UPDATE app_users 
-              SET name = @name, full_name = @name, email = @email, password_hash = @password_hash, 
+              SET name = @name, full_name = @name, email = @email, 
+                  password_hash = CASE WHEN @password_hash IS NOT NULL AND @password_hash <> '' THEN @password_hash ELSE password_hash END,
                   role = @role, brand = @brand, status = @status, avatar = @avatar, updated_at = @updated_at 
               WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email
             ELSE
               INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-              VALUES (@id, NEWID(), @name, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at)
+              VALUES (@id, NEWID(), @name, @name, @email, ISNULL(NULLIF(@password_hash, ''), 'Admin@2026'), @role, @brand, @status, @avatar, @created_at, @updated_at)
           `),
       'app_users'
     );

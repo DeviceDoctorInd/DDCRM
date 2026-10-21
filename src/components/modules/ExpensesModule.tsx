@@ -58,6 +58,7 @@ export const ExpensesModule: React.FC = () => {
     clients,
     saveExpense,
     deleteExpense,
+    confirmDelete,
     getProjectById,
     getExpenseCategoryById,
     getClientById,
@@ -74,9 +75,6 @@ export const ExpensesModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Expense>>({});
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Delete confirmation modal state
-  const [deleteCandidate, setDeleteCandidate] = useState<Expense | null>(null);
 
   // Top Summary KPIs
   // 1. Total Expenses in INR
@@ -563,7 +561,22 @@ export const ExpensesModule: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteCandidate(exp)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Expense',
+                                recordTitle: `${exp.vendor} (${formatINR(exp.amountINR || 0)})`,
+                                recordId: exp.id,
+                                details: (
+                                  <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+                                    Category: {exp.expenseCategoryName || 'N/A'} · Project: {exp.projectId || 'N/A'}
+                                  </div>
+                                ),
+                                warningNote: 'Deleting this expense voucher will permanently remove the financial outflow record from Azure SQL.',
+                                onConfirm: async () => {
+                                  await deleteExpense(exp.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Delete Expense"
                           >
@@ -852,70 +865,6 @@ export const ExpensesModule: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-              <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Delete Expense Record
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{deleteCandidate.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Vendor:</span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{deleteCandidate.vendor}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Amount (INR):</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{formatINR(deleteCandidate.amountINR || 0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Category:</span>
-                <span className="text-slate-800 dark:text-slate-200">{deleteCandidate.expenseCategoryName || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Project / Scope:</span>
-                <span className="text-slate-800 dark:text-slate-200">{deleteCandidate.projectId}</span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to permanently delete this expense voucher? This action cannot be undone.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deleteExpense(deleteCandidate.id);
-                  setDeleteCandidate(null);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-xl shadow-sm transition-colors"
-              >
-                Delete Expense
-              </button>
-            </div>
           </div>
         </div>
       )}

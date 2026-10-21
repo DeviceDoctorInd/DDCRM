@@ -19,6 +19,7 @@ export const ServiceCategoriesModule: React.FC = () => {
     categories,
     saveCategory,
     deleteCategory,
+    confirmDelete,
     getCategoryServicesCount,
     services,
     activeBrand,
@@ -233,7 +234,17 @@ export const ServiceCategoriesModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteCategory(cat.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Category',
+                                recordTitle: cat.name,
+                                recordId: cat.id,
+                                warningNote: `Deleting category "${cat.name}" will verify referential integrity against linked services in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteCategory(cat.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Category (Blocked if linked to services)"
                           >

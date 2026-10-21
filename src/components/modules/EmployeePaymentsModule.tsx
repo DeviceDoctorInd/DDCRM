@@ -44,6 +44,7 @@ export const EmployeePaymentsModule: React.FC = () => {
     employees,
     saveEmployeePayment,
     deleteEmployeePayment,
+    confirmDelete,
     getAssignmentById,
     getProjectById,
     getEmployeeById,
@@ -63,9 +64,6 @@ export const EmployeePaymentsModule: React.FC = () => {
   // Payment Proof Modal Lightbox state
   const [selectedPaymentForProof, setSelectedPaymentForProof] = useState<EmployeePayment | null>(null);
   const [isProofModalOpen, setIsProofModalOpen] = useState(false);
-
-  // Delete confirmation modal state
-  const [deleteCandidate, setDeleteCandidate] = useState<EmployeePayment | null>(null);
 
   // Top Summary KPIs
   // 1. Total Payouts Made in INR
@@ -618,7 +616,22 @@ export const EmployeePaymentsModule: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteCandidate(p)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Employee Payment',
+                                recordTitle: `Payout to ${p.employeeName} (${formatINR(p.amountPaid)})`,
+                                recordId: p.id,
+                                details: (
+                                  <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+                                    Mode: {p.paymentMode} · Date: {p.paymentDate}
+                                  </div>
+                                ),
+                                warningNote: "The linked assignment's amount paid and payment status will be recalculated automatically in Azure SQL.",
+                                onConfirm: async () => {
+                                  await deleteEmployeePayment(p.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                             title="Delete Payment"
                           >
@@ -1053,57 +1066,6 @@ export const EmployeePaymentsModule: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Delete Employee Payment
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Payment ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{deleteCandidate.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to delete payment voucher{' '}
-              <strong className="text-slate-900 dark:text-white">{deleteCandidate.id}</strong> of{' '}
-              <strong className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-mono">
-                {formatINR(deleteCandidate.amountPaid)}
-              </strong>{' '}
-              to <strong className="text-slate-900 dark:text-white">{deleteCandidate.employeeName}</strong>?
-              The linked assignment's amount paid and payment status will be recalculated automatically.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-              >
-                Keep Payment
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  deleteEmployeePayment(deleteCandidate.id);
-                  setDeleteCandidate(null);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
-              >
-                Delete Payment
-              </button>
-            </div>
           </div>
         </div>
       )}

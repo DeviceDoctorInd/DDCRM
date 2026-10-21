@@ -24,6 +24,7 @@ export const ExpenseCategoriesModule: React.FC = () => {
     saveExpenseCategory,
     deleteExpenseCategory,
     setExpenseCategoryStatus,
+    confirmDelete,
     activeBrand,
     brandPrefix,
   } = useCrm();
@@ -36,9 +37,6 @@ export const ExpenseCategoriesModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<ExpenseCategory>>({});
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Delete confirmation modal state
-  const [deleteCandidate, setDeleteCandidate] = useState<ExpenseCategory | null>(null);
 
   // Top Summary KPIs
   const totalCategories = expenseCategories.length;
@@ -286,7 +284,17 @@ export const ExpenseCategoriesModule: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleteCandidate(cat)}
+                          onClick={() => {
+                            confirmDelete({
+                              moduleName: 'Expense Category',
+                              recordTitle: cat.name,
+                              recordId: cat.id,
+                              warningNote: 'Deleting this category will verify referential integrity against recorded expenses in Azure SQL.',
+                              onConfirm: async () => {
+                                await deleteExpenseCategory(cat.id);
+                              },
+                            });
+                          }}
                           className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 transition-colors"
                           title="Delete Category"
                         >
@@ -429,65 +437,6 @@ export const ExpenseCategoriesModule: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION MODAL */}
-      {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Delete Expense Category
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{deleteCandidate.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Are you sure you want to delete expense category{' '}
-              <strong className="text-slate-900 dark:text-white">"{deleteCandidate.name}"</strong>?
-              If this category has recorded expenses, deletion will be blocked by referential integrity rules.
-            </p>
-
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setExpenseCategoryStatus(deleteCandidate.id, 'Inactive');
-                  setDeleteCandidate(null);
-                }}
-                className="px-3 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 transition-colors"
-              >
-                Mark Inactive Instead
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDeleteCandidate(null)}
-                  className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    deleteExpenseCategory(deleteCandidate.id);
-                    setDeleteCandidate(null);
-                  }}
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

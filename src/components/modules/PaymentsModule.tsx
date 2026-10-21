@@ -70,6 +70,7 @@ export const PaymentsModule: React.FC = () => {
     bankAccounts,
     savePayment,
     deletePayment,
+    confirmDelete,
     getClientById,
     getProjectById,
     activeBrand,
@@ -674,7 +675,17 @@ export const PaymentsModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deletePayment(pay.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Payment',
+                                recordTitle: `Payment ${pay.id} (${pay.paymentMode})`,
+                                recordId: pay.id,
+                                warningNote: `Deleting payment record "${pay.id}" will update project paid balance and remove the associated financial ledger entry in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deletePayment(pay.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Payment Record"
                           >

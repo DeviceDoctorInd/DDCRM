@@ -100,8 +100,12 @@ export const getBrandPrefix = (brand?: BrandName | string): BrandPrefix => {
 
 export interface Client {
   id: string; // e.g. DDI-CL-001, CDS-CL-001, FXL-CL-001, DNS-CL-001
+  client_id?: string; // Database alias / primary key code
+  client_id_code?: string; // Database formatted code
   brand?: BrandName; // Multi-brand tag
+  brand_id?: string; // Database brand identifier
   name: string;
+  client_name?: string; // Database column alias
   contactPerson?: string;
   phone?: string; // Optional Contact / Mobile Number
   email?: string; // Optional Billing / Communication Email
@@ -474,3 +478,19 @@ export interface ReferentialIntegrityBlock {
   linkedCount?: number;
   onSetInactive?: () => void;
 }
+
+export interface DeleteConfirmState {
+  isOpen: boolean;
+  recordTitle: string;
+  moduleName: string;
+  recordId?: string;
+  description?: string;
+  warningNote?: string;
+  details?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => Promise<void | boolean | { success: boolean; error?: string }> | void;
+}
+
+export type DeleteConfirmOptions = Omit<DeleteConfirmState, 'isOpen'>;
+

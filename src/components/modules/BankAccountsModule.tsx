@@ -30,6 +30,7 @@ export const BankAccountsModule: React.FC = () => {
     payments,
     saveBankAccount,
     deleteBankAccount,
+    confirmDelete,
     activeBrand,
     brandPrefix,
     isConsolidatedView,
@@ -46,7 +47,6 @@ export const BankAccountsModule: React.FC = () => {
   const [formData, setFormData] = useState<Partial<BankAccount>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [deleteCandidate, setDeleteCandidate] = useState<BankAccount | null>(null);
 
   // Copy helper
   const handleCopy = (text: string, id: string) => {
@@ -193,14 +193,20 @@ export const BankAccountsModule: React.FC = () => {
   };
 
   const handleDeleteClick = (acc: BankAccount) => {
-    setDeleteCandidate(acc);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteCandidate) return;
-    const target = deleteCandidate;
-    setDeleteCandidate(null);
-    await deleteBankAccount(target.id);
+    confirmDelete({
+      moduleName: 'Bank Account',
+      recordTitle: `${acc.accountName} (${acc.bankName})`,
+      recordId: acc.id,
+      details: (
+        <div className="font-mono text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+          Account: {acc.accountNumber} · {acc.brand}
+        </div>
+      ),
+      warningNote: 'Deleting this bank account will verify referential integrity against tagged client payment records in Azure SQL.',
+      onConfirm: async () => {
+        await deleteBankAccount(acc.id);
+      },
+    });
   };
 
   // CSV Export
@@ -660,58 +666,6 @@ export const BankAccountsModule: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal (In-App ERPNext Desk UI Style) */}
-      {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 text-slate-900 dark:text-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white shrink-0">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Delete Bank Account
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Permanent removal from Azure SQL treasury register
-                </p>
-              </div>
-            </div>
-
-            <div className="my-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-              <div>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{deleteCandidate.accountName}</span>
-                <span className="text-slate-500 dark:text-slate-400"> · {deleteCandidate.bankName}</span>
-              </div>
-              <div className="font-mono text-slate-600 dark:text-slate-300">
-                {deleteCandidate.accountNumber} ({deleteCandidate.brand})
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              Are you sure you want to delete this bank account? This will verify referential integrity against tagged client payment records.
-            </p>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800 mt-4">
-              <button
-                type="button"
-                onClick={() => setDeleteCandidate(null)}
-                className="px-4 py-2 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 rounded-lg shadow-xs transition-colors"
-              >
-                Confirm Delete
-              </button>
-            </div>
           </div>
         </div>
       )}

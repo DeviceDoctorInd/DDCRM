@@ -10,6 +10,7 @@ import { Header } from './components/layout/Header';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ReferentialIntegrityModal } from './components/common/ReferentialIntegrityModal';
+import { DeleteConfirmModal } from './components/common/DeleteConfirmModal';
 import { ProjectModal } from './components/modules/ProjectModal';
 
 // Module Components
@@ -31,7 +32,7 @@ import { UsersModule } from './components/modules/UsersModule';
 import { BankAccountsModule } from './components/modules/BankAccountsModule';
 
 const MainLayout: React.FC = () => {
-  const { authUser, activeModule, hasConfirmedWorkspace } = useCrm();
+  const { authUser, activeModule, hasConfirmedWorkspace, deleteConfirmModal, closeDeleteConfirm } = useCrm();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
@@ -107,6 +108,22 @@ const MainLayout: React.FC = () => {
       {/* Global Modals & Notifications */}
       <ProjectModal />
       <ReferentialIntegrityModal />
+      <DeleteConfirmModal
+        isOpen={deleteConfirmModal.isOpen}
+        recordTitle={deleteConfirmModal.recordTitle}
+        moduleName={deleteConfirmModal.moduleName}
+        recordId={deleteConfirmModal.recordId}
+        description={deleteConfirmModal.description}
+        warningNote={deleteConfirmModal.warningNote}
+        details={deleteConfirmModal.details}
+        confirmLabel={deleteConfirmModal.confirmLabel}
+        cancelLabel={deleteConfirmModal.cancelLabel}
+        onConfirm={async () => {
+          await deleteConfirmModal.onConfirm();
+          closeDeleteConfirm();
+        }}
+        onCancel={closeDeleteConfirm}
+      />
       <ToastContainer />
     </div>
   );

@@ -36,6 +36,7 @@ export const ProjectsModule: React.FC = () => {
   const {
     projects,
     deleteProject,
+    confirmDelete,
     getClientById,
     getServiceById,
     getProjectExpensesTotalINR,
@@ -460,7 +461,17 @@ export const ProjectsModule: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => deleteProject(project.id)}
+                            onClick={() => {
+                              confirmDelete({
+                                moduleName: 'Project',
+                                recordTitle: `${project.id} · ${project.clientName}`,
+                                recordId: project.id,
+                                warningNote: `Deleting project "${project.id}" will verify referential integrity against payments, assignments, and invoices in Azure SQL.`,
+                                onConfirm: async () => {
+                                  await deleteProject(project.id);
+                                },
+                              });
+                            }}
                             className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Project (Protected if payments exist)"
                           >
