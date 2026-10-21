@@ -16,6 +16,7 @@ import {
   AuthUser,
   BrandName,
   BankAccount,
+  PaymentProofDocument,
   getBrandPrefix,
 } from '../types/crm';
 
@@ -348,15 +349,80 @@ class StorageService {
     }
   }
 
+  public parseProofDocument(doc: any): PaymentProofDocument | undefined {
+    if (!doc) return undefined;
+    if (typeof doc === 'object') {
+      return { ...doc };
+    }
+    if (typeof doc === 'string' && doc.trim()) {
+      try {
+        let parsed = JSON.parse(doc);
+        while (typeof parsed === 'string') {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch {
+            break;
+          }
+        }
+        if (parsed && typeof parsed === 'object') {
+          return {
+            id: parsed.id || `proof-${Date.now()}`,
+            name: parsed.name || 'Payment_Proof',
+            size: typeof parsed.size === 'number' ? parsed.size : 0,
+            type: parsed.type || 'image/png',
+            uploadedAt: parsed.uploadedAt || new Date().toISOString(),
+            url: parsed.url || '',
+            externalUrl: parsed.externalUrl || '',
+            notes: parsed.notes || '',
+          };
+        }
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  public async uploadPaymentProof(payload: {
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    fileData: string;
+    transactionId?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; proofDocument?: PaymentProofDocument; error?: string }> {
+    try {
+      const res = await this.apiCall<{ success: boolean; proofDocument: PaymentProofDocument; error?: string }>(
+        '/api/upload-proof',
+        'POST',
+        payload
+      );
+      return res;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
+    }
+  }
+
   public async fetchPayments(): Promise<Payment[]> {
-    return this.apiCall<Payment[]>('/api/payments');
+    const list = await this.apiCall<Payment[]>('/api/payments');
+    return (list || []).map((p) => ({
+      ...p,
+      paymentProof: this.parseProofDocument(p.paymentProof),
+    }));
   }
 
   public async savePayment(payment: Payment): Promise<{ success: boolean; payment?: Payment; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; payment: Payment }>('/api/payments', 'POST', payment);
+      // Ensure proof is a clean cloned object
+      const payload: Payment = {
+        ...payment,
+        paymentProof: this.parseProofDocument(payment.paymentProof),
+      };
+      const res = await this.apiCall<{ success: boolean; payment: Payment }>('/api/payments', 'POST', payload);
       this.notifyListeners();
-      return { success: true, payment: res.payment };
+      const saved = res.payment ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) } : undefined;
+      return { success: true, payment: saved };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
@@ -506,14 +572,23 @@ class StorageService {
   }
 
   public async fetchEmployeePayments(): Promise<EmployeePayment[]> {
-    return this.apiCall<EmployeePayment[]>('/api/employee-payments');
+    const list = await this.apiCall<EmployeePayment[]>('/api/employee-payments');
+    return (list || []).map((p) => ({
+      ...p,
+      paymentProof: this.parseProofDocument(p.paymentProof),
+    }));
   }
 
   public async saveEmployeePayment(epay: EmployeePayment): Promise<{ success: boolean; payment?: EmployeePayment; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; payment: EmployeePayment }>('/api/employee-payments', 'POST', epay);
+      const payload: EmployeePayment = {
+        ...epay,
+        paymentProof: this.parseProofDocument(epay.paymentProof),
+      };
+      const res = await this.apiCall<{ success: boolean; payment: EmployeePayment }>('/api/employee-payments', 'POST', payload);
       this.notifyListeners();
-      return { success: true, payment: res.payment };
+      const saved = res.payment ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) } : undefined;
+      return { success: true, payment: saved };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
@@ -630,7 +705,91 @@ class StorageService {
     return `${prefix}-${cleanType}-${String(nextNum).padStart(3, '0')}`;
   }
 
-  // --- Smart Dynamic Project ID Generator ---
+  // --- Strict Semantic Slugification & ID Generation ---
+  public slugifySemantic(input?: string | null, fallback: string = 'DEFAULT'): string {
+    if (!input || typeof input !== 'string') return fallback;
+    const slug = input
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return slug || fallback;
+  }
+
+  public generateSemanticClientId(
+    brand: BrandName,
+    clientName: string,
+    existingClients: Array<{ id: string; brand?: BrandName }> = []
+  ): string {
+    const prefix = getBrandPrefix(brand);
+    const clientSlug = this.slugifySemantic(clientName, 'CLIENT');
+    const baseId = `${prefix}-${clientSlug}`;
+
+    const matching = existingClients.filter((c) => c.id === baseId || c.id.startsWith(`${baseId}-`));
+    if (matching.length === 0) {
+      return baseId;
+    }
+
+    let maxSeq = 1;
+    for (const c of matching) {
+      if (c.id === baseId) continue;
+      const match = c.id.match(new RegExp(`^${baseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`));
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    return `${baseId}-${maxSeq + 1}`;
+  }
+
+  public generateSemanticProjectId(
+    brand: BrandName,
+    clientName: string,
+    serviceName: string,
+    existingProjects: Project[] = [],
+    currentProjectId?: string,
+    clientId?: string,
+    serviceId?: string
+  ): string {
+    const prefix = getBrandPrefix(brand);
+    const clientSlug = this.slugifySemantic(clientName, 'CLIENT');
+    const serviceSlug = this.slugifySemantic(serviceName, 'SERVICE');
+    const basePrefix = `${prefix}-${clientSlug}-${serviceSlug}`;
+
+    const matchingProjects = existingProjects.filter((p) => {
+      if (currentProjectId && p.id === currentProjectId) return false;
+      const matchExactPrefix = p.id.startsWith(basePrefix);
+      const matchClientAndService = clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
+      const matchLegacySpacePattern = p.id.startsWith(`${prefix} - `) && p.id.toUpperCase().includes(clientSlug.replace(/-/g, ' '));
+      return matchExactPrefix || matchClientAndService || matchLegacySpacePattern;
+    });
+
+    let maxSeq = 0;
+    for (const p of matchingProjects) {
+      // 1. Strict semantic match: BASE-N
+      const escaped = basePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const strictMatch = p.id.match(new RegExp(`^${escaped}-(\\d+)$`, 'i'));
+      if (strictMatch && strictMatch[1]) {
+        const seq = parseInt(strictMatch[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        continue;
+      }
+
+      // 2. Space-delimited legacy match: BASE - N
+      const spaceMatch = p.id.match(/[-_\s](\d+)$/);
+      if (spaceMatch && spaceMatch[1]) {
+        const seq = parseInt(spaceMatch[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    return `${basePrefix}-${nextSeq}`;
+  }
+
+  // Backward-compatible alias for existing callers
   public generateSmartProjectId(
     clientName: string,
     serviceName: string,
@@ -641,29 +800,55 @@ class StorageService {
     existingProjects: Project[] = []
   ): string {
     const currentBrand = brand || this.getActiveBrand();
-    const prefix = getBrandPrefix(currentBrand);
-    const cleanClient = (clientName || 'CLIENT').trim().toUpperCase();
-    const cleanService = (serviceName || 'SERVICE').trim().toUpperCase();
+    return this.generateSemanticProjectId(
+      currentBrand,
+      clientName,
+      serviceName,
+      existingProjects,
+      currentProjectId,
+      clientId,
+      serviceId
+    );
+  }
 
-    const matchingProjects = existingProjects.filter((p) => {
-      if (currentProjectId && p.id === currentProjectId) return false;
-      const matchById = clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
-      const matchByPattern = p.id.startsWith(`${prefix} - ${cleanClient} - ${cleanService} - `);
-      return matchById || matchByPattern;
-    });
-
-    let maxSeq = 0;
-    for (const p of matchingProjects) {
-      const parts = p.id.split(' - ');
-      const lastPart = parts[parts.length - 1];
-      const parsed = parseInt(lastPart, 10);
-      if (!isNaN(parsed) && parsed > maxSeq) {
-        maxSeq = parsed;
-      }
+  public async fetchNextSemanticClientId(brand: BrandName, clientName: string): Promise<string> {
+    try {
+      const res = await this.apiCall<{ success: boolean; clientId: string }>(
+        `/api/clients/next-semantic-id?brand=${encodeURIComponent(brand)}&name=${encodeURIComponent(clientName)}`
+      );
+      if (res?.clientId) return res.clientId;
+    } catch (err) {
+      console.warn('[fetchNextSemanticClientId] API error, using client fallback:', err);
     }
+    return this.generateSemanticClientId(brand, clientName);
+  }
 
-    const nextSeq = maxSeq > 0 ? maxSeq + 1 : matchingProjects.length + 1;
-    return `${prefix} - ${cleanClient} - ${cleanService} - ${nextSeq}`;
+  public async fetchNextSemanticProjectId(
+    brand: BrandName,
+    clientName: string,
+    serviceName: string,
+    clientId?: string,
+    serviceId?: string
+  ): Promise<{ projectId: string; sequence: number }> {
+    try {
+      const query = new URLSearchParams({
+        brand,
+        clientName,
+        serviceName,
+        ...(clientId ? { clientId } : {}),
+        ...(serviceId ? { serviceId } : {}),
+      });
+      const res = await this.apiCall<{ success: boolean; projectId: string; sequence: number }>(
+        `/api/projects/next-semantic-id?${query.toString()}`
+      );
+      if (res?.projectId) {
+        return { projectId: res.projectId, sequence: res.sequence || 1 };
+      }
+    } catch (err) {
+      console.warn('[fetchNextSemanticProjectId] API error, using client fallback:', err);
+    }
+    const pid = this.generateSemanticProjectId(brand, clientName, serviceName);
+    return { projectId: pid, sequence: 1 };
   }
 
   // --- Referential Integrity Checking Helpers ---

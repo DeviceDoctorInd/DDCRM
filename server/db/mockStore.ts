@@ -15,6 +15,14 @@ import {
   BankAccount,
 } from '../../src/types/crm';
 import bcrypt from 'bcryptjs';
+import {
+  getBrandSemanticPrefix,
+  slugifySemantic,
+  generateSemanticClientId,
+  generateSemanticProjectId,
+  extractProjectSequence,
+  getBaseProjectPrefix,
+} from '../utils/semanticId';
 
 export interface AuditLogEntry {
   id: number;
@@ -143,7 +151,7 @@ class MockStore {
     // Clients
     this.clients = [
       {
-        id: 'DDI-CL-001',
+        id: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         brand: 'Device Doctor India',
         name: 'TechCorp Infotech Pvt Ltd',
         contactPerson: 'Rajesh Sharma',
@@ -160,7 +168,7 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'DDI-CL-002',
+        id: 'DDI-APOLLO-DIAGNOSTICS-CENTRE',
         brand: 'Device Doctor India',
         name: 'Apollo Diagnostics Centre',
         contactPerson: 'Dr. Alok Verma',
@@ -177,7 +185,7 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'CDS-CL-001',
+        id: 'CDS-FINSCALE-TECHNOLOGIES-INC',
         brand: 'Codestro',
         name: 'FinScale Technologies Inc',
         contactPerson: 'Sophia Lee',
@@ -194,7 +202,7 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'FXL-CL-001',
+        id: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL',
         brand: 'FX Launch Pad',
         name: 'AlphaEdge Quantitative Capital',
         contactPerson: 'Marcus Vance',
@@ -211,7 +219,7 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'DNS-CL-001',
+        id: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP',
         brand: 'DUNS',
         name: 'Vertex Global Compliance Corp',
         contactPerson: 'David Sterling',
@@ -325,9 +333,9 @@ class MockStore {
     // Projects
     this.projects = [
       {
-        id: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        id: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
         brand: 'Device Doctor India',
-        clientId: 'DDI-CL-001',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         serviceId: 'DDI-SRV-001',
         proposalDate: '2025-01-05',
@@ -357,9 +365,9 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'CDS - FINSCALE TECHNOLOGIES - MULTI-TENANT SAAS WEB APPLICATION - 1',
+        id: 'CDS-FINSCALE-TECHNOLOGIES-INC-MULTI-TENANT-SAAS-WEB-APPLICATION-1',
         brand: 'Codestro',
-        clientId: 'CDS-CL-001',
+        clientId: 'CDS-FINSCALE-TECHNOLOGIES-INC',
         clientName: 'FinScale Technologies Inc',
         serviceId: 'CDS-SRV-001',
         proposalDate: '2025-02-01',
@@ -387,9 +395,9 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
+        id: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL-METATRADER-5-PROP-TRADING-CHALLENGE-PLATFORM-1',
         brand: 'FX Launch Pad',
-        clientId: 'FXL-CL-001',
+        clientId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL',
         clientName: 'AlphaEdge Quantitative Capital',
         serviceId: 'FXL-SRV-001',
         proposalDate: '2025-01-05',
@@ -412,9 +420,9 @@ class MockStore {
         updatedAt: now,
       },
       {
-        id: 'DNS - VERTEX GLOBAL COMPLIANCE CORP - GLOBAL BUSINESS VERIFICATION & D-U-N-S CERTIFICATION - 1',
+        id: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP-GLOBAL-BUSINESS-VERIFICATION-D-U-N-S-CERTIFICATION-1',
         brand: 'DUNS',
-        clientId: 'DNS-CL-001',
+        clientId: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP',
         clientName: 'Vertex Global Compliance Corp',
         serviceId: 'DNS-SRV-001',
         proposalDate: '2025-01-25',
@@ -589,8 +597,8 @@ class MockStore {
       {
         id: 'DDI-PAY-001',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'GST Invoice',
         bankAccountId: 'DDI-BNK-001',
@@ -611,8 +619,8 @@ class MockStore {
       {
         id: 'DDI-PAY-002',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'GST Invoice',
         bankAccountId: 'DDI-BNK-001',
@@ -633,8 +641,8 @@ class MockStore {
       {
         id: 'CDS-PAY-001',
         brand: 'Codestro',
-        projectId: 'CDS - FINSCALE TECHNOLOGIES - MULTI-TENANT SAAS WEB APPLICATION - 1',
-        clientId: 'CDS-CL-001',
+        projectId: 'CDS-FINSCALE-TECHNOLOGIES-INC-MULTI-TENANT-SAAS-WEB-APPLICATION-1',
+        clientId: 'CDS-FINSCALE-TECHNOLOGIES-INC',
         clientName: 'FinScale Technologies Inc',
         paymentMode: 'Non GST Online',
         bankAccountId: 'CDS-BNK-002',
@@ -655,8 +663,8 @@ class MockStore {
       {
         id: 'FXL-PAY-001',
         brand: 'FX Launch Pad',
-        projectId: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
-        clientId: 'FXL-CL-001',
+        projectId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL-METATRADER-5-PROP-TRADING-CHALLENGE-PLATFORM-1',
+        clientId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL',
         clientName: 'AlphaEdge Quantitative Capital',
         paymentMode: 'Crypto',
         bankAccountId: 'FXL-BNK-002',
@@ -677,8 +685,8 @@ class MockStore {
       {
         id: 'DNS-PAY-001',
         brand: 'DUNS',
-        projectId: 'DNS - VERTEX GLOBAL COMPLIANCE CORP - GLOBAL BUSINESS VERIFICATION & D-U-N-S CERTIFICATION - 1',
-        clientId: 'DNS-CL-001',
+        projectId: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP-GLOBAL-BUSINESS-VERIFICATION-D-U-N-S-CERTIFICATION-1',
+        clientId: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP',
         clientName: 'Vertex Global Compliance Corp',
         paymentMode: 'Non GST Online',
         bankAccountId: 'DNS-BNK-001',
@@ -700,8 +708,8 @@ class MockStore {
       {
         id: 'DDI-PAY-003',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'GST Invoice',
         bankAccountId: 'DDI-BNK-001',
@@ -722,8 +730,8 @@ class MockStore {
       {
         id: 'DDI-PAY-004',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'Non GST Online',
         bankAccountId: 'DDI-BNK-001',
@@ -744,8 +752,8 @@ class MockStore {
       {
         id: 'DDI-PAY-005',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'Cash',
         bankAccountId: '',
@@ -766,8 +774,8 @@ class MockStore {
       {
         id: 'DDI-PAY-006',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentMode: 'Non GST Online',
         bankAccountId: 'DDI-BNK-003',
@@ -788,8 +796,8 @@ class MockStore {
       {
         id: 'FXL-PAY-002',
         brand: 'FX Launch Pad',
-        projectId: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
-        clientId: 'FXL-CL-001',
+        projectId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL-METATRADER-5-PROP-TRADING-CHALLENGE-PLATFORM-1',
+        clientId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL',
         clientName: 'AlphaEdge Quantitative Capital',
         paymentMode: 'Crypto',
         bankAccountId: 'FXL-BNK-002',
@@ -810,8 +818,8 @@ class MockStore {
       {
         id: 'FXL-PAY-003',
         brand: 'FX Launch Pad',
-        projectId: 'FXL - ALPHAEDGE QUANTITATIVE CAPITAL - METATRADER 5 PROP TRADING CHALLENGE PLATFORM - 1',
-        clientId: 'FXL-CL-001',
+        projectId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL-METATRADER-5-PROP-TRADING-CHALLENGE-PLATFORM-1',
+        clientId: 'FXL-ALPHAEDGE-QUANTITATIVE-CAPITAL',
         clientName: 'AlphaEdge Quantitative Capital',
         paymentMode: 'Cash',
         bankAccountId: '',
@@ -832,8 +840,8 @@ class MockStore {
       {
         id: 'CDS-PAY-002',
         brand: 'Codestro',
-        projectId: 'CDS - FINSCALE TECHNOLOGIES - MULTI-TENANT SAAS WEB APPLICATION - 1',
-        clientId: 'CDS-CL-001',
+        projectId: 'CDS-FINSCALE-TECHNOLOGIES-INC-MULTI-TENANT-SAAS-WEB-APPLICATION-1',
+        clientId: 'CDS-FINSCALE-TECHNOLOGIES-INC',
         clientName: 'FinScale Technologies Inc',
         paymentMode: 'GST Invoice',
         bankAccountId: 'CDS-BNK-001',
@@ -854,8 +862,8 @@ class MockStore {
       {
         id: 'DNS-PAY-002',
         brand: 'DUNS',
-        projectId: 'DNS - VERTEX GLOBAL COMPLIANCE CORP - GLOBAL BUSINESS VERIFICATION & D-U-N-S CERTIFICATION - 1',
-        clientId: 'DNS-CL-001',
+        projectId: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP-GLOBAL-BUSINESS-VERIFICATION-D-U-N-S-CERTIFICATION-1',
+        clientId: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP',
         clientName: 'Vertex Global Compliance Corp',
         paymentMode: 'Non GST Online',
         bankAccountId: 'DNS-BNK-001',
@@ -881,8 +889,8 @@ class MockStore {
         id: 'DDI-GST-001',
         brand: 'Device Doctor India',
         paymentId: 'DDI-PAY-001',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         paymentDate: '2025-01-20',
         amountReceived: 300000,
@@ -1011,8 +1019,8 @@ class MockStore {
       {
         id: 'DDI-ASN-001',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         employeeId: 'DDI-EMP-001',
         employeeName: 'Amit Trivedi',
@@ -1035,7 +1043,7 @@ class MockStore {
         id: 'DDI-EPAY-001',
         brand: 'Device Doctor India',
         assignmentId: 'DDI-ASN-001',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
         employeeId: 'DDI-EMP-001',
         employeeName: 'Amit Trivedi',
         paymentDate: '2025-02-01',
@@ -1084,8 +1092,8 @@ class MockStore {
       {
         id: 'DDI-EXP-001',
         brand: 'Device Doctor India',
-        projectId: 'DDI - TECHCORP INFOTECH - ENTERPRISE SERVER MAINTENANCE & AMC - 1',
-        clientId: 'DDI-CL-001',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
         clientName: 'TechCorp Infotech Pvt Ltd',
         expenseCategoryId: 'DDI-EXPCAT-001',
         expenseCategoryName: 'Cloud & Infrastructure Hosting',
@@ -1187,13 +1195,43 @@ class MockStore {
     }));
   }
 
+  public getClientById(id: string): Client | undefined {
+    return this.clients.find((c) => c.id === id || (c as any).client_id === id || (c as any).client_id_code === id);
+  }
+
+  public getNextClientId(brand: string, clientName: string): string {
+    const baseId = generateSemanticClientId(brand, clientName);
+    const existing = this.clients.filter((c) => c.id === baseId || c.id.startsWith(`${baseId}-`));
+    if (existing.length === 0) {
+      return baseId;
+    }
+    let maxSeq = 1;
+    for (const c of existing) {
+      if (c.id === baseId) continue;
+      const numMatch = c.id.match(new RegExp(`^${baseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`));
+      if (numMatch && numMatch[1]) {
+        const seq = parseInt(numMatch[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+    return `${baseId}-${maxSeq + 1}`;
+  }
+
   public saveClient(client: Client): Client {
     if (!client.brand) client.brand = 'Device Doctor India';
-    const idx = this.clients.findIndex((c) => c.id === client.id);
+    const idx = client.id ? this.clients.findIndex((c) => c.id === client.id) : -1;
     if (idx >= 0) {
       this.clients[idx] = { ...this.clients[idx], ...client, updatedAt: new Date().toISOString() };
       return this.clients[idx];
     }
+
+    // Auto-generate semantic client ID if missing or generic
+    if (!client.id || /^([A-Z]+-)?CL-\d+/i.test(client.id) || /^[0-9a-f-]{36}$/i.test(client.id)) {
+      client.id = this.getNextClientId(client.brand, client.name);
+    }
+
     const created = { ...client, createdAt: client.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.clients.unshift(created);
     return created;
@@ -1277,13 +1315,63 @@ class MockStore {
     return [...this.projects];
   }
 
+  public getNextProjectSequence(
+    brand: string,
+    clientName: string,
+    serviceName: string,
+    clientId?: string,
+    serviceId?: string
+  ): number {
+    const basePrefix = getBaseProjectPrefix(brand, clientName, serviceName);
+    const matching = this.projects.filter((p) => {
+      const matchPrefix = p.id.startsWith(basePrefix);
+      const matchClientAndService =
+        clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
+      return matchPrefix || matchClientAndService;
+    });
+
+    let maxSeq = 0;
+    for (const p of matching) {
+      const seq = extractProjectSequence(p.id, basePrefix);
+      if (seq !== null && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+    return maxSeq + 1;
+  }
+
+  public generateSemanticProjectId(
+    brand: string,
+    clientName: string,
+    serviceName: string,
+    clientId?: string,
+    serviceId?: string
+  ): string {
+    const seq = this.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
+    return generateSemanticProjectId(brand, clientName, serviceName, seq);
+  }
+
   public saveProject(proj: Project): Project {
     if (!proj.brand) proj.brand = 'Device Doctor India';
-    const idx = this.projects.findIndex((p) => p.id === proj.id);
+    const idx = proj.id ? this.projects.findIndex((p) => p.id === proj.id) : -1;
     if (idx >= 0) {
       this.projects[idx] = { ...this.projects[idx], ...proj, updatedAt: new Date().toISOString() };
       return this.projects[idx];
     }
+
+    // Auto-generate semantic project ID with sequence counter if missing or generic
+    if (!proj.id || /^([A-Z]+-)?PRJ-\d+/i.test(proj.id) || /^[0-9a-f-]{36}$/i.test(proj.id) || proj.id.includes(' - ')) {
+      const clientName = proj.clientName || this.getClientById(proj.clientId)?.name || 'CLIENT';
+      const serviceName = (proj as any).serviceName || (proj as any).serviceType || this.getServices().find((s) => s.id === proj.serviceId)?.name || 'SERVICE';
+      proj.id = this.generateSemanticProjectId(
+        proj.brand,
+        clientName,
+        serviceName,
+        proj.clientId,
+        proj.serviceId
+      );
+    }
+
     const created = { ...proj, createdAt: proj.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.projects.unshift(created);
     return created;
@@ -1301,22 +1389,30 @@ class MockStore {
 
   // --- Payments ---
   public getPayments(brand?: string | null): Payment[] {
+    let list = this.payments;
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.payments.filter((p) => p.brand === brand);
+      list = this.payments.filter((p) => p.brand === brand);
     }
-    return [...this.payments];
+    return list.map((p) => ({
+      ...p,
+      paymentProof: p.paymentProof ? JSON.parse(JSON.stringify(p.paymentProof)) : undefined,
+    }));
   }
 
   public savePayment(payment: Payment): Payment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const clonedPayment: Payment = {
+      ...payment,
+      paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
+    };
     const idx = this.payments.findIndex((p) => p.id === payment.id);
     if (idx >= 0) {
-      this.payments[idx] = { ...this.payments[idx], ...payment, updatedAt: new Date().toISOString() };
-      return this.payments[idx];
+      this.payments[idx] = { ...this.payments[idx], ...clonedPayment, updatedAt: new Date().toISOString() };
+      return JSON.parse(JSON.stringify(this.payments[idx]));
     }
-    const created = { ...payment, createdAt: payment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.payments.unshift(created);
-    return created;
+    return JSON.parse(JSON.stringify(created));
   }
 
   public deletePayment(id: string): boolean {
@@ -1449,22 +1545,30 @@ class MockStore {
 
   // --- Employee Payments ---
   public getEmployeePayments(brand?: string | null): EmployeePayment[] {
+    let list = this.employeePayments;
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.employeePayments.filter((p) => p.brand === brand);
+      list = this.employeePayments.filter((p) => p.brand === brand);
     }
-    return [...this.employeePayments];
+    return list.map((p) => ({
+      ...p,
+      paymentProof: p.paymentProof ? JSON.parse(JSON.stringify(p.paymentProof)) : undefined,
+    }));
   }
 
   public saveEmployeePayment(payment: EmployeePayment): EmployeePayment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const clonedPayment: EmployeePayment = {
+      ...payment,
+      paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
+    };
     const idx = this.employeePayments.findIndex((p) => p.id === payment.id);
     if (idx >= 0) {
-      this.employeePayments[idx] = { ...this.employeePayments[idx], ...payment, updatedAt: new Date().toISOString() };
-      return this.employeePayments[idx];
+      this.employeePayments[idx] = { ...this.employeePayments[idx], ...clonedPayment, updatedAt: new Date().toISOString() };
+      return JSON.parse(JSON.stringify(this.employeePayments[idx]));
     }
-    const created = { ...payment, createdAt: payment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.employeePayments.unshift(created);
-    return created;
+    return JSON.parse(JSON.stringify(created));
   }
 
   public deleteEmployeePayment(id: string): boolean {

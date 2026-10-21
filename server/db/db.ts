@@ -312,7 +312,8 @@ export function getAzureDbStatus(): AzureDbStatus {
 export const DDL_STATEMENTS = [
   `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='clients' AND xtype='U')
    CREATE TABLE clients (
-     id NVARCHAR(50) PRIMARY KEY,
+     id NVARCHAR(150) PRIMARY KEY,
+     client_id_code NVARCHAR(150),
      brand NVARCHAR(100) NOT NULL,
      name NVARCHAR(255) NOT NULL,
      contact_person NVARCHAR(255),
@@ -352,10 +353,11 @@ export const DDL_STATEMENTS = [
   `IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='projects' AND xtype='U')
    CREATE TABLE projects (
      id NVARCHAR(150) PRIMARY KEY,
+     project_id_code NVARCHAR(150),
      brand NVARCHAR(100) NOT NULL,
-     client_id NVARCHAR(50),
+     client_id NVARCHAR(150),
      client_name NVARCHAR(255),
-     service_id NVARCHAR(50),
+     service_id NVARCHAR(150),
      proposal_date NVARCHAR(50),
      contract_date NVARCHAR(50),
      start_date NVARCHAR(50),
@@ -577,6 +579,8 @@ export const COLUMN_MIGRATIONS = [
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'brand') ALTER TABLE clients ADD brand NVARCHAR(100) DEFAULT 'Device Doctor India';`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'created_at') ALTER TABLE clients ADD created_at NVARCHAR(50);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'updated_at') ALTER TABLE clients ADD updated_at NVARCHAR(50);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'client_id_code') ALTER TABLE clients ADD client_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'projects') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('projects') AND name = 'project_id_code') ALTER TABLE projects ADD project_id_code NVARCHAR(150);`,
 ];
 
 export const DATA_SYNC_STATEMENTS = [

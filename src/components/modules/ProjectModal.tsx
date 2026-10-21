@@ -97,6 +97,7 @@ export const ProjectModal: React.FC = () => {
     saveProject,
     clients,
     getClientById,
+    projects,
     services,
     employees,
     getRoleById,
@@ -241,18 +242,21 @@ export const ProjectModal: React.FC = () => {
         ];
       }
 
-      // Auto-generate project ID if not already assigned
+      // Auto-generate semantic project ID if not already assigned or legacy formatted
       let initialId = projectModalData.id;
-      if (!initialId && resolvedClientName) {
-        const matchedService = services.find((s) => s.id === projectModalData.serviceId);
-        initialId = storageService.generateSmartProjectId(
-          resolvedClientName,
-          matchedService?.name || 'SERVICE',
-          resolvedClientId,
-          projectModalData.serviceId,
-          undefined,
-          projectModalData.brand || activeBrand
-        );
+      if (!isProjectModalEditing || !initialId || initialId.includes(' - ') || /^([A-Z]+-)?PRJ-\d+/i.test(initialId)) {
+        if (resolvedClientName) {
+          const matchedService = services.find((s) => s.id === projectModalData.serviceId);
+          initialId = storageService.generateSemanticProjectId(
+            projectModalData.brand || activeBrand,
+            resolvedClientName,
+            matchedService?.name || 'SERVICE',
+            projects,
+            isProjectModalEditing ? projectModalData.id : undefined,
+            resolvedClientId,
+            projectModalData.serviceId
+          );
+        }
       }
 
       const parsedProposalDoc = normalizeDocument(projectModalData.proposalDocument);
@@ -315,14 +319,32 @@ export const ProjectModal: React.FC = () => {
 
     let nextId = formData.id;
     if (!isProjectModalEditing && actualClientName) {
-      nextId = storageService.generateSmartProjectId(
+      nextId = storageService.generateSemanticProjectId(
+        formData.brand || activeBrand,
         actualClientName,
         matchedService?.name || 'SERVICE',
-        actualClientId,
-        currentServiceId,
+        projects,
         undefined,
-        formData.brand || activeBrand
+        actualClientId,
+        currentServiceId
       );
+      // Asynchronously sync with Azure SQL database sequence counter
+      if (matchedService) {
+        storageService
+          .fetchNextSemanticProjectId(
+            formData.brand || activeBrand,
+            actualClientName,
+            matchedService.name,
+            actualClientId,
+            currentServiceId
+          )
+          .then((res) => {
+            if (res.projectId) {
+              setFormData((p) => ({ ...p, id: res.projectId }));
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     setFormData((prev) => ({
@@ -352,14 +374,30 @@ export const ProjectModal: React.FC = () => {
 
     let nextId = formData.id;
     if (!isProjectModalEditing && clientName && matchedService) {
-      nextId = storageService.generateSmartProjectId(
+      nextId = storageService.generateSemanticProjectId(
+        formData.brand || activeBrand,
         clientName,
         matchedService.name,
-        clientId,
-        matchedService.id,
+        projects,
         undefined,
-        formData.brand || activeBrand
+        clientId,
+        matchedService.id
       );
+      // Asynchronously sync with Azure SQL database sequence counter
+      storageService
+        .fetchNextSemanticProjectId(
+          formData.brand || activeBrand,
+          clientName,
+          matchedService.name,
+          clientId,
+          matchedService.id
+        )
+        .then((res) => {
+          if (res.projectId) {
+            setFormData((p) => ({ ...p, id: res.projectId }));
+          }
+        })
+        .catch(() => {});
     }
 
     setFormData((prev) => ({

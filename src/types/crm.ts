@@ -9,7 +9,7 @@ export type PaymentStatus = 'Received' | 'Pending' | 'Failed' | 'Cancelled';
 
 // --- Multi-Brand Workspace Architecture ---
 export type BrandName = 'Device Doctor India' | 'Codestro' | 'FX Launch Pad' | 'DUNS';
-export type BrandPrefix = 'DDI' | 'CDS' | 'FXL' | 'DNS';
+export type BrandPrefix = 'DDI' | 'CDS' | 'FXL' | 'DUNS' | 'DNS';
 export type ActiveBrandFilter = BrandName | 'All Brands (Consolidated View)';
 
 export interface BrandMeta {
@@ -94,7 +94,7 @@ export const BRAND_CONFIG: Record<BrandName, BrandMeta> = {
 export const getBrandPrefix = (brand?: BrandName | string): BrandPrefix => {
   if (brand === 'Codestro') return 'CDS';
   if (brand === 'FX Launch Pad') return 'FXL';
-  if (brand === 'DUNS') return 'DNS';
+  if (brand === 'DUNS') return 'DUNS';
   return 'DDI';
 };
 

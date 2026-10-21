@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { storageService } from '../../services/storageService';
 import { EmployeePayment, EmployeePaymentMode, PaymentProofDocument } from '../../types/crm';
@@ -60,6 +60,9 @@ export const EmployeePaymentsModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<EmployeePayment>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [uploadInputKey, setUploadInputKey] = useState(1);
+  const formSessionRef = useRef<string>('');
 
   // Payment Proof Modal Lightbox state
   const [selectedPaymentForProof, setSelectedPaymentForProof] = useState<EmployeePayment | null>(null);
@@ -188,10 +191,12 @@ export const EmployeePaymentsModule: React.FC = () => {
       paymentProofNotes: '',
     });
 
+    formSessionRef.current = `add-emp-${newId}-${Date.now()}`;
+    setUploadInputKey((k) => k + 1);
     setIsModalOpen(true);
   };
 
-  // Open Edit Modal
+  // Open Edit Modal with deep cloned proof to prevent shared object reference mutations
   const handleOpenEdit = (payment: EmployeePayment) => {
     setIsEditing(true);
     setFormError(null);
@@ -199,37 +204,96 @@ export const EmployeePaymentsModule: React.FC = () => {
     const assignment = getAssignmentById(payment.assignmentId);
     const employee = getEmployeeById(payment.employeeId);
 
+    const clonedProof = payment.paymentProof
+      ? (typeof payment.paymentProof === 'string'
+          ? storageService.parseProofDocument(payment.paymentProof)
+          : JSON.parse(JSON.stringify(payment.paymentProof)))
+      : undefined;
+
     setFormData({
       ...payment,
       projectId: assignment?.projectId || payment.projectId,
       employeeId: assignment?.employeeId || payment.employeeId,
       employeeName: employee?.name || assignment?.employeeName || payment.employeeName,
-      paymentProof: payment.paymentProof,
-      paymentProofNotes: payment.paymentProofNotes || payment.paymentProof?.notes || '',
+      paymentProof: clonedProof,
+      paymentProofNotes: payment.paymentProofNotes || clonedProof?.notes || '',
     });
 
+    formSessionRef.current = `edit-emp-${payment.id}-${Date.now()}`;
+    setUploadInputKey((k) => k + 1);
     setIsModalOpen(true);
   };
 
-  // Proof File Upload Handlers
+  // Session-isolated Proof File Upload Handler
   const handleFileUpload = (file: File) => {
+    if (!file) return;
+
+    // 1. Enforce strict 10MB ceiling to avoid browser hangs or payload truncation
+    const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      setFormError(`File size exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select a compressed image or document.`);
+      return;
+    }
+
+    // 2. Validate MIME format
+    const allowedFormats = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    if (!allowedFormats.includes(file.type.toLowerCase())) {
+      setFormError('Invalid file type. Please upload a receipt screenshot (PNG, JPG, WEBP) or PDF clearance document.');
+      return;
+    }
+
+    setFormError(null);
+    setIsUploadingProof(true);
+
+    const targetSessionId = formSessionRef.current;
+    const targetPaymentId = formData.id;
+
     const reader = new FileReader();
+    reader.onerror = () => {
+      setIsUploadingProof(false);
+      setFormError('Failed to read file from storage. Please select the file again.');
+    };
+
     reader.onload = () => {
+      // Discard if user closed modal or switched records while reading
+      if (formSessionRef.current !== targetSessionId) {
+        setIsUploadingProof(false);
+        return;
+      }
+
       const base64 = reader.result as string;
+      if (!base64 || !base64.startsWith('data:')) {
+        setIsUploadingProof(false);
+        setFormError('File buffer stream is corrupted. Please try again.');
+        return;
+      }
+
+      const uniqueProofId = `proof-${targetPaymentId || 'emp'}-${Date.now()}`;
       const proofDoc: PaymentProofDocument = {
-        id: `proof-${Date.now()}`,
+        id: uniqueProofId,
         name: file.name,
         size: file.size,
-        type: file.type,
+        type: file.type || 'image/png',
         uploadedAt: new Date().toISOString(),
         url: base64,
         notes: formData.paymentProofNotes || '',
       };
-      setFormData((prev) => ({
-        ...prev,
-        paymentProof: proofDoc,
-      }));
+
+      setFormData((prev) => {
+        if (targetPaymentId && prev.id !== targetPaymentId) {
+          return prev;
+        }
+        return {
+          ...prev,
+          paymentProof: proofDoc,
+          paymentProofNotes: prev.paymentProofNotes || proofDoc.notes || '',
+        };
+      });
+
+      setIsUploadingProof(false);
+      setUploadInputKey((k) => k + 1);
     };
+
     reader.readAsDataURL(file);
   };
 
@@ -239,7 +303,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       paymentProof: prev.paymentProof
         ? { ...prev.paymentProof, externalUrl: url }
         : {
-            id: `proof-${Date.now()}`,
+            id: `proof-${prev.id || Date.now()}-${Date.now()}`,
             name: 'Online_Receipt_Link',
             uploadedAt: new Date().toISOString(),
             externalUrl: url,
@@ -253,6 +317,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       ...prev,
       paymentProof: undefined,
     }));
+    setUploadInputKey((k) => k + 1);
   };
 
   // Handle Assignment Change in Modal
@@ -328,9 +393,8 @@ export const EmployeePaymentsModule: React.FC = () => {
       amountPaid,
       paymentMode: formData.paymentMode || 'GST Invoice',
       referenceUtr: formData.referenceUtr?.trim() || '',
-      notes: formData.notes?.trim() || '',
-      paymentProof: formData.paymentProof,
-      paymentProofNotes: formData.paymentProofNotes || formData.paymentProof?.notes || '',
+      paymentProof: formData.paymentProof ? JSON.parse(JSON.stringify(formData.paymentProof)) : undefined,
+      paymentProofNotes: formData.paymentProofNotes || (formData.paymentProof?.notes || ''),
       createdAt: formData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -648,21 +712,25 @@ export const EmployeePaymentsModule: React.FC = () => {
         </div>
       </div>
 
-      {/* ADD / EDIT EMPLOYEE PAYMENT MODAL FORM (ONLY AND EXACTLY THE 10 FIELDS) */}
+      {/* ADD / EDIT EMPLOYEE PAYMENT MODAL FORM (PINNED VIEWPORT LAYOUT) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
-          <div className="relative w-full max-w-2xl max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs overflow-hidden font-sans"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded shadow-2xl overflow-hidden">
+            {/* Pinned Modal Header */}
+            <div className="shrink-0 px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-neutral-50 dark:bg-neutral-900/90 z-10">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-black text-white shadow-md">
-                  <Wallet className="w-5 h-5" />
+                <div className="w-9 h-9 rounded bg-black text-white flex items-center justify-center shadow-xs">
+                  <Wallet className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    {isEditing ? 'Edit Employee Payment' : '+ Add Employee Payment'}
+                  <h3 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tracking-tight">
+                    {isEditing ? `Edit Employee Payment (${formData.id})` : 'Record Employee Payment'}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
                     Disburse milestone compensation linked directly to an assignment
                   </p>
                 </div>
@@ -670,20 +738,22 @@ export const EmployeePaymentsModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="text-neutral-400 hover:text-black dark:hover:text-white p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
-              {formError && (
-                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-start gap-2.5 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-slate-800 dark:text-slate-200" />
-                  <span>{formError}</span>
-                </div>
-              )}
+            {/* Form Container with Internal Scrollable Body & Pinned Footer */}
+            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {formError && (
+                  <div className="p-3 text-xs rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-neutral-700 dark:text-neutral-300" />
+                    <span>{formError}</span>
+                  </div>
+                )}
 
               {/* 1. Assignment ID Selection (Dropdown populated dynamically from all records in Assignments module) */}
               <div className="space-y-1.5">
@@ -954,15 +1024,19 @@ export const EmployeePaymentsModule: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <label className="cursor-pointer px-2.5 py-1 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors">
-                          <span>Replace</span>
+                        <label className={`cursor-pointer px-2.5 py-1 text-xs font-medium rounded text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 transition-colors ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <span>{isUploadingProof ? 'Uploading...' : 'Replace'}</span>
                           <input
+                            key={`replace-emp-proof-${formData.id || 'new'}-${uploadInputKey}`}
                             type="file"
                             accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
                             className="hidden"
+                            disabled={isUploadingProof}
                             onChange={(e) => {
                               if (e.target.files && e.target.files[0]) {
-                                handleFileUpload(e.target.files[0]);
+                                const selectedFile = e.target.files[0];
+                                e.target.value = '';
+                                handleFileUpload(selectedFile);
                               }
                             }}
                           />
@@ -970,7 +1044,8 @@ export const EmployeePaymentsModule: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleRemoveProof}
-                          className="p-1 text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                          disabled={isUploadingProof}
+                          className="p-1 text-neutral-500 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
                           title="Remove attachment"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -979,21 +1054,25 @@ export const EmployeePaymentsModule: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 dark:hover:border-slate-700 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
-                        <Upload className="w-5 h-5 text-slate-400 group-hover:text-slate-800 dark:text-slate-200 dark:group-hover:text-slate-800 dark:text-slate-200 mb-1 transition-colors" />
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Click to upload employee payment receipt / screenshot
+                      <label className={`flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded cursor-pointer bg-white dark:bg-neutral-900 transition-colors group ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <Upload className="w-5 h-5 text-neutral-400 group-hover:text-black dark:group-hover:text-white mb-1 transition-colors" />
+                        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                          {isUploadingProof ? 'Processing and isolating file...' : 'Click to upload employee payment receipt / screenshot'}
                         </span>
-                        <span className="text-[10px] text-slate-400">
-                          PNG, JPG, JPEG, WEBP, or PDF receipt vouchers
+                        <span className="text-[10px] text-neutral-400">
+                          PNG, JPG, JPEG, WEBP, or PDF (Max 10MB • receipt vouchers)
                         </span>
                         <input
+                          key={`new-emp-proof-${formData.id || 'new'}-${uploadInputKey}`}
                           type="file"
                           accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
                           className="hidden"
+                          disabled={isUploadingProof}
                           onChange={(e) => {
                             if (e.target.files && e.target.files[0]) {
-                              handleFileUpload(e.target.files[0]);
+                              const selectedFile = e.target.files[0];
+                              e.target.value = '';
+                              handleFileUpload(selectedFile);
                             }
                           }}
                         />
@@ -1001,13 +1080,13 @@ export const EmployeePaymentsModule: React.FC = () => {
 
                       {/* Optional External Link */}
                       <div className="flex items-center gap-2">
-                        <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <ExternalLink className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                         <input
                           type="url"
                           placeholder="Or paste Google Drive / payroll voucher URL..."
                           value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
                           onChange={(e) => handleExternalUrlChange(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                          className="w-full px-3 py-1.5 text-xs rounded bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
                         />
                       </div>
                     </div>
@@ -1015,7 +1094,7 @@ export const EmployeePaymentsModule: React.FC = () => {
 
                   {/* Dedicated Employee Payment Proof Notes */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-[11px] font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                       Employee Payment Proof Notes (Voucher & Clearance Verification)
                     </label>
                     <textarea
@@ -1032,7 +1111,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                         }));
                       }}
                       placeholder="e.g. IMPS reference screenshot from HDFC Netbanking • Cash voucher signed by employee..."
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full px-3 py-2 text-xs rounded bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
                     />
                   </div>
                 </div>
@@ -1040,8 +1119,8 @@ export const EmployeePaymentsModule: React.FC = () => {
 
               {/* 11. Notes (Textarea) */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
                   11. Notes
                 </label>
                 <textarea
@@ -1049,31 +1128,33 @@ export const EmployeePaymentsModule: React.FC = () => {
                   value={formData.notes || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                   placeholder="e.g. Milestone 1 driver dispatch backend APIs payout cleared."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none resize-none"
+                  className="w-full px-3 py-2 text-xs rounded border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black focus:border-black resize-none font-sans"
                 />
               </div>
+            </div>
 
-              {/* Modal Footer Actions */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 rounded-lg shadow-sm transition-colors flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  {isEditing ? 'Save Changes' : 'Record Employee Payment'}
-                </button>
-              </div>
-            </form>
-          </div>
+            {/* Pinned Modal Footer with Strict Viewport Containment */}
+            <div className="shrink-0 px-6 py-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-end gap-3 bg-neutral-50 dark:bg-neutral-900/90 z-10">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-200 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded border border-neutral-300 dark:border-neutral-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUploadingProof}
+                className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isEditing ? 'Save Changes' : 'Record Employee Payment'}</span>
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Payment Proof Lightbox Modal */}
       {selectedPaymentForProof && (

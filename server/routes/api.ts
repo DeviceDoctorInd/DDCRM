@@ -18,6 +18,7 @@ import {
   AppUser,
   BankAccount,
   ProjectDocument,
+  PaymentProofDocument,
 } from '../../src/types/crm';
 import { mockStore } from '../db/mockStore';
 import authRoutes from './auth.routes';
@@ -73,6 +74,195 @@ export function sanitizeBrand(brand: any, fallbackBrand: string | null = 'Device
     return fallbackBrand;
   }
   return 'Device Doctor India';
+}
+
+import {
+  getBrandSemanticPrefix,
+  slugifySemantic,
+  generateSemanticClientId,
+  generateSemanticProjectId,
+  extractProjectSequence,
+  getBaseProjectPrefix,
+} from '../utils/semanticId';
+
+/**
+ * Robust JSON parser and deserializer for Azure SQL NVARCHAR(MAX) payment_proof column
+ */
+export function parsePaymentProof(rawProof: any): PaymentProofDocument | undefined {
+  if (!rawProof) return undefined;
+  if (typeof rawProof === 'object') {
+    return { ...rawProof };
+  }
+  if (typeof rawProof === 'string' && rawProof.trim()) {
+    try {
+      let parsed = JSON.parse(rawProof);
+      // Guard against nested double-serialized JSON strings
+      while (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          break;
+        }
+      }
+      if (parsed && typeof parsed === 'object') {
+        return {
+          id: parsed.id || `proof-${Date.now()}`,
+          name: parsed.name || 'Payment_Proof',
+          size: typeof parsed.size === 'number' ? parsed.size : 0,
+          type: parsed.type || 'image/png',
+          uploadedAt: parsed.uploadedAt || new Date().toISOString(),
+          url: parsed.url || '',
+          externalUrl: parsed.externalUrl || '',
+          notes: parsed.notes || '',
+        };
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Safe serializer for Azure SQL NVARCHAR(MAX) payment_proof column
+ */
+export function serializePaymentProof(proof: any): string {
+  if (!proof) return '';
+  if (typeof proof === 'string') {
+    try {
+      const parsed = JSON.parse(proof);
+      return JSON.stringify(parsed);
+    } catch {
+      return proof;
+    }
+  }
+  if (typeof proof === 'object') {
+    return JSON.stringify(proof);
+  }
+  return '';
+}
+
+/**
+ * Calculates next sequence integer for a client/service project combination against Azure SQL or mockStore
+ */
+export async function calculateNextProjectSequenceSql(
+  pool: sql.ConnectionPool | null,
+  brand: string,
+  clientName: string,
+  serviceName: string,
+  clientId?: string,
+  serviceId?: string
+): Promise<{ nextSequence: number; projectId: string; basePrefix: string }> {
+  const basePrefix = getBaseProjectPrefix(brand, clientName, serviceName);
+
+  if (!pool) {
+    const nextSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
+    const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSeq);
+    return { nextSequence: nextSeq, projectId, basePrefix };
+  }
+
+  try {
+    const basePattern = `${basePrefix}-%`;
+    const spacePattern = `%${slugifySemantic(clientName)}%${slugifySemantic(serviceName)}%`;
+    const clientGuid = toGuidOrNull(clientId);
+    const serviceGuid = toGuidOrNull(serviceId);
+
+    const result = await pool.request()
+      .input('brand', brand)
+      .input('basePattern', basePattern)
+      .input('spacePattern', spacePattern)
+      .input('clientId', clientGuid)
+      .input('rawClientId', clientId || '')
+      .input('serviceId', serviceGuid)
+      .input('rawServiceId', serviceId || '')
+      .query(`
+        SELECT CAST(id AS NVARCHAR(150)) as id,
+               ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code
+        FROM projects
+        WHERE (@brand IS NULL OR brand = @brand)
+          AND (
+            id LIKE @basePattern
+            OR project_id_code LIKE @basePattern
+            OR id LIKE @spacePattern
+            OR (@clientId IS NOT NULL AND (client_id = @clientId OR client_id = @rawClientId) AND (service_id = @serviceId OR service_id = @rawServiceId))
+          )
+      `);
+
+    const records = result.recordset || [];
+    let maxSeq = 0;
+
+    for (const r of records) {
+      const seq1 = extractProjectSequence(r.id, basePrefix);
+      const seq2 = r.project_id_code ? extractProjectSequence(r.project_id_code, basePrefix) : null;
+      const found = Math.max(seq1 || 0, seq2 || 0);
+      if (found > maxSeq) {
+        maxSeq = found;
+      }
+    }
+
+    const mockSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
+    const nextSequence = Math.max(maxSeq + 1, mockSeq > 1 ? mockSeq : 1);
+    const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSequence);
+
+    return { nextSequence, projectId, basePrefix };
+  } catch (err) {
+    console.warn('[calculateNextProjectSequenceSql] Error querying DB sequence, using mockStore:', err);
+    const nextSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
+    const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSeq);
+    return { nextSequence: nextSeq, projectId, basePrefix };
+  }
+}
+
+/**
+ * Calculates next semantic Client ID against Azure SQL or mockStore
+ */
+export async function calculateNextClientIdSql(
+  pool: sql.ConnectionPool | null,
+  brand: string,
+  clientName: string
+): Promise<string> {
+  const baseId = generateSemanticClientId(brand, clientName);
+
+  if (!pool) {
+    return mockStore.getNextClientId(brand, clientName);
+  }
+
+  try {
+    const pattern = `${baseId}%`;
+    const res = await pool.request()
+      .input('brand', brand)
+      .input('pattern', pattern)
+      .query(`
+        SELECT CAST(id AS NVARCHAR(150)) as id,
+               ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code
+        FROM clients
+        WHERE id = @pattern OR client_id_code = @pattern OR id LIKE @pattern + '-%' OR client_id_code LIKE @pattern + '-%'
+      `);
+
+    const rows = res.recordset || [];
+    if (rows.length === 0) {
+      return baseId;
+    }
+
+    let maxSeq = 1;
+    for (const row of rows) {
+      const rowId = row.client_id_code || row.id || '';
+      if (rowId === baseId) continue;
+      const match = rowId.match(new RegExp(`^${baseId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`));
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    return `${baseId}-${maxSeq + 1}`;
+  } catch (err) {
+    console.warn('[calculateNextClientIdSql] Error, using mockStore fallback:', err);
+    return mockStore.getNextClientId(brand, clientName);
+  }
 }
 
 // Auto-healing and transient-retry query executor
@@ -308,6 +498,18 @@ router.post('/auth/login', (req: Request, res: Response) => {
 });
 
 // --- CLIENTS ---
+router.get('/clients/next-semantic-id', async (req: Request, res: Response) => {
+  const brand = sanitizeBrand(req.query.brand as string || getBrandContext(req));
+  const clientName = (req.query.name as string || '').trim();
+  if (!clientName) {
+    return res.status(400).json({ success: false, error: 'Client name is required.' });
+  }
+
+  const pool = await getOrInitPool();
+  const clientId = await calculateNextClientIdSql(pool, brand, clientName);
+  return res.json({ success: true, clientId, brand });
+});
+
 router.get('/clients', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
@@ -322,9 +524,9 @@ router.get('/clients', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
-               CAST(id AS NVARCHAR(100)) as client_id,
-               CAST(id AS NVARCHAR(100)) as client_id_code,
+        SELECT ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+               ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as client_id,
+               ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as client_id_code,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id,
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name, 
@@ -363,6 +565,12 @@ router.post('/clients', async (req: Request, res: Response) => {
   client.createdAt = client.createdAt || now;
 
   const pool = await getOrInitPool();
+
+  // Enforce semantic Client ID if missing or generic
+  if (!client.id || /^([A-Z]+-)?CL-\d+/i.test(client.id) || /^[0-9a-f-]{36}$/i.test(client.id)) {
+    client.id = await calculateNextClientIdSql(pool, client.brand || 'Device Doctor India', client.name);
+  }
+
   if (!pool) {
     const saved = mockStore.saveClient(client);
     mockStore.addAuditLog({
@@ -370,7 +578,7 @@ router.post('/clients', async (req: Request, res: Response) => {
       module: 'Clients',
       action: 'SAVE',
       entityId: client.id,
-      details: `Saved client ${client.name} under ${client.brand}`,
+      details: `Saved client ${client.name} (${client.id}) under ${client.brand}`,
       performedBy: 'User',
     });
     return res.json({ success: true, client: saved });
@@ -382,7 +590,8 @@ router.post('/clients', async (req: Request, res: Response) => {
       pool,
       () =>
         pool.request()
-          .input('id', guidId)
+          .input('id', client.id)
+          .input('guidId', guidId)
           .input('rawId', client.id || '')
           .input('brand', client.brand || 'Device Doctor India')
           .input('name', client.name)
@@ -399,19 +608,64 @@ router.post('/clients', async (req: Request, res: Response) => {
           .input('created_at', client.createdAt)
           .input('updated_at', client.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM clients WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM clients WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId OR id = @guidId)
               UPDATE clients SET brand=@brand, name=@name, client_name=@name, contact_person=@contact_person, phone=@phone, email=@email,
                                  city=@city, country=@country, gst_number=@gst_number, preferred_currency=@preferred_currency,
-                                 client_since=@client_since, status=@status, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                                 client_since=@client_since, status=@status, notes=@notes, updated_at=@updated_at,
+                                 client_id_code=@rawId
+              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId OR id = @guidId
             ELSE
               INSERT INTO clients (id, client_id_code, brand, name, client_name, contact_person, phone, email, city, country, gst_number, preferred_currency, client_since, status, notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @contact_person, @phone, @email, @city, @country, @gst_number, @preferred_currency, @client_since, @status, @notes, @created_at, @updated_at)
           `),
       'clients'
     );
+    mockStore.saveClient(client);
     return res.json({ success: true, client });
-  } catch (err) {
+  } catch (err: any) {
+    const errMsg = String(err?.message || err);
+    if (errMsg.includes('uniqueidentifier') || errMsg.includes('Conversion failed')) {
+      try {
+        const guidId = toGuid(client.id);
+        await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidId)
+              .input('rawId', client.id || '')
+              .input('brand', client.brand || 'Device Doctor India')
+              .input('name', client.name)
+              .input('contact_person', client.contactPerson || '')
+              .input('phone', client.phone || '')
+              .input('email', client.email || '')
+              .input('city', client.city || '')
+              .input('country', client.country || '')
+              .input('gst_number', client.gstNumber || '')
+              .input('preferred_currency', client.preferredCurrency || 'INR')
+              .input('client_since', client.clientSince || '')
+              .input('status', client.status || 'Active')
+              .input('notes', client.notes || '')
+              .input('created_at', client.createdAt)
+              .input('updated_at', client.updatedAt)
+              .query(`
+                IF EXISTS (SELECT 1 FROM clients WHERE id = @id OR client_id_code = @rawId)
+                  UPDATE clients SET brand=@brand, name=@name, client_name=@name, contact_person=@contact_person, phone=@phone, email=@email,
+                                     city=@city, country=@country, gst_number=@gst_number, preferred_currency=@preferred_currency,
+                                     client_since=@client_since, status=@status, notes=@notes, updated_at=@updated_at,
+                                     client_id_code=@rawId
+                  WHERE id = @id OR client_id_code = @rawId
+                ELSE
+                  INSERT INTO clients (id, client_id_code, brand, name, client_name, contact_person, phone, email, city, country, gst_number, preferred_currency, client_since, status, notes, created_at, updated_at)
+                  VALUES (@id, @rawId, @brand, @name, @name, @contact_person, @phone, @email, @city, @country, @gst_number, @preferred_currency, @client_since, @status, @notes, @created_at, @updated_at)
+              `),
+          'clients'
+        );
+        mockStore.saveClient(client);
+        return res.json({ success: true, client });
+      } catch (innerErr) {
+        console.warn('[POST /clients] Uniqueidentifier fallback error:', innerErr);
+      }
+    }
     console.warn('[POST /clients] Falling back to mock store:', err);
     const saved = mockStore.saveClient(client);
     return res.json({ success: true, client: saved });
@@ -653,6 +907,60 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
 });
 
 // --- PROJECTS ---
+router.get('/projects/next-semantic-id', async (req: Request, res: Response) => {
+  const brand = sanitizeBrand(req.query.brand as string || getBrandContext(req));
+  let clientName = (req.query.clientName as string || '').trim();
+  const clientId = (req.query.clientId as string || '').trim();
+  let serviceName = (req.query.serviceName as string || '').trim();
+  const serviceId = (req.query.serviceId as string || '').trim();
+
+  const pool = await getOrInitPool();
+
+  if (!clientName && clientId) {
+    if (pool) {
+      try {
+        const cRow = (await pool.request().input('cid', clientId).query(`SELECT name, client_name FROM clients WHERE id = @cid OR client_id_code = @cid`)).recordset[0];
+        clientName = cRow?.name || cRow?.client_name || '';
+      } catch {}
+    }
+    if (!clientName) {
+      clientName = mockStore.getClientById(clientId)?.name || '';
+    }
+  }
+
+  if (!serviceName && serviceId) {
+    if (pool) {
+      try {
+        const sRow = (await pool.request().input('sid', serviceId).query(`SELECT name, service_name FROM services WHERE id = @sid`)).recordset[0];
+        serviceName = sRow?.name || sRow?.service_name || '';
+      } catch {}
+    }
+    if (!serviceName) {
+      serviceName = mockStore.getServices().find((s) => s.id === serviceId)?.name || '';
+    }
+  }
+
+  clientName = clientName || 'CLIENT';
+  serviceName = serviceName || 'SERVICE';
+
+  const calculated = await calculateNextProjectSequenceSql(
+    pool,
+    brand,
+    clientName,
+    serviceName,
+    clientId,
+    serviceId
+  );
+
+  return res.json({
+    success: true,
+    projectId: calculated.projectId,
+    sequence: calculated.nextSequence,
+    basePrefix: calculated.basePrefix,
+    brand,
+  });
+});
+
 router.get('/projects', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
@@ -667,11 +975,13 @@ router.get('/projects', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(150)) as id, 
+        SELECT ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+               ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id,
+               ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id_code,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+               ISNULL(CAST(client_id AS NVARCHAR(150)), '') as clientId, 
                ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
-               ISNULL(CAST(service_id AS NVARCHAR(100)), '') as serviceId,
+               ISNULL(CAST(service_id AS NVARCHAR(150)), '') as serviceId,
                ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposalDate, 
                ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contractDate, 
                ISNULL(CAST(start_date AS NVARCHAR(50)), '') as startDate,
@@ -747,8 +1057,66 @@ router.post('/projects', async (req: Request, res: Response) => {
   proj.createdAt = proj.createdAt || now;
 
   const pool = await getOrInitPool();
+
+  // If creating new project or missing/generic/space-delimited ID, calculate strict semantic ID with sequence counter
+  const isNewOrGeneric =
+    !proj.id ||
+    /^([A-Z]+-)?PRJ-\d+/i.test(proj.id) ||
+    /^[0-9a-f-]{36}$/i.test(proj.id) ||
+    proj.id.includes(' - ');
+
+  if (isNewOrGeneric) {
+    let clientName = proj.clientName || '';
+    let serviceName = (proj as any).serviceName || (proj as any).serviceType || '';
+
+    if (!clientName && proj.clientId) {
+      if (pool) {
+        try {
+          const cRow = (await pool.request().input('cid', proj.clientId).query(`SELECT name, client_name FROM clients WHERE id = @cid OR client_id_code = @cid`)).recordset[0];
+          clientName = cRow?.name || cRow?.client_name || '';
+        } catch {}
+      }
+      if (!clientName) {
+        clientName = mockStore.getClientById(proj.clientId)?.name || '';
+      }
+    }
+
+    if (proj.serviceId && !serviceName) {
+      if (pool) {
+        try {
+          const sRow = (await pool.request().input('sid', proj.serviceId).query(`SELECT name, service_name FROM services WHERE id = @sid`)).recordset[0];
+          serviceName = sRow?.name || sRow?.service_name || '';
+        } catch {}
+      }
+      if (!serviceName) {
+        serviceName = mockStore.getServices().find((s) => s.id === proj.serviceId)?.name || '';
+      }
+    }
+
+    clientName = clientName || 'CLIENT';
+    serviceName = serviceName || 'SERVICE';
+
+    const calculated = await calculateNextProjectSequenceSql(
+      pool,
+      proj.brand || 'Device Doctor India',
+      clientName,
+      serviceName,
+      proj.clientId,
+      proj.serviceId
+    );
+    proj.id = calculated.projectId;
+  }
+
   if (!pool) {
     const saved = mockStore.saveProject(proj);
+    mockStore.addAuditLog({
+      brand: proj.brand || 'All',
+      module: 'Projects',
+      action: 'SAVE',
+      entityId: proj.id,
+      details: `Saved project ${proj.id} for client ${proj.clientName}`,
+      performedBy: 'User',
+    });
     return res.json({ success: true, project: saved });
   }
 
@@ -756,16 +1124,18 @@ router.post('/projects', async (req: Request, res: Response) => {
     const guidId = toGuid(proj.id);
     const clientGuid = toGuidOrNull(proj.clientId);
     const serviceGuid = toGuidOrNull(proj.serviceId);
+
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
-          .input('id', guidId)
+          .input('id', proj.id)
+          .input('guidId', guidId)
           .input('rawId', proj.id || '')
           .input('brand', proj.brand || 'Device Doctor India')
-          .input('client_id', clientGuid)
+          .input('client_id', proj.clientId || clientGuid)
           .input('client_name', proj.clientName || '')
-          .input('service_id', serviceGuid)
+          .input('service_id', proj.serviceId || serviceGuid)
           .input('proposal_date', proj.proposalDate || '')
           .input('contract_date', proj.contractDate || '')
           .input('start_date', proj.startDate || '')
@@ -788,7 +1158,7 @@ router.post('/projects', async (req: Request, res: Response) => {
           .input('created_at', proj.createdAt)
           .input('updated_at', proj.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM projects WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId)
+            IF EXISTS (SELECT 1 FROM projects WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId OR id = @guidId)
               UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
                                  proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
                                  committed_days=@committed_days, committed_end_date=@committed_end_date,
@@ -796,16 +1166,79 @@ router.post('/projects', async (req: Request, res: Response) => {
                                  currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
                                  contract_value=@contract_value, total_received=@total_received, balance=@balance,
                                  project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
-                                 contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
+                                 contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
+                                 project_id_code=@rawId
+              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId OR id = @guidId
             ELSE
               INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
           `),
       'projects'
     );
+    mockStore.saveProject(proj);
     return res.json({ success: true, project: proj });
-  } catch (err) {
+  } catch (err: any) {
+    const errMsg = String(err?.message || err);
+    if (errMsg.includes('uniqueidentifier') || errMsg.includes('Conversion failed')) {
+      try {
+        const guidId = toGuid(proj.id);
+        const clientGuid = toGuidOrNull(proj.clientId);
+        const serviceGuid = toGuidOrNull(proj.serviceId);
+        await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidId)
+              .input('rawId', proj.id || '')
+              .input('brand', proj.brand || 'Device Doctor India')
+              .input('client_id', clientGuid)
+              .input('client_name', proj.clientName || '')
+              .input('service_id', serviceGuid)
+              .input('proposal_date', proj.proposalDate || '')
+              .input('contract_date', proj.contractDate || '')
+              .input('start_date', proj.startDate || '')
+              .input('committed_days', proj.committedDays || 30)
+              .input('committed_end_date', proj.committedEndDate || '')
+              .input('actual_end_date', proj.actualEndDate || '')
+              .input('status', proj.status || 'In Progress')
+              .input('payment_mode', proj.paymentMode || 'GST Invoice')
+              .input('currency', proj.currency || 'INR')
+              .input('contract', proj.contract || 0)
+              .input('exchange_rate', proj.exchangeRate || 1)
+              .input('contract_value', proj.contractValue || 0)
+              .input('total_received', proj.totalReceived || 0)
+              .input('balance', proj.balance || 0)
+              .input('project_manager', proj.projectManager || '')
+              .input('notes', proj.notes || '')
+              .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : '')
+              .input('contract_document', proj.contractDocument ? (typeof proj.contractDocument === 'string' ? proj.contractDocument : JSON.stringify(proj.contractDocument)) : '')
+              .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : '[]')
+              .input('created_at', proj.createdAt)
+              .input('updated_at', proj.updatedAt)
+              .query(`
+                IF EXISTS (SELECT 1 FROM projects WHERE id = @id OR project_id_code = @rawId)
+                  UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
+                                     proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
+                                     committed_days=@committed_days, committed_end_date=@committed_end_date,
+                                     actual_end_date=@actual_end_date, status=@status, payment_mode=@payment_mode,
+                                     currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
+                                     contract_value=@contract_value, total_received=@total_received, balance=@balance,
+                                     project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
+                                     contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
+                                     project_id_code=@rawId
+                  WHERE id = @id OR project_id_code = @rawId
+                ELSE
+                  INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
+                  VALUES (@id, @rawId, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
+              `),
+          'projects'
+        );
+        mockStore.saveProject(proj);
+        return res.json({ success: true, project: proj });
+      } catch (innerErr) {
+        console.warn('[POST /projects] Fallback retry failed:', innerErr);
+      }
+    }
     console.warn('[POST /projects] Falling back to mock store:', err);
     const saved = mockStore.saveProject(proj);
     return res.json({ success: true, project: saved });
@@ -1006,12 +1439,63 @@ router.get('/projects/:id/documents/:docType', async (req: Request, res: Respons
   return res.send(htmlContent);
 });
 
+// --- UPLOAD & PAYMENT PROOF ISOLATION PIPELINE ---
+router.post('/upload-proof', async (req: Request, res: Response) => {
+  try {
+    const { fileName, fileType, fileSize, fileData, transactionId, notes } = req.body;
+    if (!fileData || typeof fileData !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid or missing file data payload.' });
+    }
+
+    // Safety guard: max 25MB base64 payload size limit (~18MB binary)
+    if (fileData.length > 25 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: 'Payment proof file exceeds maximum permissible size (10MB limit).' });
+    }
+
+    // MIME verification
+    const allowedMimes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    const mimeMatch = fileData.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1].toLowerCase() : (fileType || 'image/png').toLowerCase();
+
+    if (!allowedMimes.includes(mimeType) && !mimeType.startsWith('image/')) {
+      return res.status(400).json({ success: false, error: 'Unsupported file format. Please upload PNG, JPG, WEBP, or PDF.' });
+    }
+
+    // Validate base64 structure to guarantee uncorrupted payload
+    if (mimeMatch) {
+      const base64Body = fileData.substring(mimeMatch[0].length);
+      if (base64Body.length === 0) {
+        return res.status(400).json({ success: false, error: 'Empty file buffer received.' });
+      }
+    }
+
+    const cleanTxId = transactionId ? String(transactionId).replace(/[^a-zA-Z0-9_-]/g, '') : 'TX';
+    const uniqueProofId = `PROOF-${cleanTxId}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+
+    const proofDocument: PaymentProofDocument = {
+      id: uniqueProofId,
+      name: fileName ? String(fileName).trim() : `Payment_Proof_${cleanTxId}.${mimeType.includes('pdf') ? 'pdf' : 'png'}`,
+      size: typeof fileSize === 'number' ? fileSize : Math.round((fileData.length * 3) / 4),
+      type: mimeType,
+      uploadedAt: new Date().toISOString(),
+      url: fileData,
+      notes: notes ? String(notes).trim() : '',
+    };
+
+    return res.json({ success: true, proofDocument });
+  } catch (err: any) {
+    console.error('[POST /upload-proof] Failed to process payment proof:', err);
+    return res.status(500).json({ success: false, error: 'Internal server error processing payment proof.' });
+  }
+});
+
 // --- PAYMENTS ---
 router.get('/payments', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getPayments(brand));
+    const list = mockStore.getPayments(brand);
+    return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
 
   try {
@@ -1049,10 +1533,64 @@ router.get('/payments', async (req: Request, res: Response) => {
       `),
       'payments'
     );
-    return res.json(q.recordset || []);
+    const parsedRows = (q.recordset || []).map((row: any) => ({
+      ...row,
+      paymentProof: parsePaymentProof(row.paymentProof),
+    }));
+    return res.json(parsedRows);
   } catch (err) {
     console.warn('[GET /payments] Falling back to mock store:', err);
-    return res.json(mockStore.getPayments(brand));
+    const list = mockStore.getPayments(brand);
+    return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
+  }
+});
+
+router.get('/payments/:id/proof', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const pool = await getOrInitPool();
+
+  try {
+    let payment: any = null;
+    if (pool) {
+      const guidId = toGuid(id);
+      const resDb = await executeSqlWithAutoMigration(
+        pool,
+        () => pool.request().input('id', guidId).input('rawId', id).query(`
+          SELECT TOP 1 id, brand, client_name as clientName, amount_inr as amountINR,
+                       payment_date as paymentDate, payment_mode as paymentMode,
+                       reference_utr as referenceUtr, payment_proof as paymentProof,
+                       payment_proof_notes as paymentProofNotes
+          FROM payments
+          WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+        `),
+        'payments'
+      );
+      if (resDb.recordset && resDb.recordset.length > 0) {
+        payment = resDb.recordset[0];
+      }
+    }
+    if (!payment) {
+      payment = mockStore.getPayments(null).find((p) => p.id === id);
+    }
+
+    if (!payment) {
+      return res.status(404).json({ success: false, error: 'Payment transaction record not found.' });
+    }
+
+    const proofDoc = parsePaymentProof(payment.paymentProof);
+    if (!proofDoc) {
+      return res.status(404).json({ success: false, error: 'No payment proof document attached to this record.' });
+    }
+
+    return res.json({
+      success: true,
+      paymentId: payment.id,
+      proofDocument: proofDoc,
+      paymentProofNotes: payment.paymentProofNotes || proofDoc.notes || '',
+    });
+  } catch (err: any) {
+    console.error(`[GET /payments/${id}/proof] Error:`, err);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve payment proof.' });
   }
 });
 
@@ -1064,10 +1602,14 @@ router.post('/payments', async (req: Request, res: Response) => {
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
+  // Normalize payment proof into a clean object or undefined
+  payment.paymentProof = parsePaymentProof(payment.paymentProof);
+  const serializedProof = serializePaymentProof(payment.paymentProof);
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.savePayment(payment);
-    return res.json({ success: true, payment: saved });
+    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
 
   try {
@@ -1097,8 +1639,8 @@ router.post('/payments', async (req: Request, res: Response) => {
           .input('payment_status', payment.paymentStatus || 'Received')
           .input('days_overdue', payment.daysOverdue || 0)
           .input('notes', payment.notes || '')
-          .input('payment_proof', payment.paymentProof ? JSON.stringify(payment.paymentProof) : '')
-          .input('payment_proof_notes', payment.paymentProofNotes || '')
+          .input('payment_proof', serializedProof)
+          .input('payment_proof_notes', payment.paymentProofNotes || (payment.paymentProof?.notes || ''))
           .input('created_at', payment.createdAt)
           .input('updated_at', payment.updatedAt)
           .query(`
@@ -1121,7 +1663,7 @@ router.post('/payments', async (req: Request, res: Response) => {
   } catch (err) {
     console.warn('[POST /payments] Falling back to mock store:', err);
     const saved = mockStore.savePayment(payment);
-    return res.json({ success: true, payment: saved });
+    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
 });
 
@@ -1770,7 +2312,8 @@ router.get('/employee-payments', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getEmployeePayments(brand));
+    const list = mockStore.getEmployeePayments(brand);
+    return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
 
   try {
@@ -1801,10 +2344,15 @@ router.get('/employee-payments', async (req: Request, res: Response) => {
       `),
       'employee_payments'
     );
-    return res.json(q.recordset || []);
+    const parsedRows = (q.recordset || []).map((row: any) => ({
+      ...row,
+      paymentProof: parsePaymentProof(row.paymentProof),
+    }));
+    return res.json(parsedRows);
   } catch (err) {
     console.warn('[GET /employee-payments] Falling back to mock store:', err);
-    return res.json(mockStore.getEmployeePayments(brand));
+    const list = mockStore.getEmployeePayments(brand);
+    return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
 });
 
@@ -1817,10 +2365,13 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
+  epay.paymentProof = parsePaymentProof(epay.paymentProof);
+  const serializedProof = serializePaymentProof(epay.paymentProof);
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveEmployeePayment(epay);
-    return res.json({ success: true, payment: saved });
+    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
 
   try {
@@ -1844,8 +2395,8 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
           .input('payment_mode', epay.paymentMode || 'GST Invoice')
           .input('reference_utr', epay.referenceUtr || '')
           .input('notes', epay.notes || '')
-          .input('payment_proof', epay.paymentProof ? JSON.stringify(epay.paymentProof) : '')
-          .input('payment_proof_notes', epay.paymentProofNotes || '')
+          .input('payment_proof', serializedProof)
+          .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
           .input('created_at', epay.createdAt)
           .input('updated_at', epay.updatedAt)
           .query(`

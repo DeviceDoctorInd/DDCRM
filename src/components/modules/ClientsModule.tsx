@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { Client, CurrencyCode, ClientStatus } from '../../types/crm';
+import { Client, CurrencyCode, ClientStatus, getBrandPrefix } from '../../types/crm';
 import { CommonModuleToolbar, KpiCardItem } from '../common/CommonModuleToolbar';
 import { exportToCsv } from '../../utils/csvExport';
 import { formatDate } from '../../utils/formatters';
+import { storageService } from '../../services/storageService';
 import {
   Users,
   CheckCircle,
@@ -13,6 +14,7 @@ import {
   Trash2,
   X,
   FileSpreadsheet,
+  Hash,
 } from 'lucide-react';
 import { BrandSafetyGuardBanner } from '../common/BrandSafetyGuardBanner';
 import { BrandSafetyConfirmModal } from '../common/BrandSafetyConfirmModal';
@@ -34,6 +36,18 @@ export const ClientsModule: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [pendingClientSave, setPendingClientSave] = useState<Client | null>(null);
   const [isSavingClient, setIsSavingClient] = useState(false);
+
+  // Dynamic preview of strict semantic ID: [BRAND_PREFIX]-[CLIENT_SLUG]
+  const previewClientId = useMemo(() => {
+    if (editingClient?.id) return editingClient.id;
+    const targetBrand = editingClient?.brand || activeBrand;
+    const clientName = editingClient?.name?.trim() || '';
+    if (!clientName) {
+      const prefix = getBrandPrefix(targetBrand);
+      return `${prefix}-[CLIENT_NAME_SLUG]`;
+    }
+    return storageService.generateSemanticClientId(targetBrand, clientName, clients);
+  }, [editingClient?.id, editingClient?.brand, editingClient?.name, activeBrand, clients]);
 
   // KPIs
   const totalClients = clients.length;
@@ -242,11 +256,11 @@ export const ClientsModule: React.FC = () => {
 
                   let statusBadge = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
                   if (client.status === 'Active') {
-                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
+                    statusBadge = 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700';
                   } else if (client.status === 'Prospect') {
-                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
-                  } else if (client.status === 'Blocked') {
-                    statusBadge = 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700';
+                    statusBadge = 'bg-slate-50 text-slate-700 dark:bg-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-700';
+                  } else if (client.status === 'Blocked' || client.status === 'Inactive') {
+                    statusBadge = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
                   }
 
                   return (
@@ -254,7 +268,7 @@ export const ClientsModule: React.FC = () => {
                       key={client.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                         {client.id}
                       </td>
                       <td className="py-3.5 px-4">
@@ -361,9 +375,13 @@ export const ClientsModule: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                   {editingClient.id ? `Edit Client: ${editingClient.name}` : 'Onboard New Corporate Client'}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Client ID: <span className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold">{editingClient.id || 'Auto-generated (e.g. CL-007)'}</span>
-                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Semantic ID:</span>
+                  <span className="inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-semibold tracking-tight">
+                    <Hash className="w-3 h-3 text-slate-500" />
+                    {previewClientId}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -377,7 +395,7 @@ export const ClientsModule: React.FC = () => {
             {/* Form */}
             <form onSubmit={handleSaveSubmit} className="p-6 space-y-4">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200">
                   {formError}
                 </div>
               )}
@@ -401,9 +419,21 @@ export const ClientsModule: React.FC = () => {
                     required
                     value={editingClient.name || ''}
                     onChange={(e) => setEditingClient({ ...editingClient, name: e.target.value })}
-                    placeholder="e.g. Infosys Infrastructure Support Services"
+                    placeholder="e.g. Mukundra Roaring Tigers"
                     className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
+                  {/* Semantic ID Generation Explainer */}
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">Target Standard ID:</span>
+                      <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                        {previewClientId}
+                      </span>
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      [BRAND_PREFIX]-[CLIENT_NAME_SLUG]
+                    </span>
+                  </div>
                 </div>
 
                 {/* Contact Person */}

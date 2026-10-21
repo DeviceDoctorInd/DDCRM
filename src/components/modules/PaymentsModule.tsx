@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { storageService } from '../../services/storageService';
-import { Payment, PaymentStatus, PaymentMode, CurrencyCode } from '../../types/crm';
+import { Payment, PaymentStatus, PaymentMode, CurrencyCode, Project, BRAND_CONFIG } from '../../types/crm';
 import { CommonModuleToolbar, KpiCardItem } from '../common/CommonModuleToolbar';
 import { exportToCsv } from '../../utils/csvExport';
 import { formatINR, formatDate, calculateDaysOverdue } from '../../utils/formatters';
@@ -66,7 +66,9 @@ export const PaymentsModule: React.FC = () => {
   const {
     payments,
     projects,
+    allProjects,
     clients,
+    allClients,
     bankAccounts,
     savePayment,
     deletePayment,
@@ -75,6 +77,7 @@ export const PaymentsModule: React.FC = () => {
     getProjectById,
     activeBrand,
     brandPrefix,
+    isConsolidatedView,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -86,6 +89,69 @@ export const PaymentsModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Payment>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [localProjects, setLocalProjects] = useState<Project[]>([]);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [uploadInputKey, setUploadInputKey] = useState(1);
+  const formSessionRef = useRef<string>('');
+
+  // Fetch / refresh latest projects whenever modal opens to guarantee data availability
+  useEffect(() => {
+    if (isModalOpen) {
+      storageService
+        .fetchProjects()
+        .then((projs) => {
+          if (Array.isArray(projs) && projs.length > 0) {
+            setLocalProjects(projs);
+          }
+        })
+        .catch((err) => {
+          console.warn('[PaymentsModule] Failed to refresh projects for modal:', err);
+        });
+    }
+  }, [isModalOpen]);
+
+  // Unified projects pool ensuring all projects are accessible across brands and offline/online states
+  const effectiveProjectsPool = useMemo(() => {
+    const map = new Map<string, Project>();
+    (allProjects || []).forEach((p) => {
+      if (p?.id) map.set(p.id, p);
+    });
+    (projects || []).forEach((p) => {
+      if (p?.id) map.set(p.id, p);
+    });
+    localProjects.forEach((p) => {
+      if (p?.id) map.set(p.id, p);
+    });
+    return Array.from(map.values());
+  }, [allProjects, projects, localProjects]);
+
+  // Scoped project options for payment form dropdown based on brand workspace context
+  const availableProjects = useMemo(() => {
+    if (effectiveProjectsPool.length === 0) return [];
+
+    if (isConsolidatedView) {
+      return effectiveProjectsPool;
+    }
+
+    const currentBrand = formData.brand || activeBrand;
+    const currentPrefix = BRAND_CONFIG[currentBrand]?.prefix || brandPrefix;
+
+    let list = effectiveProjectsPool.filter((p) => {
+      if (p.brand === currentBrand) return true;
+      if (currentPrefix && p.id?.startsWith(`${currentPrefix}-`)) return true;
+      return false;
+    });
+
+    // Ensure currently selected projectId exists in dropdown (e.g. during edit or cross-brand link)
+    if (formData.projectId && !list.some((p) => p.id === formData.projectId)) {
+      const existing = effectiveProjectsPool.find((p) => p.id === formData.projectId);
+      if (existing) {
+        list = [existing, ...list];
+      }
+    }
+
+    return list;
+  }, [effectiveProjectsPool, isConsolidatedView, formData.brand, formData.projectId, activeBrand, brandPrefix]);
 
   // Payment Proof Modal Lightbox state
   const [selectedPaymentForProof, setSelectedPaymentForProof] = useState<Payment | null>(null);
@@ -203,12 +269,25 @@ export const PaymentsModule: React.FC = () => {
   const handleOpenAdd = () => {
     setFormError(null);
     setIsEditing(false);
-    const autoId = storageService.generateId('PAY', activeBrand);
-    const defaultProject = projects.length > 0 ? projects[0] : undefined;
-    const defaultClient = defaultProject
-      ? clients.find((c) => c.id === defaultProject.clientId)
-      : clients[0];
 
+    const brandPrefixCurrent = BRAND_CONFIG[activeBrand]?.prefix || brandPrefix;
+    const pool = effectiveProjectsPool;
+    const clientPool = allClients && allClients.length > 0 ? allClients : clients;
+
+    // Filter projects for the active brand workspace
+    const brandCandidates = isConsolidatedView
+      ? pool
+      : pool.filter((p) => p.brand === activeBrand || (brandPrefixCurrent && p.id?.startsWith(`${brandPrefixCurrent}-`)));
+
+    const defaultProject = brandCandidates.length > 0
+      ? brandCandidates[0]
+      : (pool.length > 0 ? pool[0] : undefined);
+
+    const defaultClient = defaultProject
+      ? clientPool.find((c) => c.id === defaultProject.clientId)
+      : (clientPool.length > 0 ? clientPool[0] : undefined);
+
+    const autoId = storageService.generateId('PAY', activeBrand);
     const today = new Date().toISOString().slice(0, 10);
     const dueDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
 
@@ -216,6 +295,8 @@ export const PaymentsModule: React.FC = () => {
     const projectRate = defaultProject?.exchangeRate ?? (projectCurrency === 'INR' ? 1 : 84.5);
     const initialAmount = 100000;
     const initialAmountINR = Math.round(initialAmount * projectRate);
+
+    const brandBank = bankAccounts.find((b) => b.brand === activeBrand && b.status === 'Active') || bankAccounts[0];
 
     setFormData({
       id: autoId,
@@ -230,56 +311,120 @@ export const PaymentsModule: React.FC = () => {
       currency: projectCurrency,
       exchangeRate: projectRate,
       amountINR: initialAmountINR,
-      referenceUtr: `UTR-${brandPrefix}-${Date.now().toString().slice(-6)}`,
-      bankAccountId: bankAccounts.find((b) => b.brand === activeBrand && b.status === 'Active')?.id || '',
-      bankAccountName: (() => {
-        const b = bankAccounts.find((acc) => acc.brand === activeBrand && acc.status === 'Active');
-        return b ? `${b.bankName} - ${b.accountNumber} (${b.accountName})` : '';
-      })(),
+      referenceUtr: `UTR-${brandPrefixCurrent}-${Date.now().toString().slice(-6)}`,
+      bankAccountId: brandBank?.id || '',
+      bankAccountName: brandBank
+        ? `${brandBank.bankName} - ${brandBank.accountNumber} (${brandBank.accountName})`
+        : '',
       paymentStatus: 'Received',
       daysOverdue: 0,
       notes: '',
       paymentProof: undefined,
       paymentProofNotes: '',
     });
+    formSessionRef.current = `add-${autoId}-${Date.now()}`;
+    setUploadInputKey((k) => k + 1);
     setIsModalOpen(true);
   };
 
-  // Open Edit Payment Modal
+  // Open Edit Payment Modal with isolated session & deep cloned proof
   const handleOpenEdit = (pay: Payment) => {
     setFormError(null);
     setIsEditing(true);
     const overdue = pay.daysOverdue ?? calculateDaysOverdue(pay.dueDate, pay.paymentStatus);
+    
+    // Deep-clone payment proof to prevent in-memory mutation of parent table state
+    const clonedProof = pay.paymentProof
+      ? (typeof pay.paymentProof === 'string'
+          ? storageService.parseProofDocument(pay.paymentProof)
+          : JSON.parse(JSON.stringify(pay.paymentProof)))
+      : undefined;
+
     setFormData({
       ...pay,
       amountReceived: pay.amountReceived ?? pay.amount ?? 0,
       amountINR: pay.amountINR ?? pay.amount ?? 0,
       daysOverdue: overdue,
-      paymentProof: pay.paymentProof,
-      paymentProofNotes: pay.paymentProofNotes || pay.paymentProof?.notes || '',
+      paymentProof: clonedProof,
+      paymentProofNotes: pay.paymentProofNotes || clonedProof?.notes || '',
     });
+
+    formSessionRef.current = `edit-${pay.id}-${Date.now()}`;
+    setUploadInputKey((k) => k + 1);
     setIsModalOpen(true);
   };
 
-  // Proof File Upload Handlers
+  // Session-isolated Proof File Upload Handler
   const handleFileUpload = (file: File) => {
+    if (!file) return;
+
+    // 1. Enforce strict 10MB file size ceiling to prevent payload truncation
+    const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      setFormError(`File size exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select a compressed image or document.`);
+      return;
+    }
+
+    // 2. Validate format
+    const allowedFormats = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/pdf'];
+    if (!allowedFormats.includes(file.type.toLowerCase())) {
+      setFormError('Invalid file type. Please upload a receipt screenshot (PNG, JPG, WEBP) or PDF clearance document.');
+      return;
+    }
+
+    setFormError(null);
+    setIsUploadingProof(true);
+
+    const targetSessionId = formSessionRef.current;
+    const targetPaymentId = formData.id;
+
     const reader = new FileReader();
+    reader.onerror = () => {
+      setIsUploadingProof(false);
+      setFormError('Failed to read file from storage. Please select the file again.');
+    };
+
     reader.onload = () => {
+      // Discard if user closed the modal or switched records while reading file buffer
+      if (formSessionRef.current !== targetSessionId) {
+        setIsUploadingProof(false);
+        return;
+      }
+
       const base64 = reader.result as string;
+      if (!base64 || !base64.startsWith('data:')) {
+        setIsUploadingProof(false);
+        setFormError('File buffer stream is corrupted. Please try again.');
+        return;
+      }
+
+      const uniqueProofId = `proof-${targetPaymentId || 'pay'}-${Date.now()}`;
       const proofDoc: PaymentProofDocument = {
-        id: `proof-${Date.now()}`,
+        id: uniqueProofId,
         name: file.name,
         size: file.size,
-        type: file.type,
+        type: file.type || 'image/png',
         uploadedAt: new Date().toISOString(),
         url: base64,
         notes: formData.paymentProofNotes || '',
       };
-      setFormData((prev) => ({
-        ...prev,
-        paymentProof: proofDoc,
-      }));
+
+      setFormData((prev) => {
+        // Enforce transaction instance ID binding
+        if (targetPaymentId && prev.id !== targetPaymentId) {
+          return prev;
+        }
+        return {
+          ...prev,
+          paymentProof: proofDoc,
+          paymentProofNotes: prev.paymentProofNotes || proofDoc.notes || '',
+        };
+      });
+
+      setIsUploadingProof(false);
+      setUploadInputKey((k) => k + 1);
     };
+
     reader.readAsDataURL(file);
   };
 
@@ -289,7 +434,7 @@ export const PaymentsModule: React.FC = () => {
       paymentProof: prev.paymentProof
         ? { ...prev.paymentProof, externalUrl: url }
         : {
-            id: `proof-${Date.now()}`,
+            id: `proof-${prev.id || Date.now()}-${Date.now()}`,
             name: 'Online_Receipt_Link',
             uploadedAt: new Date().toISOString(),
             externalUrl: url,
@@ -303,14 +448,16 @@ export const PaymentsModule: React.FC = () => {
       ...prev,
       paymentProof: undefined,
     }));
+    setUploadInputKey((k) => k + 1);
   };
 
   // Handlers for Project ID selection & reactive field updates
   const handleProjectSelect = (selectedProjectId: string) => {
-    const matchedProject = projects.find((p) => p.id === selectedProjectId);
+    const matchedProject = effectiveProjectsPool.find((p) => p.id === selectedProjectId);
     if (!matchedProject) return;
 
-    const matchedClient = clients.find((c) => c.id === matchedProject.clientId);
+    const clientPool = allClients && allClients.length > 0 ? allClients : clients;
+    const matchedClient = clientPool.find((c) => c.id === matchedProject.clientId);
     const newCurrency = matchedProject.currency || matchedClient?.preferredCurrency || 'INR';
     const newRate = matchedProject.exchangeRate ?? (DEFAULT_EXCHANGE_RATES[newCurrency] || 1);
     const currentAmount = Number(formData.amountReceived) || 0;
@@ -319,6 +466,7 @@ export const PaymentsModule: React.FC = () => {
     setFormData((prev) => ({
       ...prev,
       projectId: matchedProject.id,
+      brand: matchedProject.brand || prev.brand || activeBrand,
       clientId: matchedProject.clientId,
       clientName: matchedProject.clientName || matchedClient?.name || '',
       paymentMode: matchedProject.paymentMode || prev.paymentMode || 'GST Invoice',
@@ -361,7 +509,7 @@ export const PaymentsModule: React.FC = () => {
   };
 
   // Selected Project Financial Context for Balance Check
-  const selectedProject = projects.find((p) => p.id === formData.projectId);
+  const selectedProject = effectiveProjectsPool.find((p) => p.id === formData.projectId);
   const otherReceivedOnSelectedProject = useMemo(() => {
     if (!formData.projectId) return 0;
     return payments
@@ -436,8 +584,8 @@ export const PaymentsModule: React.FC = () => {
       paymentStatus: formData.paymentStatus || 'Received',
       daysOverdue: overdueDays,
       notes: formData.notes || '',
-      paymentProof: formData.paymentProof,
-      paymentProofNotes: formData.paymentProofNotes || formData.paymentProof?.notes || '',
+      paymentProof: formData.paymentProof ? JSON.parse(JSON.stringify(formData.paymentProof)) : undefined,
+      paymentProofNotes: formData.paymentProofNotes || (formData.paymentProof?.notes || ''),
       createdAt: formData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       amount: amountINR,
@@ -702,547 +850,575 @@ export const PaymentsModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Add / Edit Payment Modal with ONLY & EXACTLY the 15 requested fields */}
+      {/* Add / Edit Payment Modal with Viewport Containment, Pinned Header/Footer & Monochrome UI */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="relative w-full max-w-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-6">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="payment-modal-title"
+        >
+          <div className="relative flex flex-col w-full max-w-4xl max-h-[88vh] bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg shadow-2xl overflow-hidden font-sans">
+            {/* Pinned Header */}
+            <div className="shrink-0 px-6 py-4 border-b border-slate-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-neutral-900 z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-black/10 dark:bg-slate-500/20 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0">
-                  <CreditCard className="w-5 h-5" />
+                <div className="w-9 h-9 rounded bg-black text-white dark:bg-white dark:text-black flex items-center justify-center shrink-0">
+                  <CreditCard className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    {isEditing ? `Edit Payment (${formData.id})` : 'New Payment'}
+                  <h3 id="payment-modal-title" className="text-sm font-bold text-neutral-900 dark:text-neutral-100 tracking-tight">
+                    {isEditing ? `Edit Payment (${formData.id})` : 'Record Payment'}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     {isEditing
                       ? 'Update transaction reconciliation and ledger entry'
-                      : `Record client settlement · Payment ID: ${formData.id || 'DDI-PAY-Auto'}`}
+                      : `Corporate settlement tracking · Payment ID: ${formData.id || 'PAY-Auto'}`}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="text-neutral-400 hover:text-black dark:hover:text-white p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
                 aria-label="Close modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSaveSubmit} className="p-6 space-y-6">
-              {formError && (
-                <div className="p-3 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
+            {/* Form Container with Internal Scrollable Body & Pinned Footer */}
+            <form onSubmit={handleSaveSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Internal Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {formError && (
+                  <div className="p-3 text-xs rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-neutral-700 dark:text-neutral-300" />
+                    <span>{formError}</span>
+                  </div>
+                )}
 
-              {/* Project Balance Live Sync Indicator */}
-              {selectedProject && (
-                <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                    <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0" />
-                    <div>
-                      <span className="font-semibold">Project Commercial Balance: </span>
-                      <span>Contract: </span>
-                      <strong className="font-mono">{formatINR(selectedProject.contractValue || 0)}</strong>
-                      <span className="mx-1.5">|</span>
-                      <span>Received: </span>
-                      <strong className="font-mono text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                        {formatINR(otherReceivedOnSelectedProject)}
-                      </strong>
+                {/* Project Balance Live Sync Indicator */}
+                {selectedProject && (
+                  <div className="p-3.5 rounded bg-neutral-50 dark:bg-neutral-800/60 border border-slate-200 dark:border-neutral-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
+                      <Layers className="w-4 h-4 text-neutral-700 dark:text-neutral-300 shrink-0" />
+                      <div>
+                        <span className="font-semibold text-neutral-900 dark:text-neutral-100">Project Commercial Balance: </span>
+                        <span className="text-neutral-500">Contract: </span>
+                        <strong className="font-mono text-neutral-900 dark:text-neutral-100">
+                          {formatINR(selectedProject.contractValue || selectedProject.contract || 0)}
+                        </strong>
+                        <span className="mx-2 text-neutral-300 dark:text-neutral-600">|</span>
+                        <span className="text-neutral-500">Received: </span>
+                        <strong className="font-mono text-neutral-900 dark:text-neutral-100">
+                          {formatINR(otherReceivedOnSelectedProject)}
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="px-2.5 py-1 rounded bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 font-mono font-semibold text-neutral-900 dark:text-neutral-100">
+                      Remaining Balance: {formatINR(selectedProjectRemainingBalance)}
                     </div>
                   </div>
-                  <div className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                    Remaining Balance: {formatINR(selectedProjectRemainingBalance)}
-                  </div>
-                </div>
-              )}
+                )}
 
-              {/* SECTION 1: Payment & Project Association */}
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                  1. Payment & Project Association
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Field 1: Payment ID (Auto-generated, Read-only) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment ID (Auto-generated)
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={formData.id || 'DDI-PAY-Auto'}
-                      className="w-full px-3 py-2 text-xs font-mono font-semibold rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed select-all"
-                    />
+                {/* SECTION 1: Payment & Project Association */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-3">
+                    1. Payment & Project Association
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Field 1: Payment ID (Auto-generated, Read-only) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Payment ID (Auto-generated)
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.id || 'PAY-Auto'}
+                        className="w-full px-3 py-2 text-xs font-mono font-semibold rounded bg-neutral-100 dark:bg-neutral-800/60 border border-slate-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 cursor-not-allowed select-all"
+                      />
+                    </div>
 
-                  {/* Field 2: Project ID (Dropdown with smart project IDs) */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Project ID <span className="text-slate-800 dark:text-slate-200">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.projectId || ''}
-                      onChange={(e) => handleProjectSelect(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono"
-                    >
-                      <option value="" disabled>-- Select Project --</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.id}
+                    {/* Field 2: Project ID (Dropdown with smart semantic project IDs) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-neutral-800 dark:text-neutral-200 mb-1">
+                        Project ID <span className="text-neutral-900 dark:text-neutral-100 font-bold">*</span>
+                      </label>
+                      <select
+                        required
+                        value={formData.projectId || ''}
+                        onChange={(e) => handleProjectSelect(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-mono"
+                      >
+                        <option value="" disabled>
+                          {availableProjects.length === 0
+                            ? `-- No projects available for ${formData.brand || activeBrand} --`
+                            : '-- Select Project --'}
                         </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Field 3: Client ID (Auto-filled & read-only from Project) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Client ID (Auto-filled)
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={formData.clientId || '—'}
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-not-allowed"
-                    />
-                  </div>
-
-                  {/* Field 4: Client Name (Auto-filled & read-only from Project) */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Client Name (Auto-filled)
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      value={formData.clientName || '—'}
-                      className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 2: Dates, Mode & Status */}
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                  2. Schedule, Mode & Aging Status
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {/* Field 5: Payment Mode (Dropdown) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment Mode
-                    </label>
-                    <select
-                      value={formData.paymentMode || 'GST Invoice'}
-                      onChange={(e) =>
-                        setFormData({ ...formData, paymentMode: e.target.value as PaymentMode })
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    >
-                      {PAYMENT_MODES.map((mode) => (
-                        <option key={mode} value={mode}>
-                          {mode}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Field: Receiving Bank Account (Active Brand's Accounts) */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Landmark className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
-                        <span>Receiving Bank Account</span>
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        ({(formData.brand || activeBrand)} Accounts)
-                      </span>
-                    </label>
-                    <select
-                      value={formData.bankAccountId || ''}
-                      onChange={(e) => {
-                        const selId = e.target.value;
-                        if (!selId) {
-                          setFormData({ ...formData, bankAccountId: '', bankAccountName: '' });
-                        } else {
-                          const matched = bankAccounts.find((b) => b.id === selId);
-                          setFormData({
-                            ...formData,
-                            bankAccountId: selId,
-                            bankAccountName: matched
-                              ? `${matched.bankName} - ${matched.accountNumber} (${matched.accountName})`
-                              : '',
-                          });
-                        }
-                      }}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    >
-                      <option value="">-- No Bank Account Tagged / Cash / Direct Settlement --</option>
-                      {formData.bankAccountId && !bankAccounts.some((b) => b.id === formData.bankAccountId && b.brand === (formData.brand || activeBrand) && b.status === 'Active') && (
-                        <option value={formData.bankAccountId}>
-                          {formData.bankAccountName || formData.bankAccountId} (Currently Tagged)
-                        </option>
-                      )}
-                      {bankAccounts
-                        .filter((b) => b.brand === (formData.brand || activeBrand) && b.status === 'Active')
-                        .map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.bankName} — {acc.accountNumber} ({acc.accountName} · {acc.accountType})
+                        {availableProjects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.id} {p.clientName ? `— ${p.clientName}` : ''}
                           </option>
                         ))}
-                    </select>
-                  </div>
-
-                  {/* Field 6: Payment Date (Date picker) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment Date <span className="text-slate-800 dark:text-slate-200">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.paymentDate || ''}
-                      onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
-
-                  {/* Field 7: Due Date (Date picker) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Due Date <span className="text-slate-800 dark:text-slate-200">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={formData.dueDate || ''}
-                      onChange={(e) =>
-                        handleDueDateOrStatusChange(
-                          e.target.value,
-                          (formData.paymentStatus as PaymentStatus) || 'Pending'
-                        )
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
-
-                  {/* Field 13: Payment Status (Dropdown) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment Status
-                    </label>
-                    <select
-                      value={formData.paymentStatus || 'Received'}
-                      onChange={(e) =>
-                        handleDueDateOrStatusChange(
-                          formData.dueDate || '',
-                          e.target.value as PaymentStatus
-                        )
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    >
-                      {PAYMENT_STATUS_OPTIONS.map((st) => (
-                        <option key={st} value={st}>
-                          {st}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Field 14: Days Overdue (Auto-calculated & read-only) */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Days Overdue (Auto-calculated, Read-only)
-                    </label>
-                    <div className="w-full px-3 py-2 text-xs font-mono font-medium rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                      <span className="text-slate-700 dark:text-slate-300">
-                        {formData.daysOverdue !== undefined && formData.daysOverdue > 0
-                          ? `${formData.daysOverdue} day(s) overdue`
-                          : '0 days (Not overdue)'}
-                      </span>
-                      {formData.daysOverdue !== undefined && formData.daysOverdue > 0 && (
-                        <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                          Past Due
-                        </span>
+                      </select>
+                      {availableProjects.length === 0 && (
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          No projects registered under {formData.brand || activeBrand}. Create a project first or switch workspaces.
+                        </p>
                       )}
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* SECTION 3: Commercials & UTR Reference */}
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
-                  3. Commercials, Foreign Exchange & Reference / UTR
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
-                  {/* Field 9: Currency (Dropdown) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Currency
-                    </label>
-                    <select
-                      value={formData.currency || 'INR'}
-                      onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    >
-                      {CURRENCIES.map((curr) => (
-                        <option key={curr} value={curr}>
-                          {curr}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {/* Field 3: Client ID (Auto-filled & read-only from Project) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Client ID (Auto-filled)
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.clientId || '—'}
+                        className="w-full px-3 py-2 text-xs font-mono rounded bg-neutral-100 dark:bg-neutral-800/60 border border-slate-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 cursor-not-allowed select-all"
+                      />
+                    </div>
 
-                  {/* Field 8: Amount Received (Numeric input) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Amount Received <span className="text-slate-800 dark:text-slate-200">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      required
-                      value={formData.amountReceived ?? 0}
-                      onChange={(e) =>
-                        handleAmountOrRateChange(
-                          parseFloat(e.target.value) || 0,
-                          formData.exchangeRate ?? 1
-                        )
-                      }
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
-
-                  {/* Field 10: Exchange Rate (Numeric input) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Exchange Rate (to INR)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={formData.exchangeRate ?? 1}
-                      onChange={(e) =>
-                        handleAmountOrRateChange(
-                          formData.amountReceived ?? 0,
-                          parseFloat(e.target.value) || 1
-                        )
-                      }
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
-
-                  {/* Field 11: Amount (INR) (Auto-calculated & read-only) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Amount (INR, Auto)
-                    </label>
-                    <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 truncate">
-                      {formatINR(formData.amountINR || 0)}
+                    {/* Field 4: Client Name (Auto-filled & read-only from Project) */}
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Client Name (Auto-filled)
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.clientName || '—'}
+                        className="w-full px-3 py-2 text-xs font-medium rounded bg-neutral-100 dark:bg-neutral-800/60 border border-slate-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 cursor-not-allowed"
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Field 12: Reference / UTR (Text input — Unique check enforced) */}
-                  <div className="sm:col-span-2 md:col-span-4 mt-2">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Reference / UTR (Unique ID) <span className="text-slate-800 dark:text-slate-200">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.referenceUtr || ''}
-                      onChange={(e) => setFormData({ ...formData, referenceUtr: e.target.value })}
-                      placeholder="e.g. UTR-HDFC-9928172601 or IMPS-20261014-998"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Must be strictly unique across all payments in the system.
-                    </p>
+                {/* SECTION 2: Dates, Mode & Status */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-3">
+                    2. Schedule, Mode & Aging Status
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {/* Field 5: Payment Mode (Dropdown) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Payment Mode
+                      </label>
+                      <select
+                        value={formData.paymentMode || 'GST Invoice'}
+                        onChange={(e) =>
+                          setFormData({ ...formData, paymentMode: e.target.value as PaymentMode })
+                        }
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      >
+                        {PAYMENT_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {mode}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Field: Receiving Bank Account (Active Brand's Accounts) */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Landmark className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
+                          <span>Receiving Bank Account</span>
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-normal">
+                          ({(formData.brand || activeBrand)} Accounts)
+                        </span>
+                      </label>
+                      <select
+                        value={formData.bankAccountId || ''}
+                        onChange={(e) => {
+                          const selId = e.target.value;
+                          if (!selId) {
+                            setFormData({ ...formData, bankAccountId: '', bankAccountName: '' });
+                          } else {
+                            const matched = bankAccounts.find((b) => b.id === selId);
+                            setFormData({
+                              ...formData,
+                              bankAccountId: selId,
+                              bankAccountName: matched
+                                ? `${matched.bankName} - ${matched.accountNumber} (${matched.accountName})`
+                                : '',
+                            });
+                          }
+                        }}
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      >
+                        <option value="">-- No Bank Account Tagged / Cash / Direct Settlement --</option>
+                        {formData.bankAccountId && !bankAccounts.some((b) => b.id === formData.bankAccountId && b.brand === (formData.brand || activeBrand) && b.status === 'Active') && (
+                          <option value={formData.bankAccountId}>
+                            {formData.bankAccountName || formData.bankAccountId} (Currently Tagged)
+                          </option>
+                        )}
+                        {bankAccounts
+                          .filter((b) => b.brand === (formData.brand || activeBrand) && b.status === 'Active')
+                          .map((acc) => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.bankName} — {acc.accountNumber} ({acc.accountName} · {acc.accountType})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    {/* Field 6: Payment Date (Date picker) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Payment Date <span className="text-neutral-900 dark:text-neutral-100 font-bold">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.paymentDate || ''}
+                        onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      />
+                    </div>
+
+                    {/* Field 7: Due Date (Date picker) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Due Date <span className="text-neutral-900 dark:text-neutral-100 font-bold">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={formData.dueDate || ''}
+                        onChange={(e) =>
+                          handleDueDateOrStatusChange(
+                            e.target.value,
+                            (formData.paymentStatus as PaymentStatus) || 'Pending'
+                          )
+                        }
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      />
+                    </div>
+
+                    {/* Field 13: Payment Status (Dropdown) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Payment Status
+                      </label>
+                      <select
+                        value={formData.paymentStatus || 'Received'}
+                        onChange={(e) =>
+                          handleDueDateOrStatusChange(
+                            formData.dueDate || '',
+                            e.target.value as PaymentStatus
+                          )
+                        }
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      >
+                        {PAYMENT_STATUS_OPTIONS.map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Field 14: Days Overdue (Auto-calculated & read-only) */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Days Overdue (Auto-calculated, Read-only)
+                      </label>
+                      <div className="w-full px-3 py-2 text-xs font-mono font-medium rounded bg-neutral-100 dark:bg-neutral-800/60 border border-slate-200 dark:border-neutral-700 flex items-center justify-between">
+                        <span className="text-neutral-700 dark:text-neutral-300">
+                          {formData.daysOverdue !== undefined && formData.daysOverdue > 0
+                            ? `${formData.daysOverdue} day(s) overdue`
+                            : '0 days (Not overdue)'}
+                        </span>
+                        {formData.daysOverdue !== undefined && formData.daysOverdue > 0 && (
+                          <span className="text-[10px] font-bold text-black dark:text-white uppercase px-1.5 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700">
+                            Past Due
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* SECTION 4: Payment Proof / Receipt Upload */}
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <FileCheck className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200" />
-                    <span>4. Payment Proof / Receipt Upload</span>
-                  </span>
-                  {formData.paymentProof && (
-                    <span className="text-[10px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Attached
-                    </span>
-                  )}
+                {/* SECTION 3: Commercials & UTR Reference */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-3">
+                    3. Commercials, Foreign Exchange & Reference / UTR
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded bg-neutral-50/70 dark:bg-neutral-800/40 border border-slate-200 dark:border-neutral-800">
+                    {/* Field 9: Currency (Dropdown) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Currency
+                      </label>
+                      <select
+                        value={formData.currency || 'INR'}
+                        onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      >
+                        {CURRENCIES.map((curr) => (
+                          <option key={curr} value={curr}>
+                            {curr}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Field 8: Amount Received (Numeric input) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Amount Received <span className="text-neutral-900 dark:text-neutral-100 font-bold">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        required
+                        value={formData.amountReceived ?? 0}
+                        onChange={(e) =>
+                          handleAmountOrRateChange(
+                            parseFloat(e.target.value) || 0,
+                            formData.exchangeRate ?? 1
+                          )
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+                      />
+                    </div>
+
+                    {/* Field 10: Exchange Rate (Numeric input) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Exchange Rate (to INR)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={formData.exchangeRate ?? 1}
+                        onChange={(e) =>
+                          handleAmountOrRateChange(
+                            formData.amountReceived ?? 0,
+                            parseFloat(e.target.value) || 1
+                          )
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+                      />
+                    </div>
+
+                    {/* Field 11: Amount (INR) (Auto-calculated & read-only) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Amount (INR, Auto)
+                      </label>
+                      <div className="w-full px-3 py-2 text-xs font-mono font-bold rounded bg-neutral-100 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 text-black dark:text-white truncate">
+                        {formatINR(formData.amountINR || 0)}
+                      </div>
+                    </div>
+
+                    {/* Field 12: Reference / UTR (Text input — Unique check enforced) */}
+                    <div className="sm:col-span-2 md:col-span-4 mt-2">
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Reference / UTR (Unique ID) <span className="text-neutral-900 dark:text-neutral-100 font-bold">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.referenceUtr || ''}
+                        onChange={(e) => setFormData({ ...formData, referenceUtr: e.target.value })}
+                        placeholder="e.g. UTR-HDFC-9928172601 or IMPS-20261014-998"
+                        className="w-full px-3 py-2 text-xs font-mono rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+                      />
+                      <p className="text-[10px] text-neutral-400 mt-1">
+                        Must be strictly unique across all payments in the system.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-4">
-                  {formData.paymentProof ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <div className="flex items-center gap-3">
-                        {formData.paymentProof.url?.startsWith('data:image/') ||
-                        formData.paymentProof.name?.match(/\.(png|jpg|jpeg|webp)$/i) ? (
-                          <div className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shrink-0 relative group">
-                            <img
-                              src={formData.paymentProof.url}
-                              alt="Payment Proof"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-center shrink-0 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
-                            <FileText className="w-6 h-6" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate max-w-xs">
-                            {formData.paymentProof.name}
-                          </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            {formData.paymentProof.size
-                              ? `${(formData.paymentProof.size / 1024).toFixed(1)} KB • `
-                              : ''}
-                            Uploaded: {formatDate(formData.paymentProof.uploadedAt || new Date().toISOString())}
-                          </p>
-                          {formData.paymentProof.externalUrl && (
-                            <a
-                              href={formData.paymentProof.externalUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-slate-800 dark:text-slate-200 hover:underline flex items-center gap-0.5 mt-0.5"
-                            >
-                              <span>External receipt link</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
+                {/* SECTION 4: Payment Proof / Receipt Upload */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <FileCheck className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
+                      <span>4. Payment Proof / Receipt Upload</span>
+                    </span>
+                    {formData.paymentProof && (
+                      <span className="text-[10px] text-black dark:text-white font-semibold flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Attached
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-4 rounded bg-neutral-50/70 dark:bg-neutral-800/40 border border-slate-200 dark:border-neutral-800 space-y-4">
+                    {formData.paymentProof ? (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+                        <div className="flex items-center gap-3">
+                          {formData.paymentProof.url?.startsWith('data:image/') ||
+                          formData.paymentProof.name?.match(/\.(png|jpg|jpeg|webp)$/i) ? (
+                            <div className="w-14 h-14 rounded overflow-hidden border border-slate-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 shrink-0 relative group">
+                              <img
+                                src={formData.paymentProof.url}
+                                alt="Payment Proof"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center shrink-0 border border-slate-200 dark:border-neutral-700">
+                              <FileText className="w-6 h-6" />
+                            </div>
                           )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 truncate max-w-xs">
+                              {formData.paymentProof.name}
+                            </p>
+                            <p className="text-[10px] text-neutral-400 mt-0.5">
+                              {formData.paymentProof.size
+                                ? `${(formData.paymentProof.size / 1024).toFixed(1)} KB • `
+                                : ''}
+                              Uploaded: {formatDate(formData.paymentProof.uploadedAt || new Date().toISOString())}
+                            </p>
+                            {formData.paymentProof.externalUrl && (
+                              <a
+                                href={formData.paymentProof.externalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] text-black dark:text-white underline flex items-center gap-0.5 mt-0.5"
+                              >
+                                <span>External receipt link</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <label className={`cursor-pointer px-2.5 py-1 text-xs font-medium rounded text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-slate-300 dark:border-neutral-700 transition-colors ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <span>{isUploadingProof ? 'Uploading...' : 'Replace'}</span>
+                            <input
+                              key={`replace-proof-${formData.id || 'new'}-${uploadInputKey}`}
+                              type="file"
+                              accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                              className="hidden"
+                              disabled={isUploadingProof}
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  const selectedFile = e.target.files[0];
+                                  e.target.value = '';
+                                  handleFileUpload(selectedFile);
+                                }
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleRemoveProof}
+                            disabled={isUploadingProof}
+                            className="p-1 text-neutral-500 hover:text-black dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors"
+                            title="Remove attachment"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <label className="cursor-pointer px-2.5 py-1 text-xs font-medium rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors">
-                          <span>Replace</span>
+                    ) : (
+                      <div className="space-y-3">
+                        <label className={`flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded cursor-pointer bg-white dark:bg-neutral-900 transition-colors group ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <Upload className="w-6 h-6 text-neutral-400 group-hover:text-black dark:group-hover:text-white mb-1.5 transition-colors" />
+                          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                            {isUploadingProof ? 'Processing and isolating file...' : 'Click to upload screenshot / receipt proof'}
+                          </span>
+                          <span className="text-[10px] text-neutral-400 mt-0.5">
+                            PNG, JPG, JPEG, WEBP, or PDF (Max 10MB • screenshots & transaction receipts)
+                          </span>
                           <input
+                            key={`new-proof-${formData.id || 'new'}-${uploadInputKey}`}
                             type="file"
                             accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
                             className="hidden"
+                            disabled={isUploadingProof}
                             onChange={(e) => {
                               if (e.target.files && e.target.files[0]) {
-                                handleFileUpload(e.target.files[0]);
+                                const selectedFile = e.target.files[0];
+                                e.target.value = '';
+                                handleFileUpload(selectedFile);
                               }
                             }}
                           />
                         </label>
-                        <button
-                          type="button"
-                          onClick={handleRemoveProof}
-                          className="p-1 text-slate-800 dark:text-slate-200 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Remove attachment"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+
+                        {/* Optional External Link */}
+                        <div className="flex items-center gap-2">
+                          <ExternalLink className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                          <input
+                            type="url"
+                            placeholder="Or paste Google Drive / external receipt URL..."
+                            value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
+                            onChange={(e) => handleExternalUrlChange(e.target.value)}
+                            className="w-full px-3 py-1.5 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-700 dark:hover:border-slate-700 rounded-xl cursor-pointer bg-white dark:bg-slate-900 transition-colors group">
-                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-slate-800 dark:text-slate-200 dark:group-hover:text-slate-800 dark:text-slate-200 mb-1.5 transition-colors" />
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          Click to upload screenshot / receipt proof
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">
-                          PNG, JPG, JPEG, WEBP, or PDF (Screenshots & transaction receipts)
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
-                          className="hidden"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleFileUpload(e.target.files[0]);
-                            }
-                          }}
-                        />
+                    )}
+
+                    {/* Dedicated Payment Proof Notes */}
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        Payment Proof Notes (Voucher & Clearance Verification)
                       </label>
-
-                      {/* Optional External Link */}
-                      <div className="flex items-center gap-2">
-                        <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <input
-                          type="url"
-                          placeholder="Or paste Google Drive / external receipt URL..."
-                          value={(formData.paymentProof as PaymentProofDocument | undefined)?.externalUrl || ''}
-                          onChange={(e) => handleExternalUrlChange(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                        />
-                      </div>
+                      <textarea
+                        rows={2}
+                        value={formData.paymentProofNotes || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            paymentProofNotes: val,
+                            paymentProof: prev.paymentProof
+                              ? { ...prev.paymentProof, notes: val }
+                              : prev.paymentProof,
+                          }));
+                        }}
+                        placeholder="e.g. PhonePe UPI transaction screenshot verified by accounts desk • IMPS reference cleared in HDFC..."
+                        className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                      />
                     </div>
-                  )}
-
-                  {/* Dedicated Payment Proof Notes */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Payment Proof Notes (Voucher & Clearance Verification)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formData.paymentProofNotes || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData((prev) => ({
-                          ...prev,
-                          paymentProofNotes: val,
-                          paymentProof: prev.paymentProof
-                            ? { ...prev.paymentProof, notes: val }
-                            : prev.paymentProof,
-                        }));
-                      }}
-                      placeholder="e.g. PhonePe UPI transaction screenshot verified by accounts desk • IMPS reference cleared in HDFC..."
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
                   </div>
                 </div>
-              </div>
 
-              {/* SECTION 5: Notes */}
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-                  5. Transaction Notes
+                {/* SECTION 5: Notes */}
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2">
+                    5. Transaction Notes
+                  </div>
+                  {/* Field 15: Notes (Textarea) */}
+                  <textarea
+                    rows={3}
+                    value={formData.notes || ''}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    placeholder="Record bank clearance reference, remittance details, or client billing communication..."
+                    className="w-full px-3 py-2 text-xs rounded border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black focus:border-black font-sans"
+                  />
                 </div>
-                {/* Field 15: Notes (Textarea) */}
-                <textarea
-                  rows={3}
-                  value={formData.notes || ''}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Record bank clearance reference, remittance details, or client billing communication..."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
               </div>
 
-              {/* Modal Actions */}
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+              {/* Pinned Modal Footer */}
+              <div className="shrink-0 px-6 py-4 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-end gap-3 bg-neutral-50 dark:bg-neutral-900/90 z-10">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors"
+                  className="px-4 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-200 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded border border-slate-300 dark:border-neutral-700 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
                   <span>{isEditing ? 'Save Payment Changes' : 'Record Payment'}</span>

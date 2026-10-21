@@ -45,8 +45,8 @@ async function startAppServer() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProd = process.env.NODE_ENV === 'production';
 
-  app.use(express.json({ limit: '20mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // API router
   app.use('/api', apiRouter);

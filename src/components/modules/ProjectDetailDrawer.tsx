@@ -86,13 +86,13 @@ export const ProjectDetailDrawer: React.FC<ProjectDetailDrawerProps> = ({
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 truncate max-w-sm">
+                <span className="text-xs font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 truncate max-w-md tracking-tight">
                   {project.id}
                 </span>
                 <button
                   type="button"
                   onClick={copyId}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   title="Copy Project ID"
                 >
                   {copied ? <Check className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" /> : <Copy className="w-3.5 h-3.5" />}

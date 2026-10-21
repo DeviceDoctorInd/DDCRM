@@ -672,8 +672,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (client.brand !== 'Device Doctor India' && client.brand !== 'Codestro' && client.brand !== 'FX Launch Pad' && client.brand !== 'DUNS') {
       client.brand = 'Device Doctor India';
     }
-    if (!client.id) {
-      client.id = storageService.generateId('CL', client.brand, rawClients);
+    if (!client.id || /^([A-Z]+-)?CL-\d+/i.test(client.id) || /^[0-9a-f-]{36}$/i.test(client.id)) {
+      client.id = storageService.generateSemanticClientId(client.brand, client.name, rawClients);
     }
     const res = await storageService.saveClient(client);
     if (res.success) {
@@ -846,17 +846,17 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (project.brand !== 'Device Doctor India' && project.brand !== 'Codestro' && project.brand !== 'FX Launch Pad' && project.brand !== 'DUNS') {
       project.brand = 'Device Doctor India';
     }
-    if (!project.id) {
+    if (!project.id || /^([A-Z]+-)?PRJ-\d+/i.test(project.id) || /^[0-9a-f-]{36}$/i.test(project.id) || project.id.includes(' - ')) {
       const client = getClientById(project.clientId);
       const service = getServiceById(project.serviceId);
-      project.id = storageService.generateSmartProjectId(
-        client?.name || 'CLIENT',
-        service?.name || 'SERVICE',
-        project.clientId,
-        project.serviceId,
-        undefined,
+      project.id = storageService.generateSemanticProjectId(
         project.brand,
-        rawProjects
+        client?.name || project.clientName || 'CLIENT',
+        service?.name || 'SERVICE',
+        rawProjects,
+        undefined,
+        project.clientId,
+        project.serviceId
       );
     }
     const res = await storageService.saveProject(project);
