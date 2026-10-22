@@ -30,6 +30,8 @@ export const GstInvoicesModule: React.FC = () => {
     gstInvoices,
     payments,
     saveGstInvoice,
+    deleteGstInvoice,
+    confirmDelete,
     activeBrand,
     brandPrefix,
     refreshGstInvoices,
@@ -120,13 +122,13 @@ export const GstInvoicesModule: React.FC = () => {
   // Filtering
   const filteredInvoices = useMemo(() => {
     return gstInvoices.filter((inv) => {
-      const q = searchTerm.toLowerCase().trim();
+      const q = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
         !q ||
-        inv.paymentId.toLowerCase().includes(q) ||
-        inv.projectId.toLowerCase().includes(q) ||
-        inv.clientId.toLowerCase().includes(q) ||
-        inv.clientName.toLowerCase().includes(q) ||
+        (inv.paymentId || '').toLowerCase().includes(q) ||
+        (inv.projectId || '').toLowerCase().includes(q) ||
+        (inv.clientId || '').toLowerCase().includes(q) ||
+        (inv.clientName || '').toLowerCase().includes(q) ||
         (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
         (inv.notes && inv.notes.toLowerCase().includes(q));
 
@@ -522,15 +524,36 @@ export const GstInvoicesModule: React.FC = () => {
 
                       {/* Row Actions */}
                       <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(inv)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors"
-                          title="Upload / Update GST Invoice & Filing Details"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>Upload / Update GST</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(inv)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors"
+                            title="Upload / Update GST Invoice & Filing Details"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload / Update</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              confirmDelete({
+                                moduleName: 'GST Invoice',
+                                recordTitle: inv.invoiceNumber ? `Invoice #${inv.invoiceNumber}` : `Payment ${inv.paymentId}`,
+                                recordId: inv.id,
+                                warningNote: 'This will permanently remove this GST invoice record from Azure SQL.',
+                                onConfirm: async () => {
+                                  await deleteGstInvoice(inv.id);
+                                },
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950/30 text-slate-700 dark:text-slate-300 hover:text-red-600 text-xs font-semibold shadow-xs transition-colors"
+                            title="Delete GST Invoice Record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-slate-500 hover:text-red-600" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

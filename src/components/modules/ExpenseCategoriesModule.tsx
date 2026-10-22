@@ -67,10 +67,11 @@ export const ExpenseCategoriesModule: React.FC = () => {
   // Filtered Expense Categories
   const filteredCategories = useMemo(() => {
     return expenseCategories.filter((c) => {
-      const term = searchTerm.toLowerCase();
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        c.id.toLowerCase().includes(term) ||
-        c.name.toLowerCase().includes(term) ||
+        !term ||
+        (c.id || '').toLowerCase().includes(term) ||
+        (c.name || '').toLowerCase().includes(term) ||
         (c.description && c.description.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;

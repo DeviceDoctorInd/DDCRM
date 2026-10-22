@@ -70,10 +70,12 @@ export const ServiceCategoriesModule: React.FC = () => {
   // Filtering
   const filteredCategories = useMemo(() => {
     return categories.filter((c) => {
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.description.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        (c.name || '').toLowerCase().includes(term) ||
+        (c.id || '').toLowerCase().includes(term) ||
+        (c.description && c.description.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
 

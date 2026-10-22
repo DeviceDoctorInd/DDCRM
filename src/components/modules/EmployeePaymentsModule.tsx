@@ -132,14 +132,15 @@ export const EmployeePaymentsModule: React.FC = () => {
       const employee = getEmployeeById(p.employeeId);
       const empName = employee?.name || p.employeeName || assignment?.employeeName || '';
 
-      const term = searchTerm.toLowerCase();
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        p.id.toLowerCase().includes(term) ||
-        p.assignmentId.toLowerCase().includes(term) ||
-        p.projectId.toLowerCase().includes(term) ||
-        p.employeeId.toLowerCase().includes(term) ||
+        !term ||
+        (p.id || '').toLowerCase().includes(term) ||
+        (p.assignmentId || '').toLowerCase().includes(term) ||
+        (p.projectId || '').toLowerCase().includes(term) ||
+        (p.employeeId || '').toLowerCase().includes(term) ||
         empName.toLowerCase().includes(term) ||
-        p.paymentMode.toLowerCase().includes(term) ||
+        (p.paymentMode && p.paymentMode.toLowerCase().includes(term)) ||
         (p.referenceUtr && p.referenceUtr.toLowerCase().includes(term)) ||
         (p.notes && p.notes.toLowerCase().includes(term));
 

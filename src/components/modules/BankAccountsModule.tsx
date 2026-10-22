@@ -107,12 +107,13 @@ export const BankAccountsModule: React.FC = () => {
   // Filtering
   const filteredBankAccounts = useMemo(() => {
     return bankAccounts.filter((b) => {
-      const q = searchTerm.toLowerCase().trim();
+      const q = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
         !q ||
-        b.accountName.toLowerCase().includes(q) ||
-        b.bankName.toLowerCase().includes(q) ||
-        b.accountNumber.toLowerCase().includes(q) ||
+        (b.id && b.id.toLowerCase().includes(q)) ||
+        (b.accountName && b.accountName.toLowerCase().includes(q)) ||
+        (b.bankName && b.bankName.toLowerCase().includes(q)) ||
+        (b.accountNumber && b.accountNumber.toLowerCase().includes(q)) ||
         (b.ifscCode && b.ifscCode.toLowerCase().includes(q)) ||
         (b.upiId && b.upiId.toLowerCase().includes(q)) ||
         (b.branchName && b.branchName.toLowerCase().includes(q));

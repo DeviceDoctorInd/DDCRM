@@ -148,14 +148,18 @@ export const ExpensesModule: React.FC = () => {
   // Filtered Expenses
   const filteredExpenses = useMemo(() => {
     return expenses.filter((e) => {
-      const term = searchTerm.toLowerCase();
+      const term = (searchTerm || '').toLowerCase().trim();
+      const cat = getExpenseCategoryById(e.expenseCategoryId);
+      const catName = e.expenseCategoryName || cat?.name || '';
+
       const matchesSearch =
-        e.id.toLowerCase().includes(term) ||
+        !term ||
+        (e.id || '').toLowerCase().includes(term) ||
         (e.vendor && e.vendor.toLowerCase().includes(term)) ||
         (e.description && e.description.toLowerCase().includes(term)) ||
         (e.projectId && e.projectId.toLowerCase().includes(term)) ||
         (e.clientName && e.clientName.toLowerCase().includes(term)) ||
-        (e.expenseCategoryName && e.expenseCategoryName.toLowerCase().includes(term)) ||
+        (catName && catName.toLowerCase().includes(term)) ||
         (e.notes && e.notes.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || e.paymentStatus === statusFilter;
@@ -163,7 +167,7 @@ export const ExpensesModule: React.FC = () => {
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
-  }, [expenses, searchTerm, statusFilter, categoryFilter]);
+  }, [expenses, searchTerm, statusFilter, categoryFilter, getExpenseCategoryById]);
 
   // Export CSV
   const handleExportCsv = () => {

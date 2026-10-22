@@ -70,11 +70,13 @@ export const EmployeeRolesModule: React.FC = () => {
   // Filtered rows
   const filteredRoles = useMemo(() => {
     return roles.filter((r) => {
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        r.roleName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.description.toLowerCase().includes(searchTerm.toLowerCase());
+        !term ||
+        (r.roleName || '').toLowerCase().includes(term) ||
+        (r.id || '').toLowerCase().includes(term) ||
+        (r.department && r.department.toLowerCase().includes(term)) ||
+        (r.description && r.description.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
 

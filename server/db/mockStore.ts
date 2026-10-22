@@ -1698,8 +1698,8 @@ class MockStore {
       return this.clients[idx];
     }
 
-    // Auto-generate semantic client ID if missing or generic
-    if (!client.id || /^([A-Z]+-)?CL-\d+/i.test(client.id) || /^[0-9a-f-]{36}$/i.test(client.id)) {
+    // Auto-generate semantic client ID if missing
+    if (!client.id) {
       client.id = this.getNextClientId(client.brand, client.name);
     }
 
@@ -1855,8 +1855,8 @@ class MockStore {
       return this.projects[idx];
     }
 
-    // Auto-generate semantic project ID with sequence counter if missing or generic
-    if (!proj.id || /^([A-Z]+-)?PRJ-\d+/i.test(proj.id) || /^[0-9a-f-]{36}$/i.test(proj.id) || proj.id.includes(' - ')) {
+    // Auto-generate semantic project ID with sequence counter if missing
+    if (!proj.id) {
       const clientName = proj.clientName || this.getClientById(proj.clientId)?.name || 'CLIENT';
       const serviceName = (proj as any).serviceName || (proj as any).serviceType || this.getServices().find((s) => s.id === proj.serviceId)?.name || 'SERVICE';
       proj.id = this.generateSemanticProjectId(

@@ -150,6 +150,7 @@ interface CrmContextType {
   deleteExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
 
   saveGstInvoice: (invoice: GstInvoice) => Promise<{ success: boolean; error?: string }>;
+  deleteGstInvoice: (invoiceId: string) => Promise<{ success: boolean; error?: string }>;
   refreshGstInvoices: () => Promise<GstInvoice[]>;
   syncGstInvoicesFromPayments: () => Promise<{ success: boolean; count: number; error?: string }>;
 
@@ -555,8 +556,26 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
-  // Relational entity lookup maps
-  const clientMap = useMemo(() => new Map(rawClients.map((c) => [c.id, c])), [rawClients]);
+  // Relational entity lookup maps with case-insensitive and multi-key indexing
+  const clientMap = useMemo(() => {
+    const map = new Map<string, Client>();
+    rawClients.forEach((c) => {
+      if (c.id) {
+        map.set(c.id, c);
+        map.set(c.id.toLowerCase(), c);
+      }
+      if ((c as any).client_id) {
+        map.set((c as any).client_id, c);
+        map.set(String((c as any).client_id).toLowerCase(), c);
+      }
+      if ((c as any).client_id_code) {
+        map.set((c as any).client_id_code, c);
+        map.set(String((c as any).client_id_code).toLowerCase(), c);
+      }
+    });
+    return map;
+  }, [rawClients]);
+
   const categoryMap = useMemo(() => {
     const map = new Map<string, ServiceCategory>();
     rawCategories.forEach((c) => {
@@ -575,34 +594,157 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
     return map;
   }, [rawCategories]);
-  const serviceMap = useMemo(() => new Map(rawServices.map((s) => [s.id, s])), [rawServices]);
-  const roleMap = useMemo(() => new Map(rawRoles.map((r) => [r.id, r])), [rawRoles]);
-  const projectMap = useMemo(() => new Map(rawProjects.map((p) => [p.id, p])), [rawProjects]);
-  const employeeMap = useMemo(() => new Map(rawEmployees.map((e) => [e.id, e])), [rawEmployees]);
+
+  const serviceMap = useMemo(() => {
+    const map = new Map<string, Service>();
+    rawServices.forEach((s) => {
+      if (s.id) {
+        map.set(s.id, s);
+        map.set(s.id.toLowerCase(), s);
+      }
+      if ((s as any).service_id_code) {
+        map.set((s as any).service_id_code, s);
+        map.set(String((s as any).service_id_code).toLowerCase(), s);
+      }
+      if ((s as any).guid) {
+        map.set((s as any).guid, s);
+        map.set(String((s as any).guid).toLowerCase(), s);
+      }
+    });
+    return map;
+  }, [rawServices]);
+
+  const roleMap = useMemo(() => {
+    const map = new Map<string, EmployeeRole>();
+    rawRoles.forEach((r) => {
+      if (r.id) {
+        map.set(r.id, r);
+        map.set(r.id.toLowerCase(), r);
+      }
+      if ((r as any).role_id_code) {
+        map.set((r as any).role_id_code, r);
+        map.set(String((r as any).role_id_code).toLowerCase(), r);
+      }
+    });
+    return map;
+  }, [rawRoles]);
+
+  const projectMap = useMemo(() => {
+    const map = new Map<string, Project>();
+    rawProjects.forEach((p) => {
+      if (p.id) {
+        map.set(p.id, p);
+        map.set(p.id.toLowerCase(), p);
+      }
+      if ((p as any).project_id_code) {
+        map.set((p as any).project_id_code, p);
+        map.set(String((p as any).project_id_code).toLowerCase(), p);
+      }
+    });
+    return map;
+  }, [rawProjects]);
+
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, Employee>();
+    rawEmployees.forEach((e) => {
+      if (e.id) {
+        map.set(e.id, e);
+        map.set(e.id.toLowerCase(), e);
+      }
+      if ((e as any).employee_id_code) {
+        map.set((e as any).employee_id_code, e);
+        map.set(String((e as any).employee_id_code).toLowerCase(), e);
+      }
+    });
+    return map;
+  }, [rawEmployees]);
+
   const assignmentMap = useMemo(() => new Map(rawAssignments.map((a) => [a.id, a])), [rawAssignments]);
   const employeePaymentMap = useMemo(() => new Map(rawEmployeePayments.map((p) => [p.id, p])), [rawEmployeePayments]);
-  const expenseCategoryMap = useMemo(() => new Map(rawExpenseCategories.map((c) => [c.id, c])), [rawExpenseCategories]);
+  const expenseCategoryMap = useMemo(() => {
+    const map = new Map<string, ExpenseCategory>();
+    rawExpenseCategories.forEach((c) => {
+      if (c.id) {
+        map.set(c.id, c);
+        map.set(c.id.toLowerCase(), c);
+      }
+      if ((c as any).exp_category_id_code) {
+        map.set((c as any).exp_category_id_code, c);
+        map.set(String((c as any).exp_category_id_code).toLowerCase(), c);
+      }
+    });
+    return map;
+  }, [rawExpenseCategories]);
   const expenseMap = useMemo(() => new Map(rawExpenses.map((e) => [e.id, e])), [rawExpenses]);
   const gstInvoiceMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.id, g])), [rawGstInvoices]);
   const gstInvoicePaymentMap = useMemo(() => new Map(rawGstInvoices.map((g) => [g.paymentId, g])), [rawGstInvoices]);
-  const bankAccountMap = useMemo(() => new Map(rawBankAccounts.map((b) => [b.id, b])), [rawBankAccounts]);
+  const bankAccountMap = useMemo(() => {
+    const map = new Map<string, BankAccount>();
+    rawBankAccounts.forEach((b) => {
+      if (b.id) {
+        map.set(b.id, b);
+        map.set(b.id.toLowerCase(), b);
+      }
+      if ((b as any).account_id_code) {
+        map.set((b as any).account_id_code, b);
+        map.set(String((b as any).account_id_code).toLowerCase(), b);
+      }
+    });
+    return map;
+  }, [rawBankAccounts]);
 
-  const getClientById = (id: string) => clientMap.get(id);
+  const getClientById = (id?: string | null) => {
+    if (!id) return undefined;
+    return clientMap.get(id) || clientMap.get(id.toLowerCase());
+  };
   const getCategoryById = (id?: string | null) => {
     if (!id || id === 'NA' || id === 'undefined' || id === 'null') return undefined;
     return categoryMap.get(id) || categoryMap.get(id.toLowerCase());
   };
-  const getServiceById = (id: string) => serviceMap.get(id);
-  const getRoleById = (id: string) => roleMap.get(id);
-  const getProjectById = (id: string) => projectMap.get(id);
-  const getEmployeeById = (id: string) => employeeMap.get(id);
-  const getAssignmentById = (id: string) => assignmentMap.get(id);
-  const getEmployeePaymentById = (id: string) => employeePaymentMap.get(id);
-  const getExpenseCategoryById = (id: string) => expenseCategoryMap.get(id);
-  const getExpenseById = (id: string) => expenseMap.get(id);
-  const getGstInvoiceById = (id: string) => gstInvoiceMap.get(id);
-  const getGstInvoiceByPaymentId = (paymentId: string) => gstInvoicePaymentMap.get(paymentId);
-  const getBankAccountById = (id: string) => bankAccountMap.get(id);
+  const getServiceById = (id?: string | null) => {
+    if (!id) return undefined;
+    return serviceMap.get(id) || serviceMap.get(id.toLowerCase());
+  };
+  const getRoleById = (id?: string | null) => {
+    if (!id) return undefined;
+    return roleMap.get(id) || roleMap.get(id.toLowerCase());
+  };
+  const getProjectById = (id?: string | null) => {
+    if (!id) return undefined;
+    return projectMap.get(id) || projectMap.get(id.toLowerCase());
+  };
+  const getEmployeeById = (id?: string | null) => {
+    if (!id) return undefined;
+    return employeeMap.get(id) || employeeMap.get(id.toLowerCase());
+  };
+  const getAssignmentById = (id?: string | null) => {
+    if (!id) return undefined;
+    return assignmentMap.get(id) || assignmentMap.get(id.toLowerCase());
+  };
+  const getEmployeePaymentById = (id?: string | null) => {
+    if (!id) return undefined;
+    return employeePaymentMap.get(id) || employeePaymentMap.get(id.toLowerCase());
+  };
+  const getExpenseCategoryById = (id?: string | null) => {
+    if (!id) return undefined;
+    return expenseCategoryMap.get(id) || expenseCategoryMap.get(id.toLowerCase());
+  };
+  const getExpenseById = (id?: string | null) => {
+    if (!id) return undefined;
+    return expenseMap.get(id);
+  };
+  const getGstInvoiceById = (id?: string | null) => {
+    if (!id) return undefined;
+    return gstInvoiceMap.get(id);
+  };
+  const getGstInvoiceByPaymentId = (paymentId?: string | null) => {
+    if (!paymentId) return undefined;
+    return gstInvoicePaymentMap.get(paymentId);
+  };
+  const getBankAccountById = (id?: string | null) => {
+    if (!id) return undefined;
+    return bankAccountMap.get(id) || bankAccountMap.get(id.toLowerCase());
+  };
   const getProjectExpenses = (projectId: string) => {
     if (!projectId || projectId === 'NA') return [];
     return rawExpenses.filter((e) => e.projectId === projectId);
@@ -1431,6 +1573,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  const deleteGstInvoiceAction = async (invoiceId: string) => {
+    const res = await storageService.deleteGstInvoice(invoiceId);
+    if (res.success) {
+      setRawGstInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+      showToast(`GST Invoice "${invoiceId}" deleted from Azure SQL.`, 'info');
+      loadAll().catch((err) => console.warn('[Background refresh after deleteGstInvoice]', err));
+    } else {
+      showToast(res.error || 'Failed to delete GST invoice.', 'error');
+    }
+    return res;
+  };
+
   const refreshGstInvoicesAction = async (): Promise<GstInvoice[]> => {
     try {
       const invoices = await storageService.fetchGstInvoices();
@@ -1666,6 +1820,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveExpense: saveExpenseAction,
         deleteExpense: deleteExpenseAction,
         saveGstInvoice: saveGstInvoiceAction,
+        deleteGstInvoice: deleteGstInvoiceAction,
         refreshGstInvoices: refreshGstInvoicesAction,
         syncGstInvoicesFromPayments: syncGstInvoicesFromPaymentsAction,
         users,

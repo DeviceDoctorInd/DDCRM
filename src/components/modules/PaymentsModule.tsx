@@ -75,6 +75,7 @@ export const PaymentsModule: React.FC = () => {
     confirmDelete,
     getClientById,
     getProjectById,
+    getBankAccountById,
     activeBrand,
     brandPrefix,
     isConsolidatedView,
@@ -208,21 +209,27 @@ export const PaymentsModule: React.FC = () => {
     return payments.filter((pay) => {
       const client = getClientById(pay.clientId);
       const project = getProjectById(pay.projectId);
+      const bankAcc = pay.bankAccountId ? getBankAccountById(pay.bankAccountId) : null;
+      const bankName = pay.bankAccountName || bankAcc?.accountName || '';
+      const term = (searchTerm || '').toLowerCase().trim();
 
       const matchesSearch =
-        pay.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pay.projectId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (pay.referenceUtr && pay.referenceUtr.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (client && client.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (project && project.clientName && project.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (pay.paymentMode && pay.paymentMode.toLowerCase().includes(searchTerm.toLowerCase()));
+        !term ||
+        (pay.id || '').toLowerCase().includes(term) ||
+        (pay.projectId || '').toLowerCase().includes(term) ||
+        (pay.referenceUtr && pay.referenceUtr.toLowerCase().includes(term)) ||
+        (client?.name && client.name.toLowerCase().includes(term)) ||
+        (pay.clientName && pay.clientName.toLowerCase().includes(term)) ||
+        (project?.clientName && project.clientName.toLowerCase().includes(term)) ||
+        (bankName && bankName.toLowerCase().includes(term)) ||
+        (pay.paymentMode && pay.paymentMode.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || pay.paymentStatus === statusFilter;
       const matchesMode = modeFilter === 'ALL' || pay.paymentMode === modeFilter;
 
       return matchesSearch && matchesStatus && matchesMode;
     });
-  }, [payments, searchTerm, statusFilter, modeFilter, getClientById, getProjectById]);
+  }, [payments, searchTerm, statusFilter, modeFilter, getClientById, getProjectById, getBankAccountById]);
 
   // Export CSV with all 15 exact fields
   const handleExportCsv = () => {
@@ -759,15 +766,20 @@ export const PaymentsModule: React.FC = () => {
                         >
                           {pay.paymentMode}
                         </span>
-                        {pay.bankAccountName && (
-                          <div
-                            className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1 truncate max-w-[170px]"
-                            title={`Credited to: ${pay.bankAccountName}`}
-                          >
-                            <Landmark className="w-3 h-3 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0" />
-                            <span className="truncate">{pay.bankAccountName}</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const bankAcc = pay.bankAccountId ? getBankAccountById(pay.bankAccountId) : null;
+                          const resolvedBankName = pay.bankAccountName || bankAcc?.accountName;
+                          if (!resolvedBankName) return null;
+                          return (
+                            <div
+                              className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1 truncate max-w-[170px]"
+                              title={`Credited to: ${resolvedBankName}`}
+                            >
+                              <Landmark className="w-3 h-3 text-slate-800 dark:text-slate-200 shrink-0" />
+                              <span className="truncate">{resolvedBankName}</span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700 dark:text-slate-300">
                         <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 select-all">

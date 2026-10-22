@@ -111,14 +111,16 @@ export const EmployeesModule: React.FC = () => {
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const role = getRoleById(emp.roleId);
+      const term = (searchTerm || '').toLowerCase().trim();
 
       const matchesSearch =
-        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        emp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (emp.notes && emp.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (emp.employeeType && emp.employeeType.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (role && role.roleName.toLowerCase().includes(searchTerm.toLowerCase()));
+        !term ||
+        (emp.name || '').toLowerCase().includes(term) ||
+        (emp.id || '').toLowerCase().includes(term) ||
+        (emp.email && emp.email.toLowerCase().includes(term)) ||
+        (emp.notes && emp.notes.toLowerCase().includes(term)) ||
+        (emp.employeeType && emp.employeeType.toLowerCase().includes(term)) ||
+        (role?.roleName && role.roleName.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
 

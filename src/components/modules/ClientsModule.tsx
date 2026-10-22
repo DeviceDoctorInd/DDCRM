@@ -85,14 +85,16 @@ export const ClientsModule: React.FC = () => {
   // Filtered rows
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (c.city && c.city.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.gstNumber && c.gstNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.contactPerson && c.contactPerson.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (c.phone && c.phone.toLowerCase().includes(searchTerm.toLowerCase()));
+        !term ||
+        (c.name || '').toLowerCase().includes(term) ||
+        (c.id || '').toLowerCase().includes(term) ||
+        (c.city && c.city.toLowerCase().includes(term)) ||
+        (c.gstNumber && c.gstNumber.toLowerCase().includes(term)) ||
+        (c.contactPerson && c.contactPerson.toLowerCase().includes(term)) ||
+        (c.email && c.email.toLowerCase().includes(term)) ||
+        (c.phone && c.phone.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
 

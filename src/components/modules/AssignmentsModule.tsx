@@ -116,15 +116,16 @@ export const AssignmentsModule: React.FC = () => {
       const employeeName = employee?.name || asn.employeeName || '';
       const roleName = role?.roleName || asn.roleName || '';
 
-      const term = searchTerm.toLowerCase();
+      const term = (searchTerm || '').toLowerCase().trim();
       const matchesSearch =
-        asn.id.toLowerCase().includes(term) ||
-        asn.projectId.toLowerCase().includes(term) ||
+        !term ||
+        (asn.id || '').toLowerCase().includes(term) ||
+        (asn.projectId || '').toLowerCase().includes(term) ||
         clientName.toLowerCase().includes(term) ||
         employeeName.toLowerCase().includes(term) ||
         roleName.toLowerCase().includes(term) ||
         (asn.workAssigned && asn.workAssigned.toLowerCase().includes(term)) ||
-        asn.paymentStatus.toLowerCase().includes(term);
+        (asn.paymentStatus && asn.paymentStatus.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || asn.paymentStatus === statusFilter;
       return matchesSearch && matchesStatus;

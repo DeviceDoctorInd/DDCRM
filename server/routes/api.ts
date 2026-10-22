@@ -230,15 +230,16 @@ export async function calculateNextClientIdSql(
   }
 
   try {
-    const pattern = `${baseId}%`;
+    const basePattern = `${baseId}-%`;
     const res = await pool.request()
       .input('brand', brand)
-      .input('pattern', pattern)
+      .input('baseId', baseId)
+      .input('basePattern', basePattern)
       .query(`
         SELECT CAST(id AS NVARCHAR(150)) as id,
                ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code
         FROM clients
-        WHERE id = @pattern OR client_id_code = @pattern OR id LIKE @pattern + '-%' OR client_id_code LIKE @pattern + '-%'
+        WHERE id = @baseId OR client_id_code = @baseId OR id LIKE @basePattern OR client_id_code LIKE @basePattern
       `);
 
     const rows = res.recordset || [];
@@ -563,7 +564,7 @@ router.get('/clients', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/clients', async (req: Request, res: Response) => {
+async function handleSaveClientRoute(req: Request, res: Response) {
   const client: Client = req.body;
   const brandContext = getBrandContext(req);
   client.brand = sanitizeBrand(client.brand, brandContext) as any;
@@ -573,8 +574,8 @@ router.post('/clients', async (req: Request, res: Response) => {
 
   const pool = await getOrInitPool();
 
-  // Enforce semantic Client ID if missing or generic
-  if (!client.id || /^([A-Z]+-)?CL-\d+/i.test(client.id) || /^[0-9a-f-]{36}$/i.test(client.id)) {
+  // Enforce semantic Client ID only if missing (new client onboarding)
+  if (!client.id) {
     client.id = await calculateNextClientIdSql(pool, client.brand || 'Device Doctor India', client.name);
   }
 
@@ -677,6 +678,12 @@ router.post('/clients', async (req: Request, res: Response) => {
     const saved = mockStore.saveClient(client);
     return res.json({ success: true, client: saved });
   }
+}
+
+router.post('/clients', handleSaveClientRoute);
+router.put('/clients/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveClientRoute(req, res);
 });
 
 router.delete('/clients/:id', async (req: Request, res: Response) => {
@@ -737,7 +744,7 @@ router.get('/categories', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/categories', async (req: Request, res: Response) => {
+async function handleSaveCategoryRoute(req: Request, res: Response) {
   const cat: ServiceCategory = req.body;
   const brandContext = getBrandContext(req);
   cat.brand = sanitizeBrand(cat.brand, brandContext) as any;
@@ -780,10 +787,16 @@ router.post('/categories', async (req: Request, res: Response) => {
     mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
-    console.warn('[POST /categories] Falling back to mock store:', err);
+    console.warn('[handleSaveCategoryRoute] Falling back to mock store:', err);
     const saved = mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: saved });
   }
+}
+
+router.post('/categories', handleSaveCategoryRoute);
+router.put('/categories/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveCategoryRoute(req, res);
 });
 
 router.delete('/categories/:id', async (req: Request, res: Response) => {
@@ -854,7 +867,7 @@ router.get('/services', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/services', async (req: Request, res: Response) => {
+async function handleSaveServiceRoute(req: Request, res: Response) {
   const srv: Service = req.body;
   const brandContext = getBrandContext(req);
   srv.brand = sanitizeBrand(srv.brand, brandContext) as any;
@@ -916,10 +929,16 @@ router.post('/services', async (req: Request, res: Response) => {
     mockStore.saveService(srv);
     return res.json({ success: true, service: srv });
   } catch (err) {
-    console.warn('[POST /services] Falling back to mock store:', err);
+    console.warn('[handleSaveServiceRoute] Falling back to mock store:', err);
     const saved = mockStore.saveService(srv);
     return res.json({ success: true, service: saved });
   }
+}
+
+router.post('/services', handleSaveServiceRoute);
+router.put('/services/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveServiceRoute(req, res);
 });
 
 router.delete('/services/:id', async (req: Request, res: Response) => {
@@ -1087,7 +1106,7 @@ router.get('/projects', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/projects', async (req: Request, res: Response) => {
+async function handleSaveProjectRoute(req: Request, res: Response) {
   const proj: Project = req.body;
   const brandContext = getBrandContext(req);
   proj.brand = sanitizeBrand(proj.brand, brandContext) as any;
@@ -1097,14 +1116,8 @@ router.post('/projects', async (req: Request, res: Response) => {
 
   const pool = await getOrInitPool();
 
-  // If creating new project or missing/generic/space-delimited ID, calculate strict semantic ID with sequence counter
-  const isNewOrGeneric =
-    !proj.id ||
-    /^([A-Z]+-)?PRJ-\d+/i.test(proj.id) ||
-    /^[0-9a-f-]{36}$/i.test(proj.id) ||
-    proj.id.includes(' - ');
-
-  if (isNewOrGeneric) {
+  // If creating new project (missing ID), calculate strict semantic ID with sequence counter
+  if (!proj.id) {
     let clientName = proj.clientName || '';
     let serviceName = (proj as any).serviceName || (proj as any).serviceType || '';
 
@@ -1275,13 +1288,19 @@ router.post('/projects', async (req: Request, res: Response) => {
         mockStore.saveProject(proj);
         return res.json({ success: true, project: proj });
       } catch (innerErr) {
-        console.warn('[POST /projects] Fallback retry failed:', innerErr);
+        console.warn('[handleSaveProjectRoute] Fallback retry failed:', innerErr);
       }
     }
-    console.warn('[POST /projects] Falling back to mock store:', err);
+    console.warn('[handleSaveProjectRoute] Falling back to mock store:', err);
     const saved = mockStore.saveProject(proj);
     return res.json({ success: true, project: saved });
   }
+}
+
+router.post('/projects', handleSaveProjectRoute);
+router.put('/projects/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveProjectRoute(req, res);
 });
 
 router.delete('/projects/:id', async (req: Request, res: Response) => {
@@ -2028,7 +2047,7 @@ router.get('/bank-accounts', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/bank-accounts', async (req: Request, res: Response) => {
+async function handleSaveBankAccountRoute(req: Request, res: Response) {
   const account: BankAccount = req.body;
   const brandContext = getBrandContext(req);
   account.brand = sanitizeBrand(account.brand, brandContext) as any;
@@ -2080,10 +2099,16 @@ router.post('/bank-accounts', async (req: Request, res: Response) => {
     mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: account });
   } catch (err) {
-    console.warn('[POST /bank-accounts] Falling back to mock store:', err);
+    console.warn('[handleSaveBankAccountRoute] Falling back to mock store:', err);
     const saved = mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: saved });
   }
+}
+
+router.post('/bank-accounts', handleSaveBankAccountRoute);
+router.put('/bank-accounts/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveBankAccountRoute(req, res);
 });
 
 router.delete('/bank-accounts/:id', async (req: Request, res: Response) => {
@@ -2129,7 +2154,7 @@ router.get('/gst-invoices', async (req: Request, res: Response) => {
     try {
       const unsyncedRes = await pool.request()
         .query(`
-          SELECT TOP 50 
+          SELECT 
             CAST(p.id AS NVARCHAR(100)) as id,
             ISNULL(CAST(p.payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
             ISNULL(CAST(p.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
@@ -2305,7 +2330,7 @@ router.post('/gst-invoices/sync', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/gst-invoices', async (req: Request, res: Response) => {
+async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
   const inv: GstInvoice = req.body;
   const brandContext = getBrandContext(req);
   inv.brand = sanitizeBrand(inv.brand, brandContext) as any;
@@ -2363,10 +2388,16 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
     mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: inv });
   } catch (err) {
-    console.warn('[POST /gst-invoices] Falling back to mock store:', err);
+    console.warn('[handleSaveGstInvoiceRoute] Falling back to mock store:', err);
     const saved = mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: saved });
   }
+}
+
+router.post('/gst-invoices', handleSaveGstInvoiceRoute);
+router.put('/gst-invoices/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveGstInvoiceRoute(req, res);
 });
 
 router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
@@ -2428,7 +2459,7 @@ router.get('/roles', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/roles', async (req: Request, res: Response) => {
+async function handleSaveRoleRoute(req: Request, res: Response) {
   const role: EmployeeRole = req.body;
   const brandContext = getBrandContext(req);
   role.brand = sanitizeBrand(role.brand, brandContext) as any;
@@ -2472,10 +2503,16 @@ router.post('/roles', async (req: Request, res: Response) => {
     mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role });
   } catch (err) {
-    console.warn('[POST /roles] Falling back to mock store:', err);
+    console.warn('[handleSaveRoleRoute] Falling back to mock store:', err);
     const saved = mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role: saved });
   }
+}
+
+router.post('/roles', handleSaveRoleRoute);
+router.put('/roles/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveRoleRoute(req, res);
 });
 
 router.delete('/roles/:id', async (req: Request, res: Response) => {
@@ -2546,7 +2583,7 @@ router.get('/employees', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/employees', async (req: Request, res: Response) => {
+async function handleSaveEmployeeRoute(req: Request, res: Response) {
   const emp: Employee = req.body;
   const brandContext = getBrandContext(req);
   emp.brand = sanitizeBrand(emp.brand, brandContext) as any;
@@ -2600,10 +2637,16 @@ router.post('/employees', async (req: Request, res: Response) => {
     mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: emp });
   } catch (err) {
-    console.warn('[POST /employees] Falling back to mock store:', err);
+    console.warn('[handleSaveEmployeeRoute] Falling back to mock store:', err);
     const saved = mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: saved });
   }
+}
+
+router.post('/employees', handleSaveEmployeeRoute);
+router.put('/employees/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveEmployeeRoute(req, res);
 });
 
 router.delete('/employees/:id', async (req: Request, res: Response) => {
@@ -2674,7 +2717,7 @@ router.get('/assignments', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/assignments', async (req: Request, res: Response) => {
+async function handleSaveAssignmentRoute(req: Request, res: Response) {
   const asn: Assignment = req.body;
   const brandContext = getBrandContext(req);
   asn.brand = sanitizeBrand(asn.brand, brandContext) as any;
@@ -2737,10 +2780,16 @@ router.post('/assignments', async (req: Request, res: Response) => {
     mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: asn });
   } catch (err) {
-    console.warn('[POST /assignments] Falling back to mock store:', err);
+    console.warn('[handleSaveAssignmentRoute] Falling back to mock store:', err);
     const saved = mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: saved });
   }
+}
+
+router.post('/assignments', handleSaveAssignmentRoute);
+router.put('/assignments/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveAssignmentRoute(req, res);
 });
 
 router.delete('/assignments/:id', async (req: Request, res: Response) => {
@@ -2952,7 +3001,7 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/expense-categories', async (req: Request, res: Response) => {
+async function handleSaveExpenseCategoryRoute(req: Request, res: Response) {
   const cat: ExpenseCategory = req.body;
   const brandContext = getBrandContext(req);
   cat.brand = sanitizeBrand(cat.brand, brandContext) as any;
@@ -2996,10 +3045,16 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
     mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
-    console.warn('[POST /expense-categories] Falling back to mock store:', err);
+    console.warn('[handleSaveExpenseCategoryRoute] Falling back to mock store:', err);
     const saved = mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: saved });
   }
+}
+
+router.post('/expense-categories', handleSaveExpenseCategoryRoute);
+router.put('/expense-categories/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveExpenseCategoryRoute(req, res);
 });
 
 router.delete('/expense-categories/:id', async (req: Request, res: Response) => {
@@ -3074,7 +3129,7 @@ router.get('/expenses', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/expenses', async (req: Request, res: Response) => {
+async function handleSaveExpenseRoute(req: Request, res: Response) {
   const exp: Expense = req.body;
   const brandContext = getBrandContext(req);
   exp.brand = sanitizeBrand(exp.brand, brandContext) as any;
@@ -3150,10 +3205,16 @@ router.post('/expenses', async (req: Request, res: Response) => {
     mockStore.saveExpense(exp);
     return res.json({ success: true, expense: exp });
   } catch (err) {
-    console.warn('[POST /expenses] Falling back to mock store:', err);
+    console.warn('[handleSaveExpenseRoute] Falling back to mock store:', err);
     const saved = mockStore.saveExpense(exp);
     return res.json({ success: true, expense: saved });
   }
+}
+
+router.post('/expenses', handleSaveExpenseRoute);
+router.put('/expenses/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveExpenseRoute(req, res);
 });
 
 router.delete('/expenses/:id', async (req: Request, res: Response) => {
@@ -3219,7 +3280,7 @@ router.get('/users', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/users', async (req: Request, res: Response) => {
+async function handleSaveUserRoute(req: Request, res: Response) {
   const user: AppUser = req.body;
   const now = new Date().toISOString();
   user.updatedAt = now;
@@ -3292,12 +3353,18 @@ router.post('/users', async (req: Request, res: Response) => {
     return res.json({ success: true, user });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.error('[POST /users] Live Azure SQL Error:', errMsg);
+    console.error('[handleSaveUserRoute] Live Azure SQL Error:', errMsg);
     return res.status(500).json({
       success: false,
       error: `Failed to save user in Azure SQL: ${errMsg}`,
     });
   }
+}
+
+router.post('/users', handleSaveUserRoute);
+router.put('/users/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveUserRoute(req, res);
 });
 
 router.delete('/users/:id', async (req: Request, res: Response) => {

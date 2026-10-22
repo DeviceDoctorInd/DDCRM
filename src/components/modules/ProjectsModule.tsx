@@ -106,17 +106,19 @@ export const ProjectsModule: React.FC = () => {
     return projects.filter((p) => {
       const client = getClientById(p.clientId);
       const service = getServiceById(p.serviceId);
+      const term = (searchTerm || '').toLowerCase().trim();
 
       const matchesSearch =
-        p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.clientId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.clientName && p.clientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (client && client.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (service && service.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.projectManager && p.projectManager.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.paymentMode && p.paymentMode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.proposalDocument?.name && p.proposalDocument.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.contractDocument?.name && p.contractDocument.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        !term ||
+        (p.id || '').toLowerCase().includes(term) ||
+        (p.clientId || '').toLowerCase().includes(term) ||
+        (p.clientName && p.clientName.toLowerCase().includes(term)) ||
+        (client?.name && client.name.toLowerCase().includes(term)) ||
+        (service?.name && service.name.toLowerCase().includes(term)) ||
+        (p.projectManager && p.projectManager.toLowerCase().includes(term)) ||
+        (p.paymentMode && p.paymentMode.toLowerCase().includes(term)) ||
+        (p.proposalDocument?.name && p.proposalDocument.name.toLowerCase().includes(term)) ||
+        (p.contractDocument?.name && p.contractDocument.name.toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
 

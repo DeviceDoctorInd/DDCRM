@@ -78,9 +78,12 @@ export const UsersModule: React.FC = () => {
   const isSuperAdmin = authUser?.role === 'Super Admin' || authUser?.role === 'Super Administrator';
 
   const filteredUsers = users.filter((u) => {
+    const term = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase());
+      !term ||
+      (u.name || '').toLowerCase().includes(term) ||
+      (u.email || '').toLowerCase().includes(term) ||
+      (u.id || '').toLowerCase().includes(term);
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
