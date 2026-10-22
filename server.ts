@@ -15,7 +15,7 @@ const isTsxRunning =
 
 if (!isTsxRunning) {
   process.env.__TSX_BOOTSTRAPPED__ = '1';
-  const tsxBin = path.resolve(process.cwd(), 'node_modules/.bin/tsx');
+  const tsxBin = path.resolve(__dirname, 'node_modules/.bin/tsx');
   const child = spawn(tsxBin, [__filename, ...process.argv.slice(2)], {
     stdio: 'inherit',
     env: process.env,

@@ -163,19 +163,62 @@ class StorageService {
 
   // --- Live Azure SQL Authentication ---
   public async login(email: string, pass: string): Promise<{ success: boolean; user?: AuthUser; token?: string; error?: string }> {
+    // Purge any stale session or token before attempting authentication with new credentials
+    this.setAuthToken(null);
+    this.setAuthUser(null);
+
     try {
       const res = await this.apiCall<{ success: boolean; user: AuthUser; token?: string; error?: string }>('/api/auth/login', 'POST', {
-        email,
-        password: pass,
+        email: email.trim(),
+        password: pass.trim(),
       });
       if (res.success && res.user) {
         if (res.token) {
           this.setAuthToken(res.token);
         }
         this.setAuthUser(res.user);
+        this.notifyListeners();
         return { success: true, user: res.user, token: res.token };
       }
       return { success: false, error: res.error || 'Login verification failed.' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
+    }
+  }
+
+  // --- Live Azure SQL Credentials Update ---
+  public async updateCredentials(data: {
+    id?: string;
+    adminId?: string;
+    email?: string;
+    name?: string;
+    currentPassword?: string;
+    newPassword?: string;
+    password?: string;
+    role?: string;
+    brand?: string;
+  }): Promise<{ success: boolean; message?: string; user?: AuthUser; token?: string; error?: string }> {
+    try {
+      const res = await this.apiCall<{
+        success: boolean;
+        message: string;
+        user: AuthUser;
+        token?: string;
+        error?: string;
+      }>('/api/auth/update-credentials', 'PUT', data);
+
+      if (res.success) {
+        if (res.token) {
+          this.setAuthToken(res.token);
+        }
+        if (res.user) {
+          this.setAuthUser(res.user);
+        }
+        this.notifyListeners();
+        return { success: true, message: res.message, user: res.user, token: res.token };
+      }
+      return { success: false, error: res.error || 'Failed to update credentials in Azure SQL.' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
@@ -725,20 +768,21 @@ class StorageService {
   // --- Dynamic Brand-Aware ID Generation ---
   public generateId(type: string, brand: BrandName, existingItems: Array<{ id: string; brand?: BrandName }> = []): string {
     const prefix = getBrandPrefix(brand);
-    const cleanType = type.replace(/^(DDI|CDS|FXL|DNS)-/, '');
+    const cleanType = type.replace(/^(DDI|CDS|FXL|DNS|DUNS)-/, '').toUpperCase();
+    const pattern = new RegExp(`^${prefix}-${cleanType}-(\\d+)$`, 'i');
 
-    const brandItems = existingItems.filter(
-      (item) => item.brand === brand || (item.id && item.id.startsWith(prefix))
-    );
+    let max = 0;
+    for (const item of existingItems) {
+      if (!item || !item.id) continue;
+      const match = item.id.match(pattern);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > max) {
+          max = num;
+        }
+      }
+    }
 
-    const numbers = brandItems.map((item) => {
-      const parts = (item.id || '').split('-');
-      const lastPart = parts[parts.length - 1];
-      const num = parseInt(lastPart, 10);
-      return isNaN(num) ? 0 : num;
-    });
-
-    const max = numbers.length > 0 ? Math.max(...numbers) : 0;
     const nextNum = max + 1;
     return `${prefix}-${cleanType}-${String(nextNum).padStart(3, '0')}`;
   }

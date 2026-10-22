@@ -131,3 +131,32 @@ export function extractProjectSequence(projectId: string, basePrefix?: string): 
 
   return null;
 }
+
+/**
+ * Generates generic semantic ID with sequential padding (e.g. DDI-CAT-001, DDI-SRV-003, DDI-BNK-004)
+ * Guarantees unlimited record creation with strictly non-colliding increments.
+ */
+export function generateSemanticEntityId(
+  type: string,
+  brand?: string | null,
+  existingItems: Array<{ id?: string; brand?: string }> = []
+): string {
+  const prefix = getBrandSemanticPrefix(brand);
+  const cleanType = type.replace(/^(DDI|CDS|FXL|DNS|DUNS)-/, '').toUpperCase();
+  const pattern = new RegExp(`^${prefix}-${cleanType}-(\\d+)$`, 'i');
+
+  let max = 0;
+  for (const item of existingItems) {
+    if (!item || !item.id) continue;
+    const match = item.id.match(pattern);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > max) {
+        max = num;
+      }
+    }
+  }
+
+  const nextNum = max + 1;
+  return `${prefix}-${cleanType}-${String(nextNum).padStart(3, '0')}`;
+}

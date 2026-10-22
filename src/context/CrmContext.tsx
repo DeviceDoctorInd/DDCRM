@@ -45,8 +45,19 @@ interface CrmContextType {
 
   // Session & Authentication
   authUser: AuthUser | null;
-  login: (email: string, pass: string) => Promise<boolean>;
+  login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  updateCredentials: (data: {
+    id?: string;
+    adminId?: string;
+    email?: string;
+    name?: string;
+    currentPassword?: string;
+    newPassword?: string;
+    password?: string;
+    role?: string;
+    brand?: string;
+  }) => Promise<{ success: boolean; message?: string; error?: string }>;
 
   // Filtered views scoped to activeBrand (or all if consolidated)
   clients: Client[];
@@ -475,7 +486,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     storageService.setTheme(nextTheme);
   };
 
-  const login = async (email: string, pass: string): Promise<boolean> => {
+  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const res = await storageService.login(email, pass);
     if (res.success && res.user) {
       setAuthUserState(res.user);
@@ -492,10 +503,11 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setIsConsolidatedView(false);
 
       showToast(`Welcome back, ${res.user.name}! Please select your active brand workspace.`, 'info');
-      return true;
+      return { success: true };
     }
-    showToast(res.error || 'Authentication failed against live Azure SQL app_users.', 'error');
-    return false;
+    const errMessage = res.error || 'Authentication failed against live Azure SQL app_users.';
+    showToast(errMessage, 'error');
+    return { success: false, error: errMessage };
   };
 
   const logout = () => {
@@ -742,8 +754,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveCategory(category);
     if (res.success) {
+      const savedCategory = res.category || category;
+      setRawCategories((prev) => {
+        const idx = prev.findIndex((c) => c.id === savedCategory.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedCategory;
+          return updated;
+        }
+        return [savedCategory, ...prev];
+      });
       showToast(`Category "${category.name}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveCategory]', err));
     } else {
       showToast(res.error || 'Failed to save category to Azure SQL.', 'error');
     }
@@ -795,8 +817,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveService(service);
     if (res.success) {
+      const savedService = res.service || service;
+      setRawServices((prev) => {
+        const idx = prev.findIndex((s) => s.id === savedService.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedService;
+          return updated;
+        }
+        return [savedService, ...prev];
+      });
       showToast(`Service "${service.name}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveService]', err));
     } else {
       showToast(res.error || 'Failed to save service.', 'error');
     }
@@ -987,12 +1019,22 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const saveBankAccountAction = async (account: BankAccount) => {
     if (!account.brand) account.brand = activeBrand;
     if (!account.id) {
-      account.id = storageService.generateId('BNK', account.brand, rawBankAccounts);
+      account.id = storageService.generateId('ACC', account.brand, rawBankAccounts);
     }
     const res = await storageService.saveBankAccount(account);
     if (res.success) {
+      const savedAccount = res.bankAccount || account;
+      setRawBankAccounts((prev) => {
+        const idx = prev.findIndex((b) => b.id === savedAccount.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedAccount;
+          return updated;
+        }
+        return [savedAccount, ...prev];
+      });
       showToast(`Bank account "${account.accountName}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveBankAccount]', err));
     } else {
       showToast(res.error || 'Failed to save bank account to Azure SQL.', 'error');
     }
@@ -1049,8 +1091,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveRole(role);
     if (res.success) {
+      const savedRole = res.role || role;
+      setRawRoles((prev) => {
+        const idx = prev.findIndex((r) => r.id === savedRole.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedRole;
+          return updated;
+        }
+        return [savedRole, ...prev];
+      });
       showToast(`Role "${role.roleName}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveRole]', err));
     } else {
       showToast(res.error || 'Failed to save role.', 'error');
     }
@@ -1091,8 +1143,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveEmployee(employee);
     if (res.success) {
+      const savedEmployee = res.employee || employee;
+      setRawEmployees((prev) => {
+        const idx = prev.findIndex((e) => e.id === savedEmployee.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedEmployee;
+          return updated;
+        }
+        return [savedEmployee, ...prev];
+      });
       showToast(`Staff profile for "${employee.name}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveEmployee]', err));
     } else {
       showToast(res.error || 'Failed to save staff profile.', 'error');
     }
@@ -1140,8 +1202,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveAssignment(assignment);
     if (res.success) {
+      const savedAssignment = res.assignment || assignment;
+      setRawAssignments((prev) => {
+        const idx = prev.findIndex((a) => a.id === savedAssignment.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedAssignment;
+          return updated;
+        }
+        return [savedAssignment, ...prev];
+      });
       showToast(`Assignment "${assignment.id}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveAssignment]', err));
     } else {
       showToast(res.error || 'Failed to save assignment.', 'error');
     }
@@ -1180,8 +1252,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveEmployeePayment(payment);
     if (res.success) {
+      const savedPayment = res.payment || payment;
+      setRawEmployeePayments((prev) => {
+        const idx = prev.findIndex((p) => p.id === savedPayment.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedPayment;
+          return updated;
+        }
+        return [savedPayment, ...prev];
+      });
       showToast(`Staff payout "${payment.id}" recorded in Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveEmployeePayment]', err));
     } else {
       showToast(res.error || 'Failed to record payout.', 'error');
     }
@@ -1202,12 +1284,22 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const saveExpenseCategoryAction = async (category: ExpenseCategory) => {
     if (!category.brand) category.brand = activeBrand;
     if (!category.id) {
-      category.id = storageService.generateId('EXPCAT', category.brand, rawExpenseCategories);
+      category.id = storageService.generateId('EXC', category.brand, rawExpenseCategories);
     }
     const res = await storageService.saveExpenseCategory(category);
     if (res.success) {
+      const savedCat = res.category || category;
+      setRawExpenseCategories((prev) => {
+        const idx = prev.findIndex((c) => c.id === savedCat.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedCat;
+          return updated;
+        }
+        return [savedCat, ...prev];
+      });
       showToast(`Expense category "${category.name}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveExpenseCategory]', err));
     } else {
       showToast(res.error || 'Failed to save expense category.', 'error');
     }
@@ -1259,8 +1351,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveExpense(expense);
     if (res.success) {
+      const savedExpense = res.expense || expense;
+      setRawExpenses((prev) => {
+        const idx = prev.findIndex((e) => e.id === savedExpense.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedExpense;
+          return updated;
+        }
+        return [savedExpense, ...prev];
+      });
       showToast(`Expense "${expense.id}" recorded in Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveExpense]', err));
     } else {
       showToast(res.error || 'Failed to save expense.', 'error');
     }
@@ -1285,8 +1387,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const res = await storageService.saveGstInvoice(invoice);
     if (res.success) {
+      const savedInv = res.invoice || invoice;
+      setRawGstInvoices((prev) => {
+        const idx = prev.findIndex((g) => g.id === savedInv.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedInv;
+          return updated;
+        }
+        return [savedInv, ...prev];
+      });
       showToast(`GST Invoice "${invoice.id}" saved to Azure SQL.`, 'success');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after saveGstInvoice]', err));
     } else {
       showToast(res.error || 'Failed to save GST invoice.', 'error');
     }
@@ -1357,6 +1469,30 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       showToast(res.error || 'Failed to delete user account.', 'error');
     }
     return res;
+  };
+
+  const updateCredentialsAction = async (data: {
+    id?: string;
+    adminId?: string;
+    email?: string;
+    name?: string;
+    currentPassword?: string;
+    newPassword?: string;
+    password?: string;
+    role?: string;
+    brand?: string;
+  }) => {
+    const res = await storageService.updateCredentials(data);
+    if (res.success) {
+      if (res.user) {
+        setAuthUserState(res.user);
+      }
+      showToast(res.message || 'Credentials successfully updated in Azure SQL.', 'success');
+      await loadAll();
+      return { success: true, message: res.message };
+    }
+    showToast(res.error || 'Failed to update credentials in Azure SQL.', 'error');
+    return { success: false, error: res.error };
   };
 
   const openAddProjectModal = () => {
@@ -1509,6 +1645,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         users,
         saveUser: saveUserAction,
         deleteUser: deleteUserAction,
+        updateCredentials: updateCredentialsAction,
         hasPermission,
         databaseStatus,
         refreshDatabaseStatus,

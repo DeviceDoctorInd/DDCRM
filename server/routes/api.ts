@@ -83,6 +83,7 @@ import {
   generateSemanticProjectId,
   extractProjectSequence,
   getBaseProjectPrefix,
+  generateSemanticEntityId,
 } from '../utils/semanticId';
 
 /**
@@ -492,9 +493,15 @@ router.post('/db/clear-demo', async (_req: Request, res: Response) => {
 // --- Authentication & RBAC Routes ---
 router.use('/auth', authRoutes);
 
-// Backward-compatible fallback for direct /auth/login POST requests
+// Direct endpoint bindings for auth
 router.post('/auth/login', (req: Request, res: Response) => {
   authController.login(req, res);
+});
+router.put('/auth/update-credentials', (req: Request, res: Response) => {
+  authController.updateCredentials(req, res);
+});
+router.post('/auth/update-credentials', (req: Request, res: Response) => {
+  authController.updateCredentials(req, res);
 });
 
 // --- CLIENTS ---
@@ -710,7 +717,7 @@ router.get('/categories', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
                ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
@@ -738,6 +745,8 @@ router.post('/categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
+  cat.id = (cat.id || '').trim() || generateSemanticEntityId('CAT', cat.brand, mockStore.getServiceCategories(cat.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveServiceCategory(cat);
@@ -759,15 +768,16 @@ router.post('/categories', async (req: Request, res: Response) => {
           .input('created_at', cat.createdAt)
           .input('updated_at', cat.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM service_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
-              UPDATE service_categories SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at 
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            IF EXISTS (SELECT 1 FROM service_categories WHERE id = @id OR (category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR CAST(id AS NVARCHAR(100)) = @rawId)
+              UPDATE service_categories SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, category_id_code=@rawId 
+              WHERE id = @id OR (category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR CAST(id AS NVARCHAR(100)) = @rawId
             ELSE
               INSERT INTO service_categories (id, category_id_code, brand, name, category_name, description, status, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @description, @status, @created_at, @updated_at)
           `),
       'service_categories'
     );
+    mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
     console.warn('[POST /categories] Falling back to mock store:', err);
@@ -814,7 +824,7 @@ router.get('/services', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(service_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name, 
                ISNULL(CAST(category_id AS NVARCHAR(100)), '') as categoryId, 
@@ -843,6 +853,8 @@ router.post('/services', async (req: Request, res: Response) => {
   srv.updatedAt = now;
   srv.createdAt = srv.createdAt || now;
 
+  srv.id = (srv.id || '').trim() || generateSemanticEntityId('SRV', srv.brand, mockStore.getServices(srv.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveService(srv);
@@ -866,15 +878,16 @@ router.post('/services', async (req: Request, res: Response) => {
           .input('created_at', srv.createdAt)
           .input('updated_at', srv.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM services WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
-              UPDATE services SET brand=@brand, name=@name, service_name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at 
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            IF EXISTS (SELECT 1 FROM services WHERE id = @id OR (service_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
+              UPDATE services SET brand=@brand, name=@name, service_name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at, service_id_code=@rawId 
+              WHERE id = @id OR (service_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO services (id, service_id_code, brand, name, service_name, category_id, description, status, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @category_id, @description, @status, @created_at, @updated_at)
           `),
       'services'
     );
+    mockStore.saveService(srv);
     return res.json({ success: true, service: srv });
   } catch (err) {
     console.warn('[POST /services] Falling back to mock store:', err);
@@ -1505,7 +1518,7 @@ router.get('/payments', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
@@ -1817,6 +1830,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
+  payment.id = (payment.id || '').trim() || generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand));
+
   // Normalize payment proof into a clean object or undefined
   payment.paymentProof = parsePaymentProof(payment.paymentProof);
   const serializedProof = serializePaymentProof(payment.paymentProof);
@@ -1865,21 +1880,24 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .input('created_at', payment.createdAt)
           .input('updated_at', payment.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
                                  payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
                                  payment_date=@payment_date, due_date=@due_date,
                                  amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
                                  amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
                                  days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
-                                 payment_proof_notes=@payment_proof_notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                                 payment_proof_notes=@payment_proof_notes, updated_at=@updated_at,
+                                 payment_id_code=@rawId
+              WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
           `),
       'payments'
     );
+
+    mockStore.savePayment(payment);
 
     // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
     let syncedGstInvoice: GstInvoice | null = null;
@@ -1958,7 +1976,7 @@ router.get('/bank-accounts', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(account_name AS NVARCHAR(255)), '') as accountName, 
                ISNULL(CAST(bank_name AS NVARCHAR(255)), '') as bankName, 
@@ -1992,11 +2010,12 @@ router.post('/bank-accounts', async (req: Request, res: Response) => {
   account.updatedAt = now;
   account.createdAt = account.createdAt || now;
 
-  mockStore.saveBankAccount(account);
+  account.id = (account.id || '').trim() || generateSemanticEntityId('ACC', account.brand, mockStore.getBankAccounts(account.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json({ success: true, bankAccount: account });
+    const saved = mockStore.saveBankAccount(account);
+    return res.json({ success: true, bankAccount: saved });
   }
 
   try {
@@ -2020,22 +2039,24 @@ router.post('/bank-accounts', async (req: Request, res: Response) => {
           .input('created_at', account.createdAt)
           .input('updated_at', account.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM bank_accounts WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM bank_accounts WHERE id = @id OR (account_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE bank_accounts 
               SET brand=@brand, account_name=@account_name, bank_name=@bank_name, account_number=@account_number,
                   ifsc_code=@ifsc_code, branch_name=@branch_name, upi_id=@upi_id, account_type=@account_type,
-                  status=@status, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                  status=@status, notes=@notes, updated_at=@updated_at, account_id_code=@rawId
+              WHERE id = @id OR (account_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
-              INSERT INTO bank_accounts (id, brand, account_name, bank_name, account_number, ifsc_code, branch_name, upi_id, account_type, status, notes, created_at, updated_at)
-              VALUES (@id, @brand, @account_name, @bank_name, @account_number, @ifsc_code, @branch_name, @upi_id, @account_type, @status, @notes, @created_at, @updated_at)
+              INSERT INTO bank_accounts (id, account_id_code, brand, account_name, bank_name, account_number, ifsc_code, branch_name, upi_id, account_type, status, notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @account_name, @bank_name, @account_number, @ifsc_code, @branch_name, @upi_id, @account_type, @status, @notes, @created_at, @updated_at)
           `),
       'bank_accounts'
     );
+    mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: account });
   } catch (err) {
     console.warn('[POST /bank-accounts] Falling back to mock store:', err);
-    return res.json({ success: true, bankAccount: account });
+    const saved = mockStore.saveBankAccount(account);
+    return res.json({ success: true, bankAccount: saved });
   }
 });
 
@@ -2138,7 +2159,7 @@ router.get('/gst-invoices', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -2228,7 +2249,7 @@ router.post('/gst-invoices/sync', async (req: Request, res: Response) => {
     const allInvoices = await pool.request()
       .input('brandFilter', brand || null)
       .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -2266,11 +2287,12 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
-  mockStore.saveGstInvoice(inv);
+  inv.id = (inv.id || '').trim() || generateSemanticEntityId('GST', inv.brand, mockStore.getGstInvoices(inv.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json({ success: true, invoice: inv });
+    const saved = mockStore.saveGstInvoice(inv);
+    return res.json({ success: true, invoice: saved });
   }
 
   try {
@@ -2298,23 +2320,26 @@ router.post('/gst-invoices', async (req: Request, res: Response) => {
           .input('created_at', inv.createdAt)
           .input('updated_at', inv.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR (payment_id = @payment_id AND @payment_id <> ''))
+            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (payment_id = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL))
               UPDATE gst_invoices SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
                                      client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
                                      currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
                                      invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
-                                     gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR (payment_id = @payment_id AND @payment_id <> '')
+                                     gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at,
+                                     invoice_id_code=@rawId
+              WHERE id = @id OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (payment_id = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL)
             ELSE
-              INSERT INTO gst_invoices (id, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
-              VALUES (@id, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
+              INSERT INTO gst_invoices (id, invoice_id_code, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
+              VALUES (@id, @rawId, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
           `),
       'gst_invoices'
     );
+    mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: inv });
   } catch (err) {
     console.warn('[POST /gst-invoices] Falling back to mock store:', err);
-    return res.json({ success: true, invoice: inv });
+    const saved = mockStore.saveGstInvoice(inv);
+    return res.json({ success: true, invoice: saved });
   }
 });
 
@@ -2356,7 +2381,7 @@ router.get('/roles', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(role_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(role_name AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as roleName, 
                ISNULL(CAST(department AS NVARCHAR(255)), '') as department, 
@@ -2385,6 +2410,8 @@ router.post('/roles', async (req: Request, res: Response) => {
   role.updatedAt = now;
   role.createdAt = role.createdAt || now;
 
+  role.id = (role.id || '').trim() || generateSemanticEntityId('ROL', role.brand, mockStore.getEmployeeRoles(role.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveEmployeeRole(role);
@@ -2407,15 +2434,16 @@ router.post('/roles', async (req: Request, res: Response) => {
           .input('created_at', role.createdAt)
           .input('updated_at', role.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM employee_roles WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
-              UPDATE employee_roles SET brand=@brand, role_name=@role_name, name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at 
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+            IF EXISTS (SELECT 1 FROM employee_roles WHERE id = @id OR (role_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
+              UPDATE employee_roles SET brand=@brand, role_name=@role_name, name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at, role_id_code=@rawId 
+              WHERE id = @id OR (role_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO employee_roles (id, role_id_code, brand, role_name, name, department, status, description, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @role_name, @role_name, @department, @status, @description, @created_at, @updated_at)
           `),
       'employee_roles'
     );
+    mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role });
   } catch (err) {
     console.warn('[POST /roles] Falling back to mock store:', err);
@@ -2462,8 +2490,8 @@ router.get('/employees', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
-               CAST(id AS NVARCHAR(100)) as employee_id,
+        SELECT ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+               ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as employee_id,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name, 
@@ -2501,6 +2529,8 @@ router.post('/employees', async (req: Request, res: Response) => {
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
+  emp.id = (emp.id || '').trim() || generateSemanticEntityId('EMP', emp.brand, mockStore.getEmployees(emp.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveEmployee(emp);
@@ -2529,17 +2559,19 @@ router.post('/employees', async (req: Request, res: Response) => {
           .input('created_at', emp.createdAt)
           .input('updated_at', emp.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM employees WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM employees WHERE id = @id OR (employee_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE employees SET brand=@brand, name=@name, employee_name=@name, role_id=@role_id, email=@email, status=@status,
                                   joining_date=@joining_date, cost_of_employee=@cost_of_employee,
-                                  employee_type=@employee_type, comes_under_tds=@comes_under_tds, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                                  employee_type=@employee_type, comes_under_tds=@comes_under_tds, notes=@notes, updated_at=@updated_at,
+                                  employee_id_code=@rawId
+              WHERE id = @id OR (employee_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO employees (id, employee_id_code, brand, name, employee_name, role_id, email, status, joining_date, cost_of_employee, employee_type, comes_under_tds, notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @role_id, @email, @status, @joining_date, @cost_of_employee, @employee_type, @comes_under_tds, @notes, @created_at, @updated_at)
           `),
       'employees'
     );
+    mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: emp });
   } catch (err) {
     console.warn('[POST /employees] Falling back to mock store:', err);
@@ -2586,7 +2618,7 @@ router.get('/assignments', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(assignment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
@@ -2626,6 +2658,8 @@ router.post('/assignments', async (req: Request, res: Response) => {
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
+  asn.id = (asn.id || '').trim() || generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveAssignment(asn);
@@ -2660,19 +2694,21 @@ router.post('/assignments', async (req: Request, res: Response) => {
           .input('created_at', asn.createdAt)
           .input('updated_at', asn.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM assignments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM assignments WHERE id = @id OR (assignment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE assignments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
                                      employee_id=@employee_id, employee_name=@employee_name, role_name=@role_name,
                                      assigned_date=@assigned_date, work_assigned=@work_assigned, work_module_assigned=@work_assigned,
                                      amount=@amount, amount_paid=@amount_paid, payment_status=@payment_status,
-                                     employee_notes=@employee_notes, last_note_update=@last_note_update, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                                     employee_notes=@employee_notes, last_note_update=@last_note_update, updated_at=@updated_at,
+                                     assignment_id_code=@rawId
+              WHERE id = @id OR (assignment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO assignments (id, assignment_id_code, brand, project_id, client_id, client_name, employee_id, employee_name, role_name, assigned_date, work_assigned, work_module_assigned, amount, amount_paid, payment_status, employee_notes, last_note_update, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @employee_id, @employee_name, @role_name, @assigned_date, @work_assigned, @work_assigned, @amount, @amount_paid, @payment_status, @employee_notes, @last_note_update, @created_at, @updated_at)
           `),
       'assignments'
     );
+    mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: asn });
   } catch (err) {
     console.warn('[POST /assignments] Falling back to mock store:', err);
@@ -2720,7 +2756,7 @@ router.get('/employee-payments', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(emp_payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(assignment_id AS NVARCHAR(100)), '') as assignmentId, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
@@ -2767,6 +2803,8 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
+  epay.id = (epay.id || '').trim() || generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand));
+
   epay.paymentProof = parsePaymentProof(epay.paymentProof);
   const serializedProof = serializePaymentProof(epay.paymentProof);
 
@@ -2802,22 +2840,25 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
           .input('created_at', epay.createdAt)
           .input('updated_at', epay.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM employee_payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM employee_payments WHERE id = @id OR (emp_payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE employee_payments SET brand=@brand, assignment_id=@assignment_id, project_id=@project_id,
                                           employee_id=@employee_id, employee_name=@employee_name, payment_date=@payment_date,
                                           amount_paid=@amount_paid, payment_mode=@payment_mode, reference_utr=@reference_utr,
                                           notes=@notes, payment_proof=@payment_proof, payment_proof_notes=@payment_proof_notes,
-                                          updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                                          updated_at=@updated_at, emp_payment_id_code=@rawId
+              WHERE id = @id OR (emp_payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO employee_payments (id, emp_payment_id_code, brand, assignment_id, project_id, employee_id, employee_name, payment_date, amount_paid, payment_mode, reference_utr, notes, payment_proof, payment_proof_notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @assignment_id, @project_id, @employee_id, @employee_name, @payment_date, @amount_paid, @payment_mode, @reference_utr, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
           `),
       'employee_payments'
     );
+    mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: epay });
   } catch (err) {
-    return handleDbError(res, err, 'POST /employee-payments');
+    console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', err);
+    const saved = mockStore.saveEmployeePayment(epay);
+    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
 }
 
@@ -2865,7 +2906,7 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(exp_category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
                ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
@@ -2893,6 +2934,8 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
+  cat.id = (cat.id || '').trim() || generateSemanticEntityId('EXC', cat.brand, mockStore.getExpenseCategories(cat.brand));
+
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveExpenseCategory(cat);
@@ -2914,16 +2957,17 @@ router.post('/expense-categories', async (req: Request, res: Response) => {
           .input('created_at', cat.createdAt)
           .input('updated_at', cat.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM expense_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM expense_categories WHERE id = @id OR (exp_category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE expense_categories 
-              SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at 
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+              SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, exp_category_id_code=@rawId 
+              WHERE id = @id OR (exp_category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO expense_categories (id, exp_category_id_code, brand, name, category_name, description, status, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @description, @status, @created_at, @updated_at)
           `),
       'expense_categories'
     );
+    mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
     console.warn('[POST /expense-categories] Falling back to mock store:', err);
@@ -2973,7 +3017,7 @@ router.get('/expenses', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
+        SELECT ISNULL(NULLIF(CAST(expense_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
                ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
@@ -3011,6 +3055,8 @@ router.post('/expenses', async (req: Request, res: Response) => {
   const now = new Date().toISOString();
   exp.updatedAt = now;
   exp.createdAt = exp.createdAt || now;
+
+  exp.id = (exp.id || '').trim() || generateSemanticEntityId('EXP', exp.brand, mockStore.getExpenses(exp.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
@@ -3061,19 +3107,21 @@ router.post('/expenses', async (req: Request, res: Response) => {
               VALUES (@cat_id, @cat_name, @brand, @cat_name, @cat_name, 'Auto-provisioned category', 'Active', @created_at, @updated_at);
             END;
 
-            IF EXISTS (SELECT 1 FROM other_expenses WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId)
+            IF EXISTS (SELECT 1 FROM other_expenses WHERE id = @id OR (expense_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
               UPDATE other_expenses 
               SET brand=@brand, project_id=@project_id, is_na_project=@is_na_project, client_id=@client_id, client_name=@client_name,
                   expense_category_id=@cat_id, expense_category_name=@cat_name, vendor=@vendor, description=@description,
                   amount=@amount, currency=@currency, exchange_rate=@exchange_rate, amount_inr=@amount_inr,
-                  expense_date=@expense_date, payment_status=@payment_status, notes=@notes, updated_at=@updated_at
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
+                  expense_date=@expense_date, payment_status=@payment_status, notes=@notes, updated_at=@updated_at,
+                  expense_id_code=@rawId
+              WHERE id = @id OR (expense_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO other_expenses (id, expense_id_code, brand, project_id, is_na_project, client_id, client_name, expense_category_id, expense_category_name, vendor, description, amount, currency, exchange_rate, amount_inr, expense_date, payment_status, notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @project_id, @is_na_project, @client_id, @client_name, @cat_id, @cat_name, @vendor, @description, @amount, @currency, @exchange_rate, @amount_inr, @expense_date, @payment_status, @notes, @created_at, @updated_at)
           `),
       'other_expenses'
     );
+    mockStore.saveExpense(exp);
     return res.json({ success: true, expense: exp });
   } catch (err) {
     console.warn('[POST /expenses] Falling back to mock store:', err);
@@ -3151,6 +3199,13 @@ router.post('/users', async (req: Request, res: Response) => {
   user.updatedAt = now;
   user.createdAt = user.createdAt || now;
 
+  const rawId = (user.id || `USR-${Date.now().toString().slice(-4)}`).trim();
+  const userEmail = (user.email || '').toLowerCase().trim();
+  const userName = (user.name || user.email || 'User').trim();
+  user.id = rawId;
+  user.email = userEmail;
+  user.name = userName;
+
   // Hash new password if provided
   let hashedPassword = '';
   if (user.password && user.password.trim()) {
@@ -3164,19 +3219,19 @@ router.post('/users', async (req: Request, res: Response) => {
   }
 
   try {
-    const guidId = toGuid(user.id);
-    const userEmail = (user.email || '').toLowerCase().trim();
-    const userName = user.name || user.email || 'User';
+    const guidId = toGuid(rawId);
+    const fallbackNewPass = hashedPassword || (await hashPassword('Admin@2026'));
 
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', user.id || '')
+          .input('rawId', rawId)
           .input('name', userName)
           .input('email', userEmail)
           .input('password_hash', hashedPassword)
+          .input('fallback_pass', fallbackNewPass)
           .input('role', user.role || 'Viewer')
           .input('brand', user.brand || 'All')
           .input('status', user.status || 'Active')
@@ -3185,22 +3240,37 @@ router.post('/users', async (req: Request, res: Response) => {
           .input('updated_at', user.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email)
+            BEGIN
               UPDATE app_users 
-              SET name = @name, full_name = @name, email = @email, 
+              SET name = @name,
+                  email = @email, 
                   password_hash = CASE WHEN @password_hash IS NOT NULL AND @password_hash <> '' THEN @password_hash ELSE password_hash END,
-                  role = @role, brand = @brand, status = @status, avatar = @avatar, updated_at = @updated_at 
-              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email
+                  role = @role,
+                  brand = @brand,
+                  status = @status,
+                  avatar = @avatar,
+                  updated_at = @updated_at 
+              WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email;
+            END
             ELSE
-              INSERT INTO app_users (id, auth_user_id, name, full_name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-              VALUES (@id, NEWID(), @name, @name, @email, ISNULL(NULLIF(@password_hash, ''), 'Admin@2026'), @role, @brand, @status, @avatar, @created_at, @updated_at)
+            BEGIN
+              INSERT INTO app_users (id, name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
+              VALUES (@rawId, @name, @email, @fallback_pass, @role, @brand, @status, @avatar, @created_at, @updated_at);
+            END
           `),
       'app_users'
     );
+
+    // Keep in-memory store synchronized
+    mockStore.saveUser(user);
     return res.json({ success: true, user });
-  } catch (err) {
-    console.warn('[POST /users] Falling back to mock store:', err);
-    const saved = mockStore.saveUser(user);
-    return res.json({ success: true, user: saved });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[POST /users] Live Azure SQL Error:', errMsg);
+    return res.status(500).json({
+      success: false,
+      error: `Failed to save user in Azure SQL: ${errMsg}`,
+    });
   }
 });
 

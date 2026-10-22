@@ -22,6 +22,7 @@ import {
   generateSemanticProjectId,
   extractProjectSequence,
   getBaseProjectPrefix,
+  generateSemanticEntityId,
 } from '../utils/semanticId';
 
 export interface AuditLogEntry {
@@ -185,6 +186,57 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'DDI-RELIANCE-DIGITAL-INFRASTRUCTURE',
+        brand: 'Device Doctor India',
+        name: 'Reliance Digital Infrastructure Corp',
+        contactPerson: 'Vikram Singhania',
+        phone: '+91 98220 98765',
+        email: 'infra.procure@reliancedigital.com',
+        city: 'Navi Mumbai',
+        country: 'India',
+        gstNumber: '27AAACR1234F1ZV',
+        preferredCurrency: 'INR',
+        clientSince: '2024-03-12',
+        status: 'Active',
+        notes: 'Corporate datacentre server deployment and 24x7 hardware SLA.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-TATA-CONSULTANCY-SERVICES-ALLIED',
+        brand: 'Device Doctor India',
+        name: 'Tata Consultancy Services Allied Partner',
+        contactPerson: 'Priyanka Sen',
+        phone: '+91 97110 45678',
+        email: 'partnerships@tataallied.in',
+        city: 'Kolkata',
+        country: 'India',
+        gstNumber: '19AAACT9876D1Z2',
+        preferredCurrency: 'INR',
+        clientSince: '2024-07-01',
+        status: 'Active',
+        notes: 'Enterprise web applications and hybrid cloud migration.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-HDFC-SECURITIES-SYSTEMS-LTD',
+        brand: 'Device Doctor India',
+        name: 'HDFC Securities Systems Ltd',
+        contactPerson: 'Sanjay Malhotra',
+        phone: '+91 98199 11223',
+        email: 'trading.it@hdfcsec.com',
+        city: 'Mumbai',
+        country: 'India',
+        gstNumber: '27AAACH4567J1Z8',
+        preferredCurrency: 'INR',
+        clientSince: '2024-11-15',
+        status: 'Active',
+        notes: 'Cybersecurity vulnerability audit and high-throughput server AMC.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'CDS-FINSCALE-TECHNOLOGIES-INC',
         brand: 'Codestro',
         name: 'FinScale Technologies Inc',
@@ -198,6 +250,23 @@ class MockStore {
         clientSince: '2024-09-10',
         status: 'Active',
         notes: 'SaaS banking dashboard and real-time ledger microservices.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-NEXUS-CLOUD-ANALYTICS',
+        brand: 'Codestro',
+        name: 'Nexus Cloud Analytics Corp',
+        contactPerson: 'Oliver Barnes',
+        phone: '+1 206 555 8920',
+        email: 'oliver@nexuscloud.io',
+        city: 'Seattle',
+        country: 'United States',
+        gstNumber: '',
+        preferredCurrency: 'USD',
+        clientSince: '2025-01-08',
+        status: 'Active',
+        notes: 'AI analytics microservices, streaming pipelines, and dashboard portals.',
         createdAt: now,
         updatedAt: now,
       },
@@ -219,6 +288,23 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'FXL-ZENITH-PROPRIETARY-TRADING',
+        brand: 'FX Launch Pad',
+        name: 'Zenith Proprietary Trading LLC',
+        contactPerson: 'Tariq Al-Mansoor',
+        phone: '+971 4 312 8900',
+        email: 'tariq@zenithprop.ae',
+        city: 'Dubai',
+        country: 'United Arab Emirates',
+        gstNumber: '',
+        preferredCurrency: 'USD',
+        clientSince: '2025-02-01',
+        status: 'Active',
+        notes: 'Automated evaluation accounts, trader challenge engine, and risk rules.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'DUNS-VERTEX-GLOBAL-COMPLIANCE-CORP',
         brand: 'DUNS',
         name: 'Vertex Global Compliance Corp',
@@ -232,6 +318,23 @@ class MockStore {
         clientSince: '2025-01-20',
         status: 'Active',
         notes: 'Global entity verification, corporate risk intelligence and regulatory compliance auditing.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DUNS-APEX-RISK-INTELLIGENCE-GROUP',
+        brand: 'DUNS',
+        name: 'Apex Risk Intelligence Group',
+        contactPerson: 'Elena Rostova',
+        phone: '+41 22 555 3410',
+        email: 'elena.r@apexrisk.ch',
+        city: 'Geneva',
+        country: 'Switzerland',
+        gstNumber: '',
+        preferredCurrency: 'EUR',
+        clientSince: '2025-01-25',
+        status: 'Active',
+        notes: 'European cross-border sanctions screening and continuous corporate risk monitoring.',
         createdAt: now,
         updatedAt: now,
       },
@@ -258,10 +361,46 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'DDI-CAT-003',
+        brand: 'Device Doctor India',
+        name: 'Custom Web & Mobile App Engineering',
+        description: 'Enterprise React web portals, cross-platform mobile applications, and API systems.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-CAT-004',
+        brand: 'Device Doctor India',
+        name: 'Enterprise Cybersecurity & Vulnerability Auditing',
+        description: 'Penetration testing, network vulnerability assessments, and compliance hardening.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-CAT-005',
+        brand: 'Device Doctor India',
+        name: 'Industrial IoT & Embedded Systems Maintenance',
+        description: 'Smart telemetry, edge gateway provisioning, and preventative device telemetry.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'CDS-CAT-001',
         brand: 'Codestro',
         name: 'Custom SaaS & Cloud Engineering',
         description: 'Full-stack scalable web applications, REST/GraphQL APIs, and microservices.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-CAT-002',
+        brand: 'Codestro',
+        name: 'AI/ML Agents & LLM Fine-Tuning',
+        description: 'Autonomous AI workflow agents, retrieval augmented generation, and embeddings.',
         status: 'Active',
         createdAt: now,
         updatedAt: now,
@@ -276,10 +415,28 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'FXL-CAT-002',
+        brand: 'FX Launch Pad',
+        name: 'High-Frequency Trading Infrastructure',
+        description: 'Ultra-low latency FIX protocol bridges, market data feeds, and colocation routers.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'DNS-CAT-001',
         brand: 'DUNS',
         name: 'Corporate Intelligence & Verification',
         description: 'Global business registration auditing, corporate risk ratings, and compliance screening.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DNS-CAT-002',
+        brand: 'DUNS',
+        name: 'AML Risk Analytics & Regulatory Auditing',
+        description: 'Cross-border entity verification, sanctions screening, and corporate compliance certification.',
         status: 'Active',
         createdAt: now,
         updatedAt: now,
@@ -299,11 +456,61 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'DDI-SRV-002',
+        brand: 'Device Doctor India',
+        name: 'Hybrid Cloud Architecture & AWS/Azure Migration',
+        categoryId: 'DDI-CAT-002',
+        description: 'Cloud modernization, virtual network peering, and high-availability database replication.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-SRV-003',
+        brand: 'Device Doctor India',
+        name: 'Full-Stack Web Platform Development',
+        categoryId: 'DDI-CAT-003',
+        description: 'React, Vite, Node.js and TypeScript custom CRM, ERP, and customer portals.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-SRV-004',
+        brand: 'Device Doctor India',
+        name: 'Corporate Penetration Testing & Zero-Day Patching',
+        categoryId: 'DDI-CAT-004',
+        description: 'Black-box and white-box security audits, vulnerability scans, and remediation support.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-SRV-005',
+        brand: 'Device Doctor India',
+        name: 'Smart IoT Edge Gateway Deployment',
+        categoryId: 'DDI-CAT-005',
+        description: 'Edge device firmware updates, telemetry streaming, and MQTT message brokers.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'CDS-SRV-001',
         brand: 'Codestro',
         name: 'Multi-Tenant SaaS Web Application',
         categoryId: 'CDS-CAT-001',
         description: 'React, Node.js, and PostgreSQL scalable multi-tenant architecture with billing.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-SRV-002',
+        brand: 'Codestro',
+        name: 'Autonomous Generative AI Workflow Integration',
+        categoryId: 'CDS-CAT-002',
+        description: 'Context-grounded AI agent pipelines, vector search, and conversational UI layers.',
         status: 'Active',
         createdAt: now,
         updatedAt: now,
@@ -319,11 +526,31 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'FXL-SRV-002',
+        brand: 'FX Launch Pad',
+        name: 'Ultra-Low Latency FIX Protocol Broker Engine',
+        categoryId: 'FXL-CAT-002',
+        description: 'Direct market access order routing, DMA bridge, and liquidity provider feeds.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'DNS-SRV-001',
         brand: 'DUNS',
         name: 'Global Business Verification & D-U-N-S Certification',
         categoryId: 'DNS-CAT-001',
         description: 'Enterprise identity verification, credit risk scoring, and anti-money laundering compliance.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DNS-SRV-002',
+        brand: 'DUNS',
+        name: 'Continuous Regulatory Compliance & Sanctions Screening',
+        categoryId: 'DNS-CAT-002',
+        description: 'Real-time sanctions watchlists, Politically Exposed Persons (PEP) checks, and AML logs.',
         status: 'Active',
         createdAt: now,
         updatedAt: now,
@@ -360,6 +587,97 @@ class MockStore {
           { id: 'phase-1', name: 'Mobilization Advance', percentage: 40, amount: 180000, amountINR: 180000, dueDate: '2025-01-20', status: 'Received' },
           { id: 'phase-2', name: 'Milestone 2 - Server Deployment', percentage: 26.67, amount: 120000, amountINR: 120000, dueDate: '2025-02-28', status: 'Received' },
           { id: 'phase-3', name: 'Final Handover & Sign-off', percentage: 33.33, amount: 150000, amountINR: 150000, dueDate: '2025-04-20', status: 'Pending' },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-APOLLO-DIAGNOSTICS-CENTRE-HYBRID-CLOUD-ARCHITECTURE-AWS-AZURE-MIGRATION-1',
+        brand: 'Device Doctor India',
+        clientId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE',
+        clientName: 'Apollo Diagnostics Centre',
+        serviceId: 'DDI-SRV-002',
+        proposalDate: '2025-01-10',
+        contractDate: '2025-01-18',
+        startDate: '2025-01-22',
+        committedDays: 60,
+        committedEndDate: '2025-03-23',
+        actualEndDate: '',
+        status: 'In Progress',
+        paymentMode: 'GST Invoice',
+        currency: 'INR',
+        contract: 680000,
+        exchangeRate: 1,
+        contractValue: 680000,
+        totalReceived: 400000,
+        balance: 280000,
+        projectManager: 'Karthik Rao',
+        notes: 'HIPAA and NABH compliant cloud PACS storage migration with disaster recovery vault.',
+        proposalDocument: { name: 'Apollo_Cloud_Migration_Architecture.pdf', uploadedAt: now },
+        contractDocument: { name: 'Apollo_SLA_Signed.pdf', uploadedAt: now },
+        paymentPhases: [
+          { id: 'ap-1', name: 'Cloud Discovery & Setup', percentage: 58.82, amount: 400000, amountINR: 400000, dueDate: '2025-01-22', status: 'Received' },
+          { id: 'ap-2', name: 'PACS Data Cutover & Sign-off', percentage: 41.18, amount: 280000, amountINR: 280000, dueDate: '2025-03-23', status: 'Pending' },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-RELIANCE-DIGITAL-INFRASTRUCTURE-FULL-STACK-WEB-PLATFORM-DEVELOPMENT-1',
+        brand: 'Device Doctor India',
+        clientId: 'DDI-RELIANCE-DIGITAL-INFRASTRUCTURE',
+        clientName: 'Reliance Digital Infrastructure Corp',
+        serviceId: 'DDI-SRV-003',
+        proposalDate: '2025-01-12',
+        contractDate: '2025-01-20',
+        startDate: '2025-01-25',
+        committedDays: 90,
+        committedEndDate: '2025-04-25',
+        actualEndDate: '',
+        status: 'In Progress',
+        paymentMode: 'GST Invoice',
+        currency: 'INR',
+        contract: 1250000,
+        exchangeRate: 1,
+        contractValue: 1250000,
+        totalReceived: 750000,
+        balance: 500000,
+        projectManager: 'Hemant Rathore',
+        notes: 'Enterprise vendor procurement portal with custom RBAC and GST calculation engine.',
+        proposalDocument: { name: 'Reliance_Portal_Proposal.pdf', uploadedAt: now },
+        contractDocument: { name: 'Reliance_Master_Agreement.pdf', uploadedAt: now },
+        paymentPhases: [
+          { id: 'rel-1', name: 'Advance Milestone', percentage: 60, amount: 750000, amountINR: 750000, dueDate: '2025-01-25', status: 'Received' },
+          { id: 'rel-2', name: 'Final Delivery & Acceptance', percentage: 40, amount: 500000, amountINR: 500000, dueDate: '2025-04-25', status: 'Pending' },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-HDFC-SECURITIES-SYSTEMS-LTD-CORPORATE-PENETRATION-TESTING-ZERO-DAY-PATCHING-1',
+        brand: 'Device Doctor India',
+        clientId: 'DDI-HDFC-SECURITIES-SYSTEMS-LTD',
+        clientName: 'HDFC Securities Systems Ltd',
+        serviceId: 'DDI-SRV-004',
+        proposalDate: '2025-01-28',
+        contractDate: '2025-02-02',
+        startDate: '2025-02-05',
+        committedDays: 30,
+        committedEndDate: '2025-03-07',
+        actualEndDate: '',
+        status: 'In Progress',
+        paymentMode: 'GST Invoice',
+        currency: 'INR',
+        contract: 520000,
+        exchangeRate: 1,
+        contractValue: 520000,
+        totalReceived: 260000,
+        balance: 260000,
+        projectManager: 'Karthik Rao',
+        notes: 'SEBI compliance cyber audit, perimeter vulnerability assessment, and hardening.',
+        paymentPhases: [
+          { id: 'hdfc-1', name: 'Pre-Audit Retainer', percentage: 50, amount: 260000, amountINR: 260000, dueDate: '2025-02-05', status: 'Received' },
+          { id: 'hdfc-2', name: 'Vulnerability Remediation Report', percentage: 50, amount: 260000, amountINR: 260000, dueDate: '2025-03-07', status: 'Pending' },
         ],
         createdAt: now,
         updatedAt: now,
@@ -919,6 +1237,36 @@ class MockStore {
         updatedAt: now,
       },
       {
+        id: 'DDI-ROL-002',
+        brand: 'Device Doctor India',
+        roleName: 'Senior Cloud & DevOps Engineer',
+        department: 'Cloud Services',
+        status: 'Active',
+        description: 'AWS and Azure cloud migration, Docker containers, and CI/CD pipelines.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-ROL-003',
+        brand: 'Device Doctor India',
+        roleName: 'Full-Stack Web Development Specialist',
+        department: 'Software Engineering',
+        status: 'Active',
+        description: 'React, Vite, Node.js and TypeScript custom CRM, ERP, and API systems.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-ROL-004',
+        brand: 'Device Doctor India',
+        roleName: 'Cybersecurity & Network Penetration Tester',
+        department: 'Information Security',
+        status: 'Active',
+        description: 'Vulnerability assessment, ethical hacking, and network hardening.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
         id: 'CDS-ROL-001',
         brand: 'Codestro',
         roleName: 'Lead Full-Stack Developer',
@@ -964,6 +1312,51 @@ class MockStore {
         employeeType: 'Salary Basis',
         comesUnderTds: 'Yes',
         notes: 'Specialist in Dell and HP ProLiant enterprise servers.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EMP-002',
+        brand: 'Device Doctor India',
+        name: 'Vikram Batra',
+        roleId: 'DDI-ROL-002',
+        email: 'vikram.b@devicedoctor.in',
+        status: 'Active',
+        joiningDate: '2023-09-01',
+        costOfEmployee: 85000,
+        employeeType: 'Salary Basis',
+        comesUnderTds: 'Yes',
+        notes: 'Specialist in Azure Virtual Networks and Kubernetes clusters.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EMP-003',
+        brand: 'Device Doctor India',
+        name: 'Sneha Kulkarni',
+        roleId: 'DDI-ROL-003',
+        email: 'sneha.k@devicedoctor.in',
+        status: 'Active',
+        joiningDate: '2024-01-15',
+        costOfEmployee: 75000,
+        employeeType: 'Salary Basis',
+        comesUnderTds: 'Yes',
+        notes: 'Senior React and TypeScript full-stack developer.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EMP-004',
+        brand: 'Device Doctor India',
+        name: 'Rahul Deshmukh',
+        roleId: 'DDI-ROL-004',
+        email: 'rahul.d@devicedoctor.in',
+        status: 'Active',
+        joiningDate: '2024-03-20',
+        costOfEmployee: 90000,
+        employeeType: 'Salary Basis',
+        comesUnderTds: 'Yes',
+        notes: 'Certified ethical hacker (CEH) and CISSP consultant.',
         createdAt: now,
         updatedAt: now,
       },
@@ -1035,6 +1428,25 @@ class MockStore {
         createdAt: now,
         updatedAt: now,
       },
+      {
+        id: 'DDI-ASN-002',
+        brand: 'Device Doctor India',
+        projectId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE-HYBRID-CLOUD-ARCHITECTURE-AWS-AZURE-MIGRATION-1',
+        clientId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE',
+        clientName: 'Apollo Diagnostics Centre',
+        employeeId: 'DDI-EMP-002',
+        employeeName: 'Vikram Batra',
+        roleName: 'Senior Cloud & DevOps Engineer',
+        assignedDate: '2025-01-22',
+        workAssigned: 'PACS cloud architecture setup and hybrid VPN routing configuration.',
+        amount: 55000,
+        amountPaid: 55000,
+        paymentStatus: 'Paid',
+        employeeNotes: 'Configured HIPAA compliant VPN tunnels and storage buckets.',
+        lastNoteUpdate: now,
+        createdAt: now,
+        updatedAt: now,
+      },
     ];
 
     // Employee Payments
@@ -1051,6 +1463,21 @@ class MockStore {
         paymentMode: 'GST Invoice',
         referenceUtr: 'SAL-NEFT-20250201',
         notes: 'Disbursed via bank transfer.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EPAY-002',
+        brand: 'Device Doctor India',
+        assignmentId: 'DDI-ASN-002',
+        projectId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE-HYBRID-CLOUD-ARCHITECTURE-AWS-AZURE-MIGRATION-1',
+        employeeId: 'DDI-EMP-002',
+        employeeName: 'Vikram Batra',
+        paymentDate: '2025-02-15',
+        amountPaid: 55000,
+        paymentMode: 'Non GST Online',
+        referenceUtr: 'SAL-NEFT-20250215-VB',
+        notes: 'Disbursed via NEFT salary credit.',
         createdAt: now,
         updatedAt: now,
       },
@@ -1072,6 +1499,24 @@ class MockStore {
         brand: 'Device Doctor India',
         name: 'Hardware Diagnostics Tools & Spares',
         description: 'Test equipment, soldering stations, and replacement chips.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EXPCAT-003',
+        brand: 'Device Doctor India',
+        name: 'Software Licenses & Developer Subscriptions',
+        description: 'IDEs, API gateways, security scanning suites, and cloud toolkits.',
+        status: 'Active',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EXPCAT-004',
+        brand: 'Device Doctor India',
+        name: 'Office Operations & Client Travel',
+        description: 'Onsite engineer client visits, logistics, and datacenter access passes.',
         status: 'Active',
         createdAt: now,
         updatedAt: now,
@@ -1106,6 +1551,26 @@ class MockStore {
         expenseDate: '2025-01-28',
         paymentStatus: 'Paid',
         notes: 'Billed to TechCorp AMC allocation.',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-EXP-002',
+        brand: 'Device Doctor India',
+        projectId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE-HYBRID-CLOUD-ARCHITECTURE-AWS-AZURE-MIGRATION-1',
+        clientId: 'DDI-APOLLO-DIAGNOSTICS-CENTRE',
+        clientName: 'Apollo Diagnostics Centre',
+        expenseCategoryId: 'DDI-EXPCAT-003',
+        expenseCategoryName: 'Software Licenses & Developer Subscriptions',
+        vendor: 'Datadog & New Relic',
+        description: 'APM monitoring and infrastructure metrics agent licenses.',
+        amount: 14200,
+        currency: 'INR',
+        exchangeRate: 1,
+        amountINR: 14200,
+        expenseDate: '2025-02-10',
+        paymentStatus: 'Paid',
+        notes: 'Allocated to Apollo Diagnostics cloud infrastructure.',
         createdAt: now,
         updatedAt: now,
       },
@@ -1161,14 +1626,20 @@ class MockStore {
     return this.users.length < initial;
   }
 
-  public authenticate(email: string, pass: string): AppUser | null {
-    const cleanEmail = email.trim().toLowerCase();
-    const user = this.users.find((u) => u.email.toLowerCase() === cleanEmail);
+  public authenticate(identifier: string, pass: string): AppUser | null {
+    const cleanIdentifier = (identifier || '').trim().toLowerCase();
+    const cleanPass = (pass || '').trim();
+    const user = this.users.find(
+      (u) =>
+        (u.email || '').toLowerCase() === cleanIdentifier ||
+        (u.id || '').toLowerCase() === cleanIdentifier ||
+        (u.name || '').toLowerCase() === cleanIdentifier
+    );
     if (!user || user.status !== 'Active') {
       return null;
     }
 
-    if (!user.password || !pass) {
+    if (!user.password || !cleanPass) {
       return null;
     }
 
@@ -1253,12 +1724,14 @@ class MockStore {
 
   public saveCategory(cat: ServiceCategory): ServiceCategory {
     if (!cat.brand) cat.brand = 'Device Doctor India';
-    const idx = this.categories.findIndex((c) => c.id === cat.id);
+    const cleanId = (cat.id || '').trim();
+    const idx = cleanId ? this.categories.findIndex((c) => c.id === cleanId) : -1;
     if (idx >= 0) {
-      this.categories[idx] = { ...this.categories[idx], ...cat, updatedAt: new Date().toISOString() };
+      this.categories[idx] = { ...this.categories[idx], ...cat, id: cleanId, updatedAt: new Date().toISOString() };
       return this.categories[idx];
     }
-    const created = { ...cat, createdAt: cat.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const finalId = cleanId || generateSemanticEntityId('CAT', cat.brand, this.categories);
+    const created: ServiceCategory = { ...cat, id: finalId, createdAt: cat.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.categories.unshift(created);
     return created;
   }
@@ -1291,12 +1764,14 @@ class MockStore {
 
   public saveService(srv: Service): Service {
     if (!srv.brand) srv.brand = 'Device Doctor India';
-    const idx = this.services.findIndex((s) => s.id === srv.id);
+    const cleanId = (srv.id || '').trim();
+    const idx = cleanId ? this.services.findIndex((s) => s.id === cleanId) : -1;
     if (idx >= 0) {
-      this.services[idx] = { ...this.services[idx], ...srv, updatedAt: new Date().toISOString() };
+      this.services[idx] = { ...this.services[idx], ...srv, id: cleanId, updatedAt: new Date().toISOString() };
       return this.services[idx];
     }
-    const created = { ...srv, createdAt: srv.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const finalId = cleanId || generateSemanticEntityId('SRV', srv.brand, this.services);
+    const created: Service = { ...srv, id: finalId, createdAt: srv.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.services.unshift(created);
     return created;
   }
@@ -1401,17 +1876,20 @@ class MockStore {
 
   public savePayment(payment: Payment): Payment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const cleanId = (payment.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('PAY', payment.brand, this.payments);
     const clonedPayment: Payment = {
       ...payment,
+      id: finalId,
       paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
     };
-    const idx = this.payments.findIndex((p) => p.id === payment.id);
+    const idx = cleanId ? this.payments.findIndex((p) => p.id === cleanId) : -1;
     let resultPayment: Payment;
     if (idx >= 0) {
-      this.payments[idx] = { ...this.payments[idx], ...clonedPayment, updatedAt: new Date().toISOString() };
+      this.payments[idx] = { ...this.payments[idx], ...clonedPayment, id: finalId, updatedAt: new Date().toISOString() };
       resultPayment = JSON.parse(JSON.stringify(this.payments[idx]));
     } else {
-      const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = { ...clonedPayment, id: finalId, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
       this.payments.unshift(created);
       resultPayment = JSON.parse(JSON.stringify(created));
     }
@@ -1561,12 +2039,14 @@ class MockStore {
 
   public saveGstInvoice(inv: GstInvoice): GstInvoice {
     if (!inv.brand) inv.brand = 'Device Doctor India';
-    const idx = this.gstInvoices.findIndex((i) => i.id === inv.id);
+    const cleanId = (inv.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('GST', inv.brand, this.gstInvoices);
+    const idx = cleanId ? this.gstInvoices.findIndex((i) => i.id === cleanId) : -1;
     if (idx >= 0) {
-      this.gstInvoices[idx] = { ...this.gstInvoices[idx], ...inv, updatedAt: new Date().toISOString() };
+      this.gstInvoices[idx] = { ...this.gstInvoices[idx], ...inv, id: finalId, updatedAt: new Date().toISOString() };
       return this.gstInvoices[idx];
     }
-    const created = { ...inv, createdAt: inv.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: GstInvoice = { ...inv, id: finalId, createdAt: inv.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.gstInvoices.unshift(created);
     return created;
   }
@@ -1587,12 +2067,14 @@ class MockStore {
 
   public saveRole(role: EmployeeRole): EmployeeRole {
     if (!role.brand) role.brand = 'Device Doctor India';
-    const idx = this.roles.findIndex((r) => r.id === role.id);
+    const cleanId = (role.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('ROL', role.brand, this.roles);
+    const idx = cleanId ? this.roles.findIndex((r) => r.id === cleanId) : -1;
     if (idx >= 0) {
-      this.roles[idx] = { ...this.roles[idx], ...role, updatedAt: new Date().toISOString() };
+      this.roles[idx] = { ...this.roles[idx], ...role, id: finalId, updatedAt: new Date().toISOString() };
       return this.roles[idx];
     }
-    const created = { ...role, createdAt: role.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: EmployeeRole = { ...role, id: finalId, createdAt: role.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.roles.unshift(created);
     return created;
   }
@@ -1631,12 +2113,14 @@ class MockStore {
 
   public saveEmployee(emp: Employee): Employee {
     if (!emp.brand) emp.brand = 'Device Doctor India';
-    const idx = this.employees.findIndex((e) => e.id === emp.id);
+    const cleanId = (emp.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('EMP', emp.brand, this.employees);
+    const idx = cleanId ? this.employees.findIndex((e) => e.id === cleanId) : -1;
     if (idx >= 0) {
-      this.employees[idx] = { ...this.employees[idx], ...emp, updatedAt: new Date().toISOString() };
+      this.employees[idx] = { ...this.employees[idx], ...emp, id: finalId, updatedAt: new Date().toISOString() };
       return this.employees[idx];
     }
-    const created = { ...emp, createdAt: emp.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: Employee = { ...emp, id: finalId, createdAt: emp.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.employees.unshift(created);
     return created;
   }
@@ -1657,12 +2141,14 @@ class MockStore {
 
   public saveAssignment(asn: Assignment): Assignment {
     if (!asn.brand) asn.brand = 'Device Doctor India';
-    const idx = this.assignments.findIndex((a) => a.id === asn.id);
+    const cleanId = (asn.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('ASN', asn.brand, this.assignments);
+    const idx = cleanId ? this.assignments.findIndex((a) => a.id === cleanId) : -1;
     if (idx >= 0) {
-      this.assignments[idx] = { ...this.assignments[idx], ...asn, updatedAt: new Date().toISOString() };
+      this.assignments[idx] = { ...this.assignments[idx], ...asn, id: finalId, updatedAt: new Date().toISOString() };
       return this.assignments[idx];
     }
-    const created = { ...asn, createdAt: asn.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: Assignment = { ...asn, id: finalId, createdAt: asn.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.assignments.unshift(created);
     return created;
   }
@@ -1687,16 +2173,19 @@ class MockStore {
 
   public saveEmployeePayment(payment: EmployeePayment): EmployeePayment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const cleanId = (payment.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('EPAY', payment.brand, this.employeePayments);
     const clonedPayment: EmployeePayment = {
       ...payment,
+      id: finalId,
       paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
     };
-    const idx = this.employeePayments.findIndex((p) => p.id === payment.id);
+    const idx = cleanId ? this.employeePayments.findIndex((p) => p.id === cleanId) : -1;
     if (idx >= 0) {
-      this.employeePayments[idx] = { ...this.employeePayments[idx], ...clonedPayment, updatedAt: new Date().toISOString() };
+      this.employeePayments[idx] = { ...this.employeePayments[idx], ...clonedPayment, id: finalId, updatedAt: new Date().toISOString() };
       return JSON.parse(JSON.stringify(this.employeePayments[idx]));
     }
-    const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created = { ...clonedPayment, id: finalId, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.employeePayments.unshift(created);
     return JSON.parse(JSON.stringify(created));
   }
@@ -1717,12 +2206,14 @@ class MockStore {
 
   public saveExpenseCategory(cat: ExpenseCategory): ExpenseCategory {
     if (!cat.brand) cat.brand = 'Device Doctor India';
-    const idx = this.expenseCategories.findIndex((c) => c.id === cat.id);
+    const cleanId = (cat.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('EXPCAT', cat.brand, this.expenseCategories);
+    const idx = cleanId ? this.expenseCategories.findIndex((c) => c.id === cleanId) : -1;
     if (idx >= 0) {
-      this.expenseCategories[idx] = { ...this.expenseCategories[idx], ...cat, updatedAt: new Date().toISOString() };
+      this.expenseCategories[idx] = { ...this.expenseCategories[idx], ...cat, id: finalId, updatedAt: new Date().toISOString() };
       return this.expenseCategories[idx];
     }
-    const created = { ...cat, createdAt: cat.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: ExpenseCategory = { ...cat, id: finalId, createdAt: cat.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.expenseCategories.unshift(created);
     return created;
   }
@@ -1743,12 +2234,14 @@ class MockStore {
 
   public saveExpense(exp: Expense): Expense {
     if (!exp.brand) exp.brand = 'Device Doctor India';
-    const idx = this.expenses.findIndex((e) => e.id === exp.id);
+    const cleanId = (exp.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('EXP', exp.brand, this.expenses);
+    const idx = cleanId ? this.expenses.findIndex((e) => e.id === cleanId) : -1;
     if (idx >= 0) {
-      this.expenses[idx] = { ...this.expenses[idx], ...exp, updatedAt: new Date().toISOString() };
+      this.expenses[idx] = { ...this.expenses[idx], ...exp, id: finalId, updatedAt: new Date().toISOString() };
       return this.expenses[idx];
     }
-    const created = { ...exp, createdAt: exp.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const created: Expense = { ...exp, id: finalId, createdAt: exp.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.expenses.unshift(created);
     return created;
   }
@@ -1790,10 +2283,14 @@ class MockStore {
   }
 
   public saveBankAccount(account: BankAccount): BankAccount {
-    const existingIndex = this.bankAccounts.findIndex((b) => b.id === account.id);
+    if (!account.brand) account.brand = 'Device Doctor India';
+    const cleanId = (account.id || '').trim();
+    const finalId = cleanId || generateSemanticEntityId('BNK', account.brand, this.bankAccounts);
+    const existingIndex = cleanId ? this.bankAccounts.findIndex((b) => b.id === cleanId) : -1;
     const now = new Date().toISOString();
     const toSave: BankAccount = {
       ...account,
+      id: finalId,
       updatedAt: now,
       createdAt: account.createdAt || now,
     };

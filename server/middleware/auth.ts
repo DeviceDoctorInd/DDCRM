@@ -89,16 +89,20 @@ export function optionalAuthenticateToken(req: AuthenticatedRequest, _res: Respo
  */
 export async function comparePasswords(provided: string, storedHash: string): Promise<boolean> {
   if (!provided || !storedHash) return false;
+  const cleanProvided = String(provided).trim();
+  const cleanStored = String(storedHash).trim();
+  if (!cleanProvided || !cleanStored) return false;
+
   // If stored password is a standard bcrypt hash
-  if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$') || storedHash.startsWith('$2y$')) {
+  if (cleanStored.startsWith('$2a$') || cleanStored.startsWith('$2b$') || cleanStored.startsWith('$2y$')) {
     try {
-      return await bcrypt.compare(provided, storedHash);
+      return await bcrypt.compare(cleanProvided, cleanStored);
     } catch {
       return false;
     }
   }
   // Fallback to exact comparison for unhashed legacy records
-  return provided === storedHash;
+  return cleanProvided === cleanStored;
 }
 
 /**

@@ -26,6 +26,7 @@ export const UsersModule: React.FC = () => {
     users,
     saveUser,
     deleteUser,
+    updateCredentials,
     confirmDelete,
     authUser,
     hasPermission,
@@ -41,9 +42,21 @@ export const UsersModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCredsModalOpen, setIsCredsModalOpen] = useState(false);
+  const [isUpdatingCreds, setIsUpdatingCreds] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isClearingDemo, setIsClearingDemo] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+
+  const [credsFormData, setCredsFormData] = useState({
+    id: '',
+    name: '',
+    email: '',
+    newPassword: '',
+    confirmPassword: '',
+    role: 'Super Admin' as UserRole,
+    brand: 'All' as BrandName | 'All',
+  });
 
   const [formData, setFormData] = useState<{
     id?: string;
@@ -77,7 +90,7 @@ export const UsersModule: React.FC = () => {
     setFormData({
       name: '',
       email: '',
-      password: 'Admin@2026',
+      password: '',
       role: 'Project Manager',
       brand: 'All',
       status: 'Active',
@@ -91,7 +104,7 @@ export const UsersModule: React.FC = () => {
       id: user.id,
       name: user.name,
       email: user.email,
-      password: user.password || 'Admin@2026',
+      password: '', // Blank by default so existing password hash is preserved in Azure SQL
       role: user.role,
       brand: user.brand || 'All',
       status: user.status,
@@ -99,7 +112,7 @@ export const UsersModule: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) {
       showToast('Name and email are required.', 'error');
@@ -110,7 +123,7 @@ export const UsersModule: React.FC = () => {
       id: formData.id || '',
       name: formData.name.trim(),
       email: formData.email.trim().toLowerCase(),
-      password: formData.password || 'Admin@2026',
+      password: formData.password && formData.password.trim() ? formData.password.trim() : undefined,
       role: formData.role,
       brand: formData.brand,
       status: formData.status,
@@ -118,8 +131,70 @@ export const UsersModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    saveUser(payload);
-    setIsModalOpen(false);
+    const res = await saveUser(payload);
+    if (res.success) {
+      setIsModalOpen(false);
+    }
+  };
+
+  const handleOpenCredentialsModal = (targetUser?: AppUser | null) => {
+    const userToEdit = targetUser || (authUser ? users.find((u) => u.email.toLowerCase() === authUser.email.toLowerCase()) : null) || users[0];
+    if (userToEdit) {
+      setCredsFormData({
+        id: userToEdit.id || '',
+        name: userToEdit.name || '',
+        email: userToEdit.email || '',
+        newPassword: '',
+        confirmPassword: '',
+        role: userToEdit.role || 'Super Admin',
+        brand: userToEdit.brand || 'All',
+      });
+    } else {
+      setCredsFormData({
+        id: authUser?.id || 'USR-001',
+        name: authUser?.name || 'Administrator',
+        email: authUser?.email || '',
+        newPassword: '',
+        confirmPassword: '',
+        role: 'Super Admin',
+        brand: 'All',
+      });
+    }
+    setIsCredsModalOpen(true);
+  };
+
+  const handleSaveCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!credsFormData.email) {
+      showToast('Email address is required.', 'error');
+      return;
+    }
+    if (credsFormData.newPassword && credsFormData.newPassword.length < 4) {
+      showToast('New password must be at least 4 characters long.', 'error');
+      return;
+    }
+    if (credsFormData.newPassword !== credsFormData.confirmPassword) {
+      showToast('New password and confirmation password do not match.', 'error');
+      return;
+    }
+
+    setIsUpdatingCreds(true);
+    try {
+      const res = await updateCredentials({
+        id: credsFormData.id,
+        email: credsFormData.email.trim().toLowerCase(),
+        name: credsFormData.name.trim(),
+        newPassword: credsFormData.newPassword ? credsFormData.newPassword.trim() : undefined,
+        role: credsFormData.role,
+        brand: credsFormData.brand,
+      });
+
+      if (res.success) {
+        setIsCredsModalOpen(false);
+      }
+    } finally {
+      setIsUpdatingCreds(false);
+    }
   };
 
   const handleDelete = (userId: string, userName: string) => {
@@ -229,13 +304,24 @@ export const UsersModule: React.FC = () => {
           </button>
 
           {isSuperAdmin && (
-            <button
-              onClick={handleOpenAdd}
-              className="px-3.5 py-2 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Add App User</span>
-            </button>
+            <>
+              <button
+                onClick={() => handleOpenCredentialsModal(null)}
+                className="px-3.5 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                title="Update Admin ID, email, or security password live in Azure SQL"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
+                <span>Update Admin Password</span>
+              </button>
+
+              <button
+                onClick={handleOpenAdd}
+                className="px-3.5 py-2 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Add App User</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -477,6 +563,13 @@ export const UsersModule: React.FC = () => {
                         {isSuperAdmin && (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
+                              onClick={() => handleOpenCredentialsModal(user)}
+                              className="p-1 rounded text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Update password and security credentials"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleOpenEdit(user)}
                               className="p-1 rounded text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Edit user details and role"
@@ -557,9 +650,12 @@ export const UsersModule: React.FC = () => {
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Leave as Admin@2026 or set custom"
+                  placeholder={editingUser ? "Leave blank to preserve current password, or enter new password" : "Enter account password (or leave blank for Admin@2026)"}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono text-[11px]"
                 />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                  {editingUser ? "Leave blank to keep existing password intact. Entered passwords are automatically hashed with bcrypt before saving to Azure SQL." : "New accounts are hashed with bcrypt before persisting to Azure SQL app_users."}
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -638,6 +734,134 @@ export const UsersModule: React.FC = () => {
                   className="px-4 py-2 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-md cursor-pointer"
                 >
                   {editingUser ? 'Save Changes' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Update Admin Security Credentials & Password */}
+      {isCredsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl max-w-md w-full p-6 shadow-xl animate-modal-scale-in">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    Update Security Credentials
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Direct live commit to Azure SQL <span className="font-mono font-semibold">app_users</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCredsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 cursor-pointer rounded-md"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCredentials} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                    User / Admin ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={credsFormData.id}
+                    onChange={(e) => setCredsFormData({ ...credsFormData, id: e.target.value })}
+                    placeholder="e.g. USR-001"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={credsFormData.name}
+                    onChange={(e) => setCredsFormData({ ...credsFormData, name: e.target.value })}
+                    placeholder="e.g. Administrator"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                  Work Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={credsFormData.email}
+                  onChange={(e) => setCredsFormData({ ...credsFormData, email: e.target.value })}
+                  placeholder="admin@devicedoctor.in"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    New Security Password
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">bcrypt (rounds=10)</span>
+                </div>
+                <input
+                  type="password"
+                  value={credsFormData.newPassword}
+                  onChange={(e) => setCredsFormData({ ...credsFormData, newPassword: e.target.value })}
+                  placeholder="Leave blank to keep existing password, or enter new"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
+                />
+              </div>
+
+              {credsFormData.newPassword && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={credsFormData.confirmPassword}
+                    onChange={(e) => setCredsFormData({ ...credsFormData, confirmPassword: e.target.value })}
+                    placeholder="Repeat new security password"
+                    className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
+                  />
+                </div>
+              )}
+
+              <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                <span className="font-semibold text-slate-900 dark:text-white">Note:</span> Submitting updates executes a parameterized <span className="font-mono">UPDATE app_users</span> in Azure SQL. A fresh session token will be issued and synchronized with request headers.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCredsModalOpen(false)}
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingCreds}
+                  className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span>{isUpdatingCreds ? 'Committing to Azure SQL...' : 'Save & Commit Credentials'}</span>
                 </button>
               </div>
             </form>

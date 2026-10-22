@@ -5,7 +5,7 @@ import {
   Wrench,
   Shield,
   Lock,
-  Mail,
+  User,
   ArrowRight,
   Sun,
   Moon,
@@ -24,6 +24,7 @@ import {
   Layers,
   Sparkles,
   Globe,
+  KeyRound,
 } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
@@ -38,8 +39,8 @@ export const LoginScreen: React.FC = () => {
     databaseStatus,
   } = useCrm();
 
-  const [email, setEmail] = useState('rathorehemant114@gmail.com');
-  const [password, setPassword] = useState('Admin@2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -58,9 +59,9 @@ export const LoginScreen: React.FC = () => {
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const success = await login(email, password);
-      if (!success) {
-        setErrorMessage('Authentication failed. Please verify your credentials or Azure SQL whitelist.');
+      const res = await login(email, password);
+      if (!res.success) {
+        setErrorMessage(res.error || 'Authentication failed. Please verify your credentials or Azure SQL whitelist.');
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Unable to connect to Azure SQL app_users.');
@@ -75,7 +76,10 @@ export const LoginScreen: React.FC = () => {
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      await login(userEmail, userPass);
+      const res = await login(userEmail, userPass);
+      if (!res.success) {
+        setErrorMessage(res.error || 'Authentication failed for the selected role.');
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Authentication error.');
     } finally {
@@ -141,10 +145,10 @@ export const LoginScreen: React.FC = () => {
     },
     {
       name: 'DUNS',
-      prefix: 'DNS',
+      prefix: 'DUNS',
       icon: <Globe className="w-5 h-5" />,
-      tagline: 'Global Business Verification, Corporate Intelligence & Regulatory Compliance',
-      capabilities: ['Entity Verification & D&B Ratings', 'KYC & Cross-Border Compliance', 'Corporate Credit Intelligence & Risk'],
+      tagline: 'Global Business Intelligence & Corporate Risk Audits',
+      capabilities: ['Global Entity Verification', 'D-U-N-S® Compliance Data', 'Cross-Border Risk Assessment'],
       colorScheme: {
         activeBorder: 'border-slate-900 ring-2 ring-slate-900/20 dark:border-white dark:ring-white/20',
         activeBg: 'bg-slate-100/90 dark:bg-slate-800/80',
@@ -154,94 +158,75 @@ export const LoginScreen: React.FC = () => {
     },
   ];
 
-  // Determine current step:
-  // Step 1: User is not authenticated (!authUser)
-  // Step 2: User is authenticated, but workspace not yet locked/confirmed (!hasConfirmedWorkspace)
-  const isStep2 = Boolean(authUser && !hasConfirmedWorkspace);
-
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center items-center p-4 relative py-12">
-      {/* Top right theme switch */}
-      <div className="absolute top-4 right-4">
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <Sun className="w-4 h-4 text-slate-800 dark:text-slate-200" /> : <Moon className="w-4 h-4 text-slate-600" />}
-        </button>
+    <div className="min-h-screen bg-white dark:bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 font-sans selection:bg-slate-900 selection:text-white">
+      {/* Top Bar with Brand Badge & Controls */}
+      <div className="w-full max-w-xl flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-bold text-sm shadow-xs">
+            DD
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-tight">
+              Device Doctor India
+            </h1>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Enterprise Multi-Brand CRM
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Live Azure SQL Status Pill */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${
+              databaseStatus.connected
+                ? 'bg-slate-50 text-slate-900 border-slate-300 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700'
+                : 'bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700'
+            }`}
+            title={`Azure SQL Database: ${databaseStatus.database} on ${databaseStatus.server} (${databaseStatus.authType})`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>{databaseStatus.connected ? 'Azure SQL Live' : 'Azure SQL Pending'}</span>
+          </div>
+
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-1.5 rounded-md border border-slate-200 dark:border-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-900 transition-colors cursor-pointer"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
-      <div className={`w-full transition-all duration-300 ${isStep2 ? 'max-w-2xl' : 'max-w-lg'}`}>
-        {/* Brand Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs mb-3">
-            {isStep2 ? <Layers className="w-7 h-7" /> : <Wrench className="w-7 h-7" />}
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-            Device Doctor India CRM
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-            Multi-Brand Enterprise IT & Software Agency CRM · Device Doctor · Codestro · FX Launch Pad · DUNS
-          </p>
-        </div>
-
-        {/* Live Azure SQL Connection Badge (Always visible for auditability) */}
-        <div className="mb-4 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 shrink-0">
-              <Database className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
-                <span>Azure SQL:</span>
-                <span className="font-mono text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
-                  {databaseStatus.server} [{databaseStatus.database}]
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                Auth: {databaseStatus.authType} · User: {databaseStatus.user}
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 flex items-center gap-1 text-[11px] font-medium">
-            {databaseStatus.connected ? (
-              <span className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-1 font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Connected</span>
-              </span>
-            ) : (
-              <span className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center gap-1 font-semibold" title={databaseStatus.error || undefined}>
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Pending Whitelist</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* STEP 2: MANDATORY BRAND SELECTION SCREEN (Post-Authentication)             */}
-        {/* ========================================================================= */}
-        {isStep2 ? (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 animate-in fade-in zoom-in-95 duration-200">
-            {/* Step Indicator & Title */}
-            <div className="pb-4 mb-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Main Card Container */}
+      <div className="w-full max-w-xl">
+        {authUser ? (
+          /* ========================================================================= */
+          /* STEP 2: WORKSPACE PARTITION SELECTION (SESSION LOCK)                      */
+          /* ========================================================================= */
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 sm:p-7">
+            {/* Header info */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 mb-1.5">
-                  <Shield className="w-3 h-3 text-slate-600 dark:text-slate-400" />
-                  <span>Step 2 of 2 · Mandatory Workspace Selection</span>
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 mb-1">
+                  <CheckCircle2 className="w-3 h-3 text-slate-900 dark:text-white" />
+                  <span>Authenticated · Step 2 of 2</span>
                 </div>
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-                  Select Active Brand Workspace
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Select Brand Workspace
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Choose the workspace to operate in. All records and operations will be strictly locked to this brand.
+                  Confirm workspace partition for this session
                 </p>
               </div>
 
               {/* Operator info pill */}
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 self-start sm:self-auto shrink-0">
-                <div className="w-7 h-7 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-bold shrink-0">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 self-start sm:self-auto shrink-0">
+                <div className="w-7 h-7 rounded-md bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-xs font-bold shrink-0">
                   {authUser?.name?.[0] || 'U'}
                 </div>
                 <div className="text-left pr-2">
@@ -263,7 +248,7 @@ export const LoginScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* 3 Brand Selection Cards */}
+            {/* Brand Selection Cards */}
             <div className="space-y-3 mb-6">
               {brands.map((b) => {
                 const isSelected = selectedBrand === b.name;
@@ -273,16 +258,14 @@ export const LoginScreen: React.FC = () => {
                   <div
                     key={b.name}
                     onClick={() => setSelectedBrand(b.name)}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start sm:items-center justify-between gap-4 ${
+                    className={`p-4 rounded-lg border-2 transition-all cursor-pointer flex items-start sm:items-center justify-between gap-4 ${
                       isSelected
-                        ? `${b.colorScheme.activeBorder} ${b.colorScheme.activeBg} shadow-md`
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
+                        ? 'border-slate-900 bg-slate-50 dark:border-white dark:bg-slate-800/80 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
-                      <div
-                        className={`w-11 h-11 rounded-xl bg-gradient-to-tr ${b.colorScheme.avatarBg} text-white flex items-center justify-center shadow-md shrink-0`}
-                      >
+                      <div className="w-10 h-10 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center shrink-0">
                         {b.icon}
                       </div>
 
@@ -295,7 +278,7 @@ export const LoginScreen: React.FC = () => {
                             {b.prefix}
                           </span>
                           {isAssigned && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 dark:text-slate-200 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-white">
                               Your Assigned Brand
                             </span>
                           )}
@@ -305,7 +288,7 @@ export const LoginScreen: React.FC = () => {
                           {b.tagline}
                         </p>
 
-                        <div className="hidden sm:flex items-center gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <div className="hidden sm:flex items-center gap-2 mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                           {b.capabilities.map((cap, idx) => (
                             <span key={idx} className="flex items-center gap-1">
                               {idx > 0 && <span className="text-slate-300 dark:text-slate-700">·</span>}
@@ -318,13 +301,13 @@ export const LoginScreen: React.FC = () => {
 
                     <div className="shrink-0 pt-1 sm:pt-0">
                       <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${
+                        className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-colors ${
                           isSelected
                             ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900'
                             : 'border-slate-300 dark:border-slate-600 bg-transparent'
                         }`}
                       >
-                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </div>
                     </div>
                   </div>
@@ -333,15 +316,15 @@ export const LoginScreen: React.FC = () => {
             </div>
 
             {/* Session Lock Security Notice */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 mb-6 text-xs text-slate-600 dark:text-slate-300 flex items-start gap-3">
-              <Lock className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 mb-6 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-3">
+              <Lock className="w-4 h-4 text-slate-600 dark:text-slate-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold text-slate-900 dark:text-slate-100">
-                  Strict Session Lock & Data Partitioning:
+                  Strict Session Partitioning:
                 </span>{' '}
-                Once confirmed, the entire CRM is strictly locked to{' '}
+                The CRM session will be scoped to{' '}
                 <span className="font-bold text-slate-900 dark:text-white underline decoration-slate-400">{selectedBrand}</span>.
-                All client on-boardings, project IDs, contracts, and GST invoices will be tagged with this brand context. Dynamic switching inside the CRM has been permanently removed to protect data integrity.
+                All client on-boardings, project codes, contracts, and GST invoices will be recorded under this brand partition.
               </div>
             </div>
 
@@ -350,15 +333,15 @@ export const LoginScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={logout}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
-                Sign Out / Switch Account
+                Sign Out / Switch User
               </button>
 
               <button
                 type="button"
                 onClick={handleConfirmWorkspace}
-                className="w-full sm:flex-1 py-3 px-6 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:flex-1 py-2.5 px-6 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Confirm & Enter {selectedBrand} Workspace</span>
                 <ArrowRight className="w-4 h-4" />
@@ -369,62 +352,73 @@ export const LoginScreen: React.FC = () => {
           /* ========================================================================= */
           /* STEP 1: OPERATOR SIGN IN SCREEN                                            */
           /* ========================================================================= */
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-6 sm:p-7">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 sm:p-7">
             <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 mb-1">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 mb-1">
                   <span>Step 1 of 2</span>
                 </div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
                   Operator Sign In
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Authenticates against live <span className="font-mono text-[11px]">app_users</span> in Azure SQL
+                  Validates credentials live against <span className="font-mono text-[11px] font-semibold">app_users</span> in Azure SQL
                 </p>
               </div>
-              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700">
                 <Shield className="w-5 h-5" />
               </div>
             </div>
 
+            {/* Diagnostic Monochrome Alert Banner */}
             {errorMessage && (
-              <div className="mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-slate-800 dark:text-slate-200 shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
+              <div className="mb-5 p-3.5 rounded-lg bg-white dark:bg-slate-900 border-2 border-slate-900 dark:border-white text-xs text-slate-900 dark:text-slate-100 flex items-start gap-2.5 shadow-xs">
+                <AlertCircle className="w-4 h-4 text-slate-900 dark:text-slate-100 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-[11px] uppercase tracking-wider mb-0.5 text-slate-900 dark:text-white">
+                    Authentication Failure
+                  </div>
+                  <div className="leading-relaxed text-slate-700 dark:text-slate-300">
+                    {errorMessage}
+                  </div>
+                </div>
               </div>
             )}
 
-            <form onSubmit={handleSubmitAuth} className="space-y-3.5">
+            <form onSubmit={handleSubmitAuth} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Work Email Address / Entra ID
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                  Work Email Address / Admin ID
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="rathorehemant114@gmail.com"
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    placeholder="Enter Work Email or Admin ID (e.g. USR-001)"
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 dark:focus:ring-white dark:focus:border-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Security Password
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Security Password
+                  </label>
+                  <span className="text-[10px] text-slate-400">bcrypt verified</span>
+                </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100"
+                    placeholder="Enter security password"
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 dark:focus:ring-white dark:focus:border-white"
                   />
                 </div>
               </div>
@@ -434,42 +428,62 @@ export const LoginScreen: React.FC = () => {
                 disabled={isLoading}
                 className="w-full mt-2 py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                <span>{isLoading ? 'Verifying Azure SQL Entra Session...' : 'Authenticate & Continue to Workspace Selection'}</span>
+                <span>{isLoading ? 'Verifying Azure SQL app_users...' : 'Authenticate & Continue to Workspace Selection'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
 
-            {/* Quick RBAC Role Access Grid */}
+            {/* Quick Reference Accounts Grid */}
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-2 flex items-center justify-between">
-                <span>Quick Sign-In by RBAC Role:</span>
-                <span className="text-[10px] text-slate-400">1-Click Live Test</span>
-              </p>
+              <div className="mb-2.5">
+                <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                  <span>Standard Initial Accounts:</span>
+                  <span className="text-[10px] text-slate-400">1-Click Live Test</span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  If you updated your Admin ID or password in User Settings, type your updated credentials above.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => handleSelectRole('rathorehemant114@gmail.com', 'Admin@2026')}
-                  className="p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <Shield className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-                    <span>Entra Super Admin</span>
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <Shield className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
+                    <span>Super Admin</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     rathorehemant114@gmail.com
                   </div>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => handleSelectRole('admin@codestro.com', 'Codestro@2026')}
-                  className="p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                  onClick={() => handleSelectRole('devicedoctorindia.in@gmail.com', 'Admin@2026')}
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <UserCheck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <Building2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
+                    <span>DDI Primary Admin</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    devicedoctorindia.in@gmail.com
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectRole('admin@codestro.com', 'Codestro@2026')}
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <UserCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                     <span>Brand Admin (Codestro)</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     admin@codestro.com
                   </div>
                 </button>
@@ -477,13 +491,13 @@ export const LoginScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSelectRole('admin@duns.com', 'Duns@2026')}
-                  className="p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <Globe className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <Globe className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                     <span>Brand Admin (DUNS)</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     admin@duns.com
                   </div>
                 </button>
@@ -491,13 +505,13 @@ export const LoginScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSelectRole('karthik.pm@devicedoctor.in', 'Project@2026')}
-                  className="p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                     <span>Project Manager</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     karthik.pm@devicedoctor.in
                   </div>
                 </button>
@@ -505,28 +519,14 @@ export const LoginScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSelectRole('finance@devicedoctor.in', 'Finance@2026')}
-                  className="p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
+                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <Calculator className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <Calculator className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
                     <span>Accountant</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     finance@devicedoctor.in
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('viewer@devicedoctor.in', 'Viewer@2026')}
-                  className="col-span-2 p-2 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white">
-                    <Eye className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                    <span>Read-Only Viewer Role</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                    viewer@devicedoctor.in (Audits & Client Review)
                   </div>
                 </button>
               </div>

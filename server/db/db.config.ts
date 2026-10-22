@@ -37,14 +37,14 @@ export const SQL_POOL_CONFIG = {
   max: 10,
   min: 0,
   idleTimeoutMillis: 30000,
-  acquireTimeoutMillis: 30000,
+  acquireTimeoutMillis: 5000,
 } as const;
 
 export const SQL_OPTIONS_CONFIG = {
   encrypt: true,
   trustServerCertificate: false,
-  connectTimeout: 30000,
-  requestTimeout: 30000,
+  connectTimeout: 5000,
+  requestTimeout: 10000,
   enableArithAbort: true,
   abortTransactionOnError: true,
 } as const;

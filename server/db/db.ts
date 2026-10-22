@@ -581,7 +581,27 @@ export const COLUMN_MIGRATIONS = [
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'updated_at') ALTER TABLE clients ADD updated_at NVARCHAR(50);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'client_id_code') ALTER TABLE clients ADD client_id_code NVARCHAR(150);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'projects') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('projects') AND name = 'project_id_code') ALTER TABLE projects ADD project_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'service_categories') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('service_categories') AND name = 'category_id_code') ALTER TABLE service_categories ADD category_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'services') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('services') AND name = 'service_id_code') ALTER TABLE services ADD service_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'bank_accounts') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('bank_accounts') AND name = 'account_id_code') ALTER TABLE bank_accounts ADD account_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'employee_roles') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('employee_roles') AND name = 'role_id_code') ALTER TABLE employee_roles ADD role_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'employees') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('employees') AND name = 'employee_id_code') ALTER TABLE employees ADD employee_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'assignments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('assignments') AND name = 'assignment_id_code') ALTER TABLE assignments ADD assignment_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'employee_payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('employee_payments') AND name = 'emp_payment_id_code') ALTER TABLE employee_payments ADD emp_payment_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'expense_categories') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('expense_categories') AND name = 'exp_category_id_code') ALTER TABLE expense_categories ADD exp_category_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'other_expenses') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('other_expenses') AND name = 'expense_id_code') ALTER TABLE other_expenses ADD expense_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'payments') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('payments') AND name = 'payment_id_code') ALTER TABLE payments ADD payment_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'gst_invoices') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('gst_invoices') AND name = 'invoice_id_code') ALTER TABLE gst_invoices ADD invoice_id_code NVARCHAR(150);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'gst_invoices') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('gst_invoices') AND name = 'invoice_file') ALTER TABLE gst_invoices ADD invoice_file NVARCHAR(MAX);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'password_hash') ALTER TABLE app_users ADD password_hash NVARCHAR(255);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'name') ALTER TABLE app_users ADD name NVARCHAR(255);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'email') ALTER TABLE app_users ADD email NVARCHAR(255);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'role') ALTER TABLE app_users ADD role NVARCHAR(50) DEFAULT 'Super Admin';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'brand') ALTER TABLE app_users ADD brand NVARCHAR(100) DEFAULT 'All';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'status') ALTER TABLE app_users ADD status NVARCHAR(50) DEFAULT 'Active';`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'avatar') ALTER TABLE app_users ADD avatar NVARCHAR(MAX);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'created_at') ALTER TABLE app_users ADD created_at NVARCHAR(50);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'updated_at') ALTER TABLE app_users ADD updated_at NVARCHAR(50);`,
 ];
 
 export const DATA_SYNC_STATEMENTS = [
@@ -589,6 +609,8 @@ export const DATA_SYNC_STATEMENTS = [
    EXEC('UPDATE other_expenses SET expense_category_id = category_id WHERE (expense_category_id IS NULL OR expense_category_id = '''') AND category_id IS NOT NULL AND category_id <> '''';');`,
   `IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'client_name')
    EXEC('UPDATE clients SET name = client_name WHERE (name IS NULL OR name = '''') AND client_name IS NOT NULL AND client_name <> '''';');`,
+  `IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('app_users') AND name = 'full_name')
+   EXEC('UPDATE app_users SET name = full_name WHERE (name IS NULL OR name = '''') AND full_name IS NOT NULL AND full_name <> '''';');`,
 ];
 
 export async function migrateAzureSqlSchema(p?: sql.ConnectionPool): Promise<void> {
