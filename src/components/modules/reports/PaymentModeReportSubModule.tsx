@@ -38,6 +38,15 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import {
+  chartTooltipProps,
+  chartXAxisProps,
+  chartYAxisProps,
+  chartGridProps,
+  renderHighContrastLegend,
+  PIE_SLICE_BORDER,
+  HELVETICA_FONT,
+} from './ChartTheme';
 
 type DatePreset = 'this-month' | 'last-3-months' | 'last-6-months' | 'this-fy' | 'all-time' | 'august-2026';
 
@@ -77,13 +86,13 @@ const MONTH_NAMES = [
 ];
 
 const MODE_COLORS: Record<string, string> = {
-  'GST Invoice': '#0f172a',
-  'Non GST Online': '#1e293b',
-  Cash: '#334155',
-  Crypto: '#475569',
-  'Bank Transfer': '#64748b',
-  UPI: '#94a3b8',
-  Other: '#cbd5e1',
+  'GST Invoice': '#000000',
+  'Non GST Online': '#1f2937',
+  Cash: '#374151',
+  Crypto: '#4b5563',
+  'Bank Transfer': '#6b7280',
+  UPI: '#9ca3af',
+  Other: '#d1d5db',
 };
 
 export const PaymentModeReportSubModule: React.FC = () => {
@@ -612,16 +621,16 @@ export const PaymentModeReportSubModule: React.FC = () => {
       </div>
 
       {/* Visual Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
         {/* Chart 1: Revenue by Payment Mode */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+        <div className="lg:col-span-2 bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-black dark:text-white" />
                 <span>Revenue by Payment Mode (INR)</span>
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Gross collections comparison across client settlement methods
               </p>
             </div>
@@ -629,33 +638,29 @@ export const PaymentModeReportSubModule: React.FC = () => {
 
           <div className="h-64 w-full">
             {modeBreakdownData.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+              <div className="h-full flex items-center justify-center text-xs text-neutral-500 font-sans">
                 No payment transactions recorded for selected filters.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={modeBreakdownData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-                  <XAxis dataKey="mode" tick={{ fontSize: 11 }} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="mode" {...chartXAxisProps} />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val: any) => [formatINR(Number(val) || 0), 'Revenue']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '12px',
-                    }}
                   />
-                  <Bar dataKey="totalINR" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="totalINR" radius={[2, 2, 0, 0]}>
                     {modeBreakdownData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        fill={MODE_COLORS[entry.mode] || '#0f172a'}
+                        fill={MODE_COLORS[entry.mode] || '#000000'}
+                        stroke="#ffffff"
+                        strokeWidth={1}
                       />
                     ))}
                   </Bar>
@@ -666,20 +671,20 @@ export const PaymentModeReportSubModule: React.FC = () => {
         </div>
 
         {/* Chart 2: Mode Share Donut */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs flex flex-col">
           <div className="mb-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <PieChartIcon className="w-4 h-4 text-slate-900 dark:text-white" />
+            <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+              <PieChartIcon className="w-4 h-4 text-black dark:text-white" />
               <span>Settlement Method Share</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
               Portfolio distribution by payment instrument
             </p>
           </div>
 
           <div className="flex-1 min-h-[220px]">
             {totalModeRevenueINR === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+              <div className="h-full flex items-center justify-center text-xs text-neutral-500 font-sans">
                 No cleared revenue in period.
               </div>
             ) : (
@@ -694,23 +699,19 @@ export const PaymentModeReportSubModule: React.FC = () => {
                     innerRadius={50}
                     outerRadius={80}
                     paddingAngle={3}
+                    {...PIE_SLICE_BORDER}
                   >
                     {modeBreakdownData.map((entry) => (
                       <Cell
                         key={entry.mode}
-                        fill={MODE_COLORS[entry.mode] || '#0f172a'}
+                        fill={MODE_COLORS[entry.mode] || '#000000'}
+                        {...PIE_SLICE_BORDER}
                       />
                     ))}
                   </Pie>
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val: any) => [formatINR(Number(val) || 0), 'Share']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '12px',
-                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -722,15 +723,15 @@ export const PaymentModeReportSubModule: React.FC = () => {
             {modeBreakdownData.map((item) => {
               const pct = totalModeRevenueINR > 0 ? ((item.totalINR / totalModeRevenueINR) * 100).toFixed(1) : '0';
               return (
-                <div key={item.mode} className="flex items-center justify-between text-xs">
+                <div key={item.mode} className="flex items-center justify-between text-xs" style={{ fontFamily: HELVETICA_FONT }}>
                   <div className="flex items-center gap-2 truncate mr-2">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: MODE_COLORS[item.mode] || '#0f172a' }}
+                      className="w-2.5 h-2.5 rounded-full shrink-0 border border-neutral-300"
+                      style={{ backgroundColor: MODE_COLORS[item.mode] || '#000000' }}
                     />
-                    <span className="text-slate-600 dark:text-slate-400 truncate">{item.mode}</span>
+                    <span className="text-neutral-900 dark:text-neutral-100 font-medium truncate">{item.mode}</span>
                   </div>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 shrink-0">
+                  <span className="font-mono font-bold text-black dark:text-white shrink-0">
                     {pct}%
                   </span>
                 </div>

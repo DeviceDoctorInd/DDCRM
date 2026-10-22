@@ -37,20 +37,29 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import {
+  chartTooltipProps,
+  chartXAxisProps,
+  chartYAxisProps,
+  chartGridProps,
+  renderHighContrastLegend,
+  PIE_SLICE_BORDER,
+  HELVETICA_FONT,
+} from './ChartTheme';
 
 type DatePreset = 'last-6-months' | 'this-year' | 'all-time' | 'custom';
 
 const PALETTE = {
-  received: '#0f172a',
-  outstanding: '#64748b',
-  contract: '#000000',
-  employeeCost: '#334155',
-  expenses: '#94a3b8',
-  profit: '#0f172a',
-  cashProfit: '#1e293b',
+  received: '#000000',
+  outstanding: '#6b7280',
+  contract: '#111827',
+  employeeCost: '#374151',
+  expenses: '#9ca3af',
+  profit: '#000000',
+  cashProfit: '#1f2937',
 };
 
-const DONUT_COLORS = ['#0f172a', '#1e293b', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'];
+const DONUT_COLORS = ['#000000', '#374151', '#6b7280', '#9ca3af', '#111827', '#4b5563', '#d1d5db'];
 
 export const ClientReportSubModule: React.FC = () => {
   const { clients, projects, payments, employeePayments, assignments, expenses, services, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
@@ -778,20 +787,20 @@ export const ClientReportSubModule: React.FC = () => {
       </div>
 
       {/* 3. Interactive Graphs & Visual Analytics Grid for Selected Client (Recharts) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 font-sans">
         {/* Graph 1: Client Financial Summary Bar Graph */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-black dark:text-white" />
                 <span>Client Financial Summary (Bar Chart)</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Comparison of Inflow, Outstanding, Outflows & Profit for {clientDisplayName}
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700 font-semibold">
               P&L Split
             </span>
           </div>
@@ -799,27 +808,20 @@ export const ClientReportSubModule: React.FC = () => {
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={financialBarData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} interval={0} />
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="name" {...chartXAxisProps} tickLine={false} interval={0} />
                 <YAxis
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  {...chartYAxisProps}
                   tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                   width={55}
                 />
                 <Tooltip
+                  {...chartTooltipProps}
                   formatter={(val) => [formatINR(Number(val || 0)), 'Amount']}
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#f8fafc',
-                  }}
-                  itemStyle={{ color: '#ffffff' }}
                 />
-                <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="amount" radius={[2, 2, 0, 0]}>
                   {financialBarData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`cell-${index}`} fill={entry.fill} stroke="#ffffff" strokeWidth={1} />
                   ))}
                 </Bar>
               </BarChart>
@@ -828,39 +830,40 @@ export const ClientReportSubModule: React.FC = () => {
         </div>
 
         {/* Graph 2: Project-Wise Revenue & Balance Breakdown Grouped Bar Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-black dark:text-white" />
                 <span>Project-Wise Revenue & Balance Breakdown</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Contract Value vs Received vs Outstanding vs Profit per project
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700">
               {filteredProjects.length} Projects
             </span>
           </div>
 
           <div className="h-64 w-full">
             {projectBreakdownData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Briefcase className="w-6 h-6 mb-1 text-slate-300" />
+              <div className="h-full flex flex-col items-center justify-center text-neutral-500 text-xs font-sans">
+                <Briefcase className="w-6 h-6 mb-1 text-neutral-400" />
                 <span>No projects recorded for this client in selected dates</span>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={projectBreakdownData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                  <XAxis dataKey="shortName" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="shortName" {...chartXAxisProps} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     width={55}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val, name) => [
                       formatINR(Number(val || 0)),
                       name === 'contract'
@@ -871,31 +874,26 @@ export const ClientReportSubModule: React.FC = () => {
                         ? 'Outstanding'
                         : 'Project Profit',
                     ]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
                   <Legend
                     verticalAlign="top"
-                    wrapperStyle={{ fontSize: '10px', paddingBottom: '8px' }}
+                    wrapperStyle={{ fontSize: '11px', paddingBottom: '8px', fontFamily: HELVETICA_FONT }}
                     formatter={(val) =>
-                      val === 'contract'
-                        ? 'Contract'
-                        : val === 'received'
-                        ? 'Received'
-                        : val === 'outstanding'
-                        ? 'Outstanding'
-                        : 'Profit'
+                      renderHighContrastLegend(
+                        val === 'contract'
+                          ? 'Contract'
+                          : val === 'received'
+                          ? 'Received'
+                          : val === 'outstanding'
+                          ? 'Outstanding'
+                          : 'Profit'
+                      )
                     }
                   />
-                  <Bar dataKey="contract" fill="#000000" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="received" fill="#0f172a" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="outstanding" fill="#64748b" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="profit" fill="#334155" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="contract" fill="#000000" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
+                  <Bar dataKey="received" fill="#1f2937" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
+                  <Bar dataKey="outstanding" fill="#6b7280" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
+                  <Bar dataKey="profit" fill="#374151" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -903,53 +901,47 @@ export const ClientReportSubModule: React.FC = () => {
         </div>
 
         {/* Graph 3: Client Payment Timeline / Monthly Inflow Histogram */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-black dark:text-white" />
                 <span>Payment Timeline & Monthly Inflows</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Month-by-month payment clearance velocity for {clientDisplayName}
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               {formatINR(totalReceivedINR)} Total
             </span>
           </div>
 
           <div className="h-64 w-full">
             {monthlyInflowData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Calendar className="w-6 h-6 mb-1 text-slate-300" />
+              <div className="h-full flex flex-col items-center justify-center text-neutral-500 text-xs font-sans">
+                <Calendar className="w-6 h-6 mb-1 text-neutral-400" />
                 <span>No payments logged for this client in the selected date window</span>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={monthlyInflowData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                  <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="monthLabel" {...chartXAxisProps} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     width={55}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val, name) => [
                       formatINR(Number(val || 0)),
                       name === 'received' ? 'Received Cash' : name,
                     ]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
-                  <Bar dataKey="received" name="received" fill="#0f172a" radius={[6, 6, 0, 0]} />
-                  <Line type="monotone" dataKey="received" stroke="#000000" strokeWidth={2} dot={{ r: 4 }} />
+                  <Bar dataKey="received" name="received" fill="#000000" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
+                  <Line type="monotone" dataKey="received" stroke="#111827" strokeWidth={2} dot={{ r: 4, fill: '#111827', stroke: '#ffffff', strokeWidth: 1.5 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -957,39 +949,38 @@ export const ClientReportSubModule: React.FC = () => {
         </div>
 
         {/* Graph 4: Service Mix & Revenue Share Donut Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <PieChartIcon className="w-4 h-4 text-black dark:text-white" />
                 <span>Service Mix & Revenue Share</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Breakdown of services contracted by {clientDisplayName}
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               {serviceMixData.length} Service Lines
             </span>
           </div>
 
           <div className="h-64 w-full flex items-center justify-center">
             {serviceMixData.length === 0 ? (
-              <div className="text-slate-400 text-xs">No service data available for selected client</div>
+              <div className="text-neutral-500 text-xs font-sans">No service data available for selected client</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val) => [formatINR(Number(val || 0)), 'Contract Value']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
-                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: HELVETICA_FONT }}
+                    formatter={renderHighContrastLegend}
+                  />
                   <Pie
                     data={serviceMixData}
                     cx="50%"
@@ -998,9 +989,10 @@ export const ClientReportSubModule: React.FC = () => {
                     outerRadius={75}
                     paddingAngle={4}
                     dataKey="value"
+                    {...PIE_SLICE_BORDER}
                   >
                     {serviceMixData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.color} {...PIE_SLICE_BORDER} />
                     ))}
                   </Pie>
                 </PieChart>

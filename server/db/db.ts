@@ -581,6 +581,7 @@ export const COLUMN_MIGRATIONS = [
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'updated_at') ALTER TABLE clients ADD updated_at NVARCHAR(50);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'clients') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('clients') AND name = 'client_id_code') ALTER TABLE clients ADD client_id_code NVARCHAR(150);`,
   `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'projects') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('projects') AND name = 'project_id_code') ALTER TABLE projects ADD project_id_code NVARCHAR(150);`,
+  `IF EXISTS (SELECT * FROM sys.tables WHERE name = 'gst_invoices') AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('gst_invoices') AND name = 'invoice_file') ALTER TABLE gst_invoices ADD invoice_file NVARCHAR(MAX);`,
 ];
 
 export const DATA_SYNC_STATEMENTS = [

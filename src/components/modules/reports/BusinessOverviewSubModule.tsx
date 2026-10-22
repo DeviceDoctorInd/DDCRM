@@ -35,6 +35,15 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import {
+  chartTooltipProps,
+  chartXAxisProps,
+  chartYAxisProps,
+  chartGridProps,
+  renderHighContrastLegend,
+  PIE_SLICE_BORDER,
+  HELVETICA_FONT,
+} from './ChartTheme';
 
 export const BusinessOverviewSubModule: React.FC = () => {
   const { clients, projects, payments, employeePayments, assignments, expenses, activeBrand, brandPrefix, isConsolidatedView } = useCrm();
@@ -154,11 +163,11 @@ export const BusinessOverviewSubModule: React.FC = () => {
     const onHold = projects.filter((p) => p.status === 'On Hold' || p.status === 'Proposal').length;
 
     const items = [
-      { name: 'Active / In Progress', value: active, color: '#0f172a' },
-      { name: 'Completed', value: completed, color: '#475569' },
+      { name: 'Active / In Progress', value: active, color: '#000000' },
+      { name: 'Completed', value: completed, color: '#4b5563' },
     ];
     if (onHold > 0) {
-      items.push({ name: 'On Hold / Proposal', value: onHold, color: '#94a3b8' });
+      items.push({ name: 'On Hold / Proposal', value: onHold, color: '#9ca3af' });
     }
     return items;
   }, [projects]);
@@ -166,14 +175,14 @@ export const BusinessOverviewSubModule: React.FC = () => {
   // --- Chart 2: Financial Position Horizontal Bar Chart Data (8 metrics) ---
   const financialPositionData = useMemo(() => {
     return [
-      { name: 'Contract Value', value: totalContractValueINR, fill: '#0f172a' },
-      { name: 'Received', value: totalReceivedINR, fill: '#1e293b' },
-      { name: 'Outstanding', value: totalOutstandingINR, fill: '#64748b' },
-      { name: 'Employee Cost', value: projectEmployeeCost, fill: '#334155' },
-      { name: 'Project Expenses', value: projectExpenses, fill: '#475569' },
-      { name: 'Fixed Expenses', value: fixedExpenses, fill: '#64748b' },
-      { name: 'Project Profit', value: projectProfit, fill: '#000000' },
-      { name: 'Business Profit', value: businessProfit, fill: '#0f172a' },
+      { name: 'Contract Value', value: totalContractValueINR, fill: '#000000' },
+      { name: 'Received', value: totalReceivedINR, fill: '#1f2937' },
+      { name: 'Outstanding', value: totalOutstandingINR, fill: '#6b7280' },
+      { name: 'Employee Cost', value: projectEmployeeCost, fill: '#374151' },
+      { name: 'Project Expenses', value: projectExpenses, fill: '#4b5563' },
+      { name: 'Fixed Expenses', value: fixedExpenses, fill: '#9ca3af' },
+      { name: 'Project Profit', value: projectProfit, fill: '#111827' },
+      { name: 'Business Profit', value: businessProfit, fill: '#000000' },
     ];
   }, [
     totalContractValueINR,
@@ -649,41 +658,40 @@ export const BusinessOverviewSubModule: React.FC = () => {
       </div>
 
       {/* SECTION 3: 2x2 EXECUTIVE CHARTS GRID (Powered by Recharts) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 font-sans">
         {/* Chart 1 (Top-Left): "PROJECT STATUS" — Donut Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <PieChartIcon className="w-4 h-4 text-black dark:text-white" />
                 <span>PROJECT STATUS</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Active / In Progress vs Completed Distribution
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-medium">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700 font-medium">
               {totalProjectsCount} Total
             </span>
           </div>
 
           <div className="h-64 w-full flex items-center justify-center">
             {projectStatusData.length === 0 ? (
-              <div className="text-slate-400 text-xs">No project status data</div>
+              <div className="text-neutral-500 text-xs font-sans">No project status data</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val, name) => [`${val} Projects`, name]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
-                  <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: HELVETICA_FONT }}
+                    formatter={renderHighContrastLegend}
+                  />
                   <Pie
                     data={projectStatusData}
                     cx="50%"
@@ -692,9 +700,10 @@ export const BusinessOverviewSubModule: React.FC = () => {
                     outerRadius={80}
                     paddingAngle={4}
                     dataKey="value"
+                    {...PIE_SLICE_BORDER}
                   >
                     {projectStatusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.color} {...PIE_SLICE_BORDER} />
                     ))}
                   </Pie>
                 </PieChart>
@@ -704,18 +713,18 @@ export const BusinessOverviewSubModule: React.FC = () => {
         </div>
 
         {/* Chart 2 (Top-Right): "FINANCIAL POSITION" — Horizontal Bar Chart (8 metrics) */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-black dark:text-white" />
                 <span>FINANCIAL POSITION</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Horizontal comparison of 8 core financial dimensions
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               INR Ledger
             </span>
           </div>
@@ -727,32 +736,26 @@ export const BusinessOverviewSubModule: React.FC = () => {
                 data={financialPositionData}
                 margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} horizontal={false} />
+                <CartesianGrid {...chartGridProps} horizontal={false} />
                 <XAxis
                   type="number"
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  {...chartXAxisProps}
                   tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                 />
                 <YAxis
                   type="category"
                   dataKey="name"
-                  tick={{ fontSize: 10, fill: '#475569' }}
+                  {...chartYAxisProps}
                   width={110}
                   tickLine={false}
                 />
                 <Tooltip
+                  {...chartTooltipProps}
                   formatter={(val) => [formatINR(Number(val || 0)), 'Amount']}
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#f8fafc',
-                  }}
                 />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="value" radius={[0, 2, 2, 0]}>
                   {financialPositionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`cell-${index}`} fill={entry.fill} stroke="#ffffff" strokeWidth={1} />
                   ))}
                 </Bar>
               </BarChart>
@@ -761,47 +764,41 @@ export const BusinessOverviewSubModule: React.FC = () => {
         </div>
 
         {/* Chart 3 (Bottom-Left): "MONTHLY COLLECTIONS" — Line Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-black dark:text-white" />
                 <span>MONTHLY COLLECTIONS</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Trend line with data points showing month-by-month Received (INR)
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               {formatINR(totalReceivedINR)} Total
             </span>
           </div>
 
           <div className="h-64 w-full">
             {monthlyCollectionsData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Clock className="w-6 h-6 mb-1 text-slate-300" />
+              <div className="h-full flex flex-col items-center justify-center text-neutral-500 text-xs font-sans">
+                <Clock className="w-6 h-6 mb-1 text-neutral-400" />
                 <span>No monthly collection records found</span>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={monthlyCollectionsData} margin={{ top: 15, right: 15, left: 15, bottom: 15 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                  <XAxis dataKey="monthLabel" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="monthLabel" {...chartXAxisProps} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     width={55}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val) => [formatINR(Number(val || 0)), 'Received']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
                   <Line
                     type="monotone"
@@ -809,8 +806,8 @@ export const BusinessOverviewSubModule: React.FC = () => {
                     name="Collections"
                     stroke="#000000"
                     strokeWidth={2.5}
-                    dot={{ r: 5, fill: '#000000', stroke: '#334155', strokeWidth: 1.5 }}
-                    activeDot={{ r: 7 }}
+                    dot={{ r: 5, fill: '#000000', stroke: '#ffffff', strokeWidth: 2 }}
+                    activeDot={{ r: 7, stroke: '#000000', strokeWidth: 2 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -819,26 +816,26 @@ export const BusinessOverviewSubModule: React.FC = () => {
         </div>
 
         {/* Chart 4 (Bottom-Right): "TOP PROJECTS BY PROFIT" — Horizontal Bar Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Award className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <Award className="w-4 h-4 text-black dark:text-white" />
                 <span>TOP PROJECTS BY PROFIT</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Top individual projects ranked by net contract profit
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               Top 8 Ranking
             </span>
           </div>
 
           <div className="h-64 w-full">
             {topProjectsByProfitData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Briefcase className="w-6 h-6 mb-1 text-slate-300" />
+              <div className="h-full flex flex-col items-center justify-center text-neutral-500 text-xs font-sans">
+                <Briefcase className="w-6 h-6 mb-1 text-neutral-400" />
                 <span>No project profit data</span>
               </div>
             ) : (
@@ -848,35 +845,34 @@ export const BusinessOverviewSubModule: React.FC = () => {
                   data={topProjectsByProfitData}
                   margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} horizontal={false} />
+                  <CartesianGrid {...chartGridProps} horizontal={false} />
                   <XAxis
                     type="number"
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    {...chartXAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                   />
                   <YAxis
                     type="category"
                     dataKey="displayName"
-                    tick={{ fontSize: 10, fill: '#475569' }}
+                    {...chartYAxisProps}
                     width={155}
                     tickLine={false}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val, name, props) => [
                       `${formatINR(Number(val || 0))} (Contract: ${formatINR(props.payload.contract)})`,
                       'Project Profit',
                     ]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
-                  <Bar dataKey="profit" fill="#334155" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="profit" fill="#374151" radius={[0, 2, 2, 0]}>
                     {topProjectsByProfitData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#0f172a' : index < 3 ? '#334155' : '#64748b'} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={index === 0 ? '#000000' : index < 3 ? '#374151' : '#6b7280'}
+                        stroke="#ffffff"
+                        strokeWidth={1}
+                      />
                     ))}
                   </Bar>
                 </BarChart>

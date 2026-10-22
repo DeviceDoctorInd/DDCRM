@@ -412,20 +412,58 @@ class StorageService {
     }));
   }
 
-  public async savePayment(payment: Payment): Promise<{ success: boolean; payment?: Payment; error?: string }> {
+  public async savePayment(payment: Payment): Promise<{
+    success: boolean;
+    payment?: Payment;
+    gstInvoice?: GstInvoice;
+    gstInvoiceSynced?: boolean;
+    error?: string;
+  }> {
     try {
       // Ensure proof is a clean cloned object
       const payload: Payment = {
         ...payment,
         paymentProof: this.parseProofDocument(payment.paymentProof),
       };
-      const res = await this.apiCall<{ success: boolean; payment: Payment }>('/api/payments', 'POST', payload);
+      const res = await this.apiCall<{
+        success: boolean;
+        payment: Payment;
+        gstInvoiceSynced?: boolean;
+        gstInvoice?: GstInvoice;
+      }>('/api/payments', 'POST', payload);
       this.notifyListeners();
-      const saved = res.payment ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) } : undefined;
-      return { success: true, payment: saved };
+      const saved = res.payment
+        ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) }
+        : undefined;
+      return {
+        success: true,
+        payment: saved,
+        gstInvoice: res.gstInvoice,
+        gstInvoiceSynced: res.gstInvoiceSynced,
+      };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg };
+    }
+  }
+
+  public async syncGstInvoicesFromPayments(): Promise<{
+    success: boolean;
+    count: number;
+    invoices: GstInvoice[];
+    error?: string;
+  }> {
+    try {
+      const res = await this.apiCall<{
+        success: boolean;
+        count: number;
+        invoices: GstInvoice[];
+      }>('/api/gst-invoices/sync', 'POST', {});
+      this.notifyListeners();
+      return { success: true, count: res.count || 0, invoices: res.invoices || [] };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, count: 0, invoices: [], error: msg };
     }
   }
 

@@ -37,6 +37,17 @@ import {
   Cell,
 } from 'recharts';
 
+import {
+  chartTooltipProps,
+  chartXAxisProps,
+  chartYAxisProps,
+  chartGridProps,
+  renderHighContrastLegend,
+  PIE_SLICE_BORDER,
+  HELVETICA_FONT,
+  MONOCHROME_CHART_PALETTE,
+} from './ChartTheme';
+
 type DatePreset = 'this-month' | 'last-3-months' | 'last-6-months' | 'this-fy' | 'all-time' | 'august-2026';
 
 const BRAND_OPTIONS: (BrandName | 'All')[] = [
@@ -63,7 +74,7 @@ const MONTH_NAMES = [
   { label: 'December', value: '12' },
 ];
 
-const CHART_COLORS = ['#0f172a', '#1e293b', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'];
+const CHART_COLORS = ['#000000', '#1f2937', '#374151', '#4b5563', '#6b7280', '#9ca3af', '#d1d5db'];
 
 export const BankAccountReportSubModule: React.FC = () => {
   const {
@@ -325,24 +336,24 @@ export const BankAccountReportSubModule: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Module Sub-Header & Controls */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+      <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#e2e8f0] dark:border-neutral-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700 flex items-center justify-center shrink-0">
               <Landmark className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <h2 className="text-base font-bold text-black dark:text-white">
                   Bank Account-Wise Revenue Reports
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-black text-white dark:bg-white dark:text-black">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-black text-white dark:bg-white dark:text-black">
                   Multi-Account Audit
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
                 Audit and reconcile gross collections credited to specific corporate bank accounts and digital wallets across brands.
               </p>
             </div>
@@ -352,7 +363,7 @@ export const BankAccountReportSubModule: React.FC = () => {
             <button
               type="button"
               onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-black hover:bg-neutral-800 text-white shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded text-xs font-semibold bg-black hover:bg-neutral-800 text-white shadow-xs transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
@@ -558,122 +569,121 @@ export const BankAccountReportSubModule: React.FC = () => {
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
+        <div className="p-4 rounded bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 shadow-xs">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold">Total Revenue Credited</span>
-            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+            <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold font-mono text-black dark:text-white">
             {formatINR(totalRevenueCreditedINR)}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1 truncate">
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 truncate">
             {currentSelectedAccount
               ? `In ${currentSelectedAccount.bankName} (${currentSelectedAccount.accountNumber.slice(-4)})`
               : `Across ${accountBreakdownData.length} operating accounts`}
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+        <div className="p-4 rounded bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 shadow-xs">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold">Settled Transactions</span>
-            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+            <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
-            {receivedCount} <span className="text-xs font-normal text-slate-400">/ {totalTransactionsCount} total</span>
+          <div className="text-xl sm:text-2xl font-bold font-mono text-black dark:text-white">
+            {receivedCount} <span className="text-xs font-normal text-neutral-500">/ {totalTransactionsCount} total</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1">
             {pendingCount > 0 ? `${pendingCount} invoices pending settlement` : '100% payments settled'}
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+        <div className="p-4 rounded bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 shadow-xs">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold">Average Settlement</span>
-            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+            <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               <CreditCard className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold font-mono text-slate-900 dark:text-slate-100">
+          <div className="text-xl sm:text-2xl font-bold font-mono text-black dark:text-white">
             {formatINR(averageSettlementINR)}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1">
             Per cleared client invoice transaction
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
+        <div className="p-4 rounded bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 shadow-xs">
+          <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400 mb-2">
             <span className="text-xs font-semibold">Selected Scope</span>
-            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700">
+            <div className="p-2 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               <Landmark className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+          <div className="text-base font-bold text-black dark:text-white truncate">
             {currentSelectedAccount ? currentSelectedAccount.bankName : (selectedAccountId === 'ALL' ? 'All Accounts' : 'Direct Cash')}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1 truncate">
+          <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1 truncate">
             {selectedBrand} · {selectedMonth !== 'all' ? `Month: ${selectedMonth}/${selectedYear}` : `${fromDate} to ${toDate}`}
           </div>
         </div>
       </div>
 
       {/* Visual Distribution Analytics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
         {/* Chart 1: Revenue Credited by Bank Account */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+        <div className="lg:col-span-2 bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+              <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-black dark:text-white" />
                 <span>Revenue Credited by Bank Account (INR)</span>
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
                 Comparison of settlement inflow volumes across registered banking channels
               </p>
             </div>
-            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               {accountBreakdownData.length} Accounts Active
             </span>
           </div>
 
           <div className="h-64 w-full">
             {accountBreakdownData.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+              <div className="h-full flex items-center justify-center text-xs text-neutral-500">
                 No payment transactions recorded for selected filters.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={accountBreakdownData} margin={{ top: 10, right: 10, left: 10, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <BarChart data={accountBreakdownData} margin={{ top: 10, right: 10, left: 10, bottom: 35 }}>
+                  <CartesianGrid {...chartGridProps} />
                   <XAxis
+                    {...chartXAxisProps}
                     dataKey="name"
-                    tick={{ fontSize: 11 }}
                     angle={-20}
                     textAnchor="end"
                     interval={0}
                   />
                   <YAxis
-                    tick={{ fontSize: 11 }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val: any) => [formatINR(Number(val) || 0), 'Credited Revenue']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '12px',
-                    }}
                   />
-                  <Bar dataKey="totalINR" fill="#0f172a" radius={[4, 4, 0, 0]}>
-                    {accountBreakdownData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  <Bar dataKey="totalINR" fill="#000000" radius={[2, 2, 0, 0]}>
+                    {accountBreakdownData.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        stroke="#ffffff"
+                        strokeWidth={1}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -683,20 +693,20 @@ export const BankAccountReportSubModule: React.FC = () => {
         </div>
 
         {/* Chart 2: Account Revenue Share Pie Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs flex flex-col font-sans">
           <div className="mb-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <PieChartIcon className="w-4 h-4 text-slate-900 dark:text-white" />
+            <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+              <PieChartIcon className="w-4 h-4 text-black dark:text-white" />
               <span>Share of Total Inflow</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
               Percentage distribution across banking channels
             </p>
           </div>
 
           <div className="flex-1 min-h-[220px]">
             {totalRevenueCreditedINR === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+              <div className="h-full flex items-center justify-center text-xs text-neutral-500">
                 No cleared revenue in period.
               </div>
             ) : (
@@ -711,40 +721,39 @@ export const BankAccountReportSubModule: React.FC = () => {
                     innerRadius={50}
                     outerRadius={80}
                     paddingAngle={3}
+                    {...PIE_SLICE_BORDER}
                   >
                     {accountBreakdownData.map((_, index) => (
-                      <Cell key={`slice-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      <Cell
+                        key={`slice-${index}`}
+                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        {...PIE_SLICE_BORDER}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val: any) => [formatINR(Number(val) || 0), 'Share']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
-                      fontSize: '12px',
-                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </div>
 
-          {/* Legend Items */}
+          {/* Legend Items with High Contrast Helvetica */}
           <div className="space-y-1.5 mt-2 max-h-28 overflow-y-auto pr-1">
             {accountBreakdownData.map((item, index) => {
               const pct = totalRevenueCreditedINR > 0 ? ((item.totalINR / totalRevenueCreditedINR) * 100).toFixed(1) : '0';
               return (
-                <div key={item.name} className="flex items-center justify-between text-xs">
+                <div key={item.name} className="flex items-center justify-between text-xs font-sans">
                   <div className="flex items-center gap-2 truncate mr-2">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2.5 h-2.5 rounded-xs shrink-0 border border-neutral-300 dark:border-neutral-700"
                       style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                     />
-                    <span className="text-slate-600 dark:text-slate-400 truncate">{item.name}</span>
+                    <span className="text-black dark:text-neutral-200 font-medium truncate">{item.name}</span>
                   </div>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200 shrink-0">
+                  <span className="font-mono font-bold text-black dark:text-white shrink-0">
                     {pct}%
                   </span>
                 </div>
@@ -755,15 +764,15 @@ export const BankAccountReportSubModule: React.FC = () => {
       </div>
 
       {/* Transaction Register Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+      <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded shadow-xs overflow-hidden font-sans">
         {/* Table Filter / Search Header */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30">
+        <div className="p-4 border-b border-[#e2e8f0] dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-neutral-50/50 dark:bg-neutral-800/30">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+            <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-black dark:text-white" />
               <span>Bank Account Transaction Ledger</span>
             </h3>
-            <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+            <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white border border-[#e2e8f0] dark:border-neutral-700">
               {filteredPayments.length} Records
             </span>
           </div>

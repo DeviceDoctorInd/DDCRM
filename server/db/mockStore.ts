@@ -1406,23 +1406,153 @@ class MockStore {
       paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
     };
     const idx = this.payments.findIndex((p) => p.id === payment.id);
+    let resultPayment: Payment;
     if (idx >= 0) {
       this.payments[idx] = { ...this.payments[idx], ...clonedPayment, updatedAt: new Date().toISOString() };
-      return JSON.parse(JSON.stringify(this.payments[idx]));
+      resultPayment = JSON.parse(JSON.stringify(this.payments[idx]));
+    } else {
+      const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      this.payments.unshift(created);
+      resultPayment = JSON.parse(JSON.stringify(created));
     }
-    const created = { ...clonedPayment, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
-    this.payments.unshift(created);
-    return JSON.parse(JSON.stringify(created));
+
+    // Auto-sync into GST Invoices module if payment mode is 'GST Invoice'
+    if (resultPayment.paymentMode === 'GST Invoice') {
+      this.syncPaymentToGstInvoice(resultPayment);
+    }
+
+    return resultPayment;
   }
 
   public deletePayment(id: string): boolean {
     const initial = this.payments.length;
     this.payments = this.payments.filter((p) => p.id !== id);
+    // Remove unfiled synced GST invoice linked to deleted payment
+    this.gstInvoices = this.gstInvoices.filter(
+      (inv) => inv.paymentId !== id || inv.uploadedToGstPortal === 'Yes'
+    );
     return this.payments.length < initial;
   }
 
   // --- GST Invoices ---
+  public getNextGstInvoiceSequence(brand?: string | null): number {
+    const prefix = getBrandSemanticPrefix(brand);
+    const pattern = new RegExp(`^${prefix}-GST-(\\d+)`, 'i');
+    let max = 0;
+    for (const inv of this.gstInvoices) {
+      const match = (inv.id || '').match(pattern);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    }
+    return max + 1;
+  }
+
+  public syncPaymentToGstInvoice(payment: Payment): GstInvoice | null {
+    if (payment.paymentMode !== 'GST Invoice') {
+      return null;
+    }
+
+    const brand = payment.brand || 'Device Doctor India';
+    const amountReceived = Number(payment.amountReceived) || 0;
+    const currency = payment.currency || 'INR';
+    const amountINR = Number(payment.amountINR) || Number(payment.amountReceived) || 0;
+    const gstAmountINR = Math.round(amountINR * 0.18);
+    const paymentDate = payment.paymentDate || new Date().toISOString().slice(0, 10);
+
+    // Resolve client details from linked project if missing
+    let clientName = payment.clientName || '';
+    let clientId = payment.clientId || '';
+    if ((!clientName || !clientId) && payment.projectId) {
+      const proj = this.projects.find((p) => p.id === payment.projectId);
+      if (proj) {
+        clientName = clientName || proj.clientName;
+        clientId = clientId || proj.clientId;
+      }
+    }
+
+    const year = new Date(paymentDate).getFullYear() || new Date().getFullYear();
+    const cleanPaySuffix = (payment.id || '').replace(/^([A-Z]+-)?(PAY-)?/i, '') || '001';
+    const defaultInvoiceNum = `INV-${year}-${cleanPaySuffix}`;
+
+    const existingIdx = this.gstInvoices.findIndex(
+      (inv) => inv.paymentId === payment.id || (payment.id && inv.paymentId === payment.id)
+    );
+
+    if (existingIdx >= 0) {
+      const existing = this.gstInvoices[existingIdx];
+      const updated: GstInvoice = {
+        ...existing,
+        brand: brand as any,
+        projectId: payment.projectId || existing.projectId || '',
+        clientId: clientId || existing.clientId || '',
+        clientName: clientName || existing.clientName || 'Direct Client',
+        paymentDate,
+        amountReceived,
+        currency: currency as any,
+        amountINR,
+        gstAmountINR,
+        invoiceNumber:
+          existing.invoiceNumber && existing.invoiceNumber.trim() !== ''
+            ? existing.invoiceNumber
+            : defaultInvoiceNum,
+        updatedAt: new Date().toISOString(),
+      };
+      this.gstInvoices[existingIdx] = updated;
+      return JSON.parse(JSON.stringify(updated));
+    } else {
+      const prefix = getBrandSemanticPrefix(brand);
+      const nextSeq = this.getNextGstInvoiceSequence(brand);
+      const seqStr = String(nextSeq).padStart(3, '0');
+      const gstId = `${prefix}-GST-${seqStr}`;
+
+      const newInv: GstInvoice = {
+        id: gstId,
+        brand: brand as any,
+        paymentId: payment.id,
+        projectId: payment.projectId || '',
+        clientId: clientId || '',
+        clientName: clientName || 'Direct Client',
+        paymentDate,
+        amountReceived,
+        currency: currency as any,
+        amountINR,
+        gstAmountINR,
+        invoiceNumber: defaultInvoiceNum,
+        uploadedToGstPortal: 'No',
+        gstPortalUploadDate: '',
+        notes: payment.notes
+          ? `Auto-synced from Payment ${payment.id} (GST Invoice Mode). ${payment.notes}`
+          : `Auto-synced from Payment ${payment.id} (GST Invoice Mode)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.gstInvoices.unshift(newInv);
+      return JSON.parse(JSON.stringify(newInv));
+    }
+  }
+
+  public syncAllGstInvoicesFromPayments(): { count: number; invoices: GstInvoice[] } {
+    let count = 0;
+    for (const p of this.payments) {
+      if (p.paymentMode === 'GST Invoice') {
+        const synced = this.syncPaymentToGstInvoice(p);
+        if (synced) count++;
+      }
+    }
+    return { count, invoices: [...this.gstInvoices] };
+  }
+
   public getGstInvoices(brand?: string | null): GstInvoice[] {
+    // Run self-healing sync so any GST invoice payments are reflected
+    for (const p of this.payments) {
+      if (p.paymentMode === 'GST Invoice') {
+        if (!this.gstInvoices.some((inv) => inv.paymentId === p.id)) {
+          this.syncPaymentToGstInvoice(p);
+        }
+      }
+    }
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
       return this.gstInvoices.filter((i) => i.brand === brand);
     }

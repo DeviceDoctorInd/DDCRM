@@ -139,6 +139,8 @@ interface CrmContextType {
   deleteExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
 
   saveGstInvoice: (invoice: GstInvoice) => Promise<{ success: boolean; error?: string }>;
+  refreshGstInvoices: () => Promise<GstInvoice[]>;
+  syncGstInvoicesFromPayments: () => Promise<{ success: boolean; count: number; error?: string }>;
 
   // Users & RBAC
   users: AppUser[];
@@ -938,6 +940,31 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return [savedPayment, ...prev];
       });
+
+      // Real-time synchronization into GST Invoices state
+      if (res.gstInvoice) {
+        setRawGstInvoices((prev) => {
+          const idx = prev.findIndex(
+            (g) => g.id === res.gstInvoice!.id || g.paymentId === res.gstInvoice!.paymentId
+          );
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = res.gstInvoice!;
+            return updated;
+          }
+          return [res.gstInvoice!, ...prev];
+        });
+      } else if (savedPayment.paymentMode === 'GST Invoice') {
+        storageService
+          .fetchGstInvoices()
+          .then((invoices) => {
+            if (Array.isArray(invoices)) {
+              setRawGstInvoices(invoices);
+            }
+          })
+          .catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+      }
+
       showToast(`Payment voucher "${payment.id}" recorded in Azure SQL.`, 'success');
       loadAll().catch((err) => console.warn('[Background refresh after savePayment]', err));
     } else {
@@ -1266,6 +1293,46 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
+  const refreshGstInvoicesAction = async (): Promise<GstInvoice[]> => {
+    try {
+      const invoices = await storageService.fetchGstInvoices();
+      if (Array.isArray(invoices)) {
+        setRawGstInvoices(invoices);
+      }
+      return invoices;
+    } catch (err) {
+      console.warn('[refreshGstInvoicesAction] Error fetching GST invoices:', err);
+      return rawGstInvoices;
+    }
+  };
+
+  const syncGstInvoicesFromPaymentsAction = async (): Promise<{
+    success: boolean;
+    count: number;
+    error?: string;
+  }> => {
+    try {
+      const res = await storageService.syncGstInvoicesFromPayments();
+      if (res.success) {
+        if (Array.isArray(res.invoices)) {
+          setRawGstInvoices(res.invoices);
+        }
+        showToast(
+          `Successfully synchronized ${res.count} GST Invoice record(s) from Payments module.`,
+          'success'
+        );
+        return { success: true, count: res.count };
+      } else {
+        showToast(res.error || 'Failed to sync GST invoices.', 'error');
+        return { success: false, count: 0, error: res.error };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(`Sync error: ${msg}`, 'error');
+      return { success: false, count: 0, error: msg };
+    }
+  };
+
   const saveUserAction = async (user: AppUser) => {
     if (!user.brand) user.brand = activeBrand;
     if (!user.id) {
@@ -1437,6 +1504,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         saveExpense: saveExpenseAction,
         deleteExpense: deleteExpenseAction,
         saveGstInvoice: saveGstInvoiceAction,
+        refreshGstInvoices: refreshGstInvoicesAction,
+        syncGstInvoicesFromPayments: syncGstInvoicesFromPaymentsAction,
         users,
         saveUser: saveUserAction,
         deleteUser: deleteUserAction,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { GstInvoice, GstPortalUploadStatus, InvoiceDocumentFile } from '../../types/crm';
 import { CommonModuleToolbar, KpiCardItem } from '../common/CommonModuleToolbar';
@@ -22,13 +22,39 @@ import {
   Trash2,
   Paperclip,
   Check,
+  RefreshCw,
 } from 'lucide-react';
 
 export const GstInvoicesModule: React.FC = () => {
-  const { gstInvoices, payments, saveGstInvoice, activeBrand, brandPrefix } = useCrm();
+  const {
+    gstInvoices,
+    payments,
+    saveGstInvoice,
+    activeBrand,
+    brandPrefix,
+    refreshGstInvoices,
+    syncGstInvoicesFromPayments,
+  } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [portalFilter, setPortalFilter] = useState<'ALL' | 'Yes' | 'No'>('ALL');
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Proactively refresh GST Invoices on module load to guarantee instant sync
+  useEffect(() => {
+    refreshGstInvoices().catch((err) =>
+      console.warn('[GstInvoicesModule] Initial refresh notice:', err)
+    );
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await syncGstInvoicesFromPayments();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -315,26 +341,36 @@ export const GstInvoicesModule: React.FC = () => {
       />
 
       {/* Sync Status Banner (ERPNext Desk UI Monochrome) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs">
-            <FileText className="w-3.5 h-3.5" />
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-white border border-[#e2e8f0] text-xs text-[#0f172a] shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-black text-white shadow-xs">
+            <FileText className="w-4 h-4 text-white" />
           </div>
           <div>
-            <span className="font-semibold text-slate-900 dark:text-slate-100">
-              Live Real-Time Sync Active:
-            </span>{' '}
-            All transactions from the{' '}
-            <strong className="text-slate-900 dark:text-slate-100">Payments</strong> module with{' '}
-            <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700">
-              Payment Mode == "GST Invoice"
-            </code>{' '}
-            are automatically linked with 18% GST calculations.
+            <div className="font-semibold text-black tracking-tight">
+              Automatic Payments & GST Sync Active
+            </div>
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              All transactions recorded with <strong className="text-black font-semibold">Payment Mode == "GST Invoice"</strong> are automatically bound to this GST ledger with 18% output tax calculation and Zoho invoice placeholders.
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-          <span>Zoho Books Sync Ready</span>
-          <span className="w-2 h-2 rounded-full bg-slate-800 dark:bg-slate-200" />
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#64748b] border-r border-[#e2e8f0] pr-3">
+            <span className="w-2 h-2 rounded-full bg-black" />
+            <span>Zoho & GSTR-1 Audit Ready</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-800 active:bg-black disabled:opacity-50 text-xs font-semibold tracking-tight transition-colors shadow-xs"
+            title="Re-synchronize all GST payments from the Payments module into the GST Ledger"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Payments Now'}</span>
+          </button>
         </div>
       </div>
 

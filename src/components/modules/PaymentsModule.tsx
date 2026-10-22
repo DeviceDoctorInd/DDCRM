@@ -78,6 +78,7 @@ export const PaymentsModule: React.FC = () => {
     activeBrand,
     brandPrefix,
     isConsolidatedView,
+    refreshGstInvoices,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,6 +93,7 @@ export const PaymentsModule: React.FC = () => {
   const [localProjects, setLocalProjects] = useState<Project[]>([]);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [uploadInputKey, setUploadInputKey] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
   const formSessionRef = useRef<string>('');
 
   // Fetch / refresh latest projects whenever modal opens to guarantee data availability
@@ -595,6 +597,9 @@ export const PaymentsModule: React.FC = () => {
 
     const res = await savePayment(payload);
     if (res.success) {
+      if (payload.paymentMode === 'GST Invoice') {
+        refreshGstInvoices().catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+      }
       setIsModalOpen(false);
       setFormData({});
       setFormError(null);
@@ -1328,10 +1333,40 @@ export const PaymentsModule: React.FC = () => {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        <label className={`flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded cursor-pointer bg-white dark:bg-neutral-900 transition-colors group ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <label
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(true);
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(false);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDragging(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                              handleFileUpload(e.dataTransfer.files[0]);
+                            }
+                          }}
+                          className={`flex flex-col items-center justify-center p-5 border-2 border-dashed ${
+                            isDragging
+                              ? 'border-black bg-neutral-100 dark:border-white dark:bg-neutral-800'
+                              : 'border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white bg-white dark:bg-neutral-900'
+                          } rounded cursor-pointer transition-colors group ${
+                            isUploadingProof ? 'opacity-50 pointer-events-none' : ''
+                          }`}
+                        >
                           <Upload className="w-6 h-6 text-neutral-400 group-hover:text-black dark:group-hover:text-white mb-1.5 transition-colors" />
-                          <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                            {isUploadingProof ? 'Processing and isolating file...' : 'Click to upload screenshot / receipt proof'}
+                          <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                            {isUploadingProof
+                              ? 'Processing and isolating file...'
+                              : isDragging
+                              ? 'Drop receipt proof here to attach'
+                              : 'Click or drag receipt proof screenshot to upload'}
                           </span>
                           <span className="text-[10px] text-neutral-400 mt-0.5">
                             PNG, JPG, JPEG, WEBP, or PDF (Max 10MB • screenshots & transaction receipts)

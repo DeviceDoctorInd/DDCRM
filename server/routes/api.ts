@@ -1594,7 +1594,222 @@ router.get('/payments/:id/proof', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/payments', async (req: Request, res: Response) => {
+/**
+ * Synchronizes a payment record into the gst_invoices table in Azure SQL and mockStore
+ * Whenever payment_mode === 'GST Invoice', captures:
+ * - Payment ID, Project ID, Client ID, Client Name, Payment Date
+ * - Amount Received, Currency, Amount INR
+ * - Calculation of 18% GST output tax: Math.round(amountINR * 0.18)
+ * - Zoho Invoice number placeholder (e.g., INV-YYYY-SEQ or preserves existing)
+ * - Portal status ('No' by default)
+ */
+export async function syncPaymentToGstInvoiceSql(
+  pool: sql.ConnectionPool | null,
+  payment: Payment
+): Promise<GstInvoice | null> {
+  if (payment.paymentMode !== 'GST Invoice') {
+    return null;
+  }
+
+  const brand = sanitizeBrand(payment.brand, null) || 'Device Doctor India';
+  const amountReceived = Number(payment.amountReceived) || 0;
+  const currency = payment.currency || 'INR';
+  const amountINR = Number(payment.amountINR) || Number(payment.amountReceived) || 0;
+  const gstAmountINR = Math.round(amountINR * 0.18);
+  const paymentDate = payment.paymentDate || new Date().toISOString().slice(0, 10);
+  const year = new Date(paymentDate).getFullYear() || new Date().getFullYear();
+  const cleanPaySuffix = (payment.id || '').replace(/^([A-Z]+-)?(PAY-)?/i, '') || '001';
+  const defaultInvoiceNum = `INV-${year}-${cleanPaySuffix}`;
+  let clientName = payment.clientName || '';
+  let clientId = payment.clientId || '';
+  let projectId = payment.projectId || '';
+
+  // Synchronize mockStore in-memory cache first
+  const mockSynced = mockStore.syncPaymentToGstInvoice(payment);
+
+  if (!pool) {
+    return mockSynced;
+  }
+
+  try {
+    // If client details are missing, lookup from projects table
+    if ((!clientName || !clientId) && projectId) {
+      try {
+        const projRes = await pool.request()
+          .input('projectId', projectId)
+          .query(`
+            SELECT TOP 1 
+              ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+              ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId
+            FROM projects
+            WHERE id = @projectId OR project_id_code = @projectId
+          `);
+        if (projRes.recordset && projRes.recordset.length > 0) {
+          if (!clientName) clientName = projRes.recordset[0].clientName;
+          if (!clientId) clientId = projRes.recordset[0].clientId;
+        }
+      } catch (err) {
+        console.warn('[syncPaymentToGstInvoiceSql] Project lookup error:', err);
+      }
+    }
+
+    const payId = payment.id || '';
+
+    // Check if GST invoice already exists for this payment_id
+    const checkRes = await pool.request()
+      .input('paymentId', payId)
+      .query(`
+        SELECT TOP 1 
+          CAST(id AS NVARCHAR(100)) as id,
+          ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+          ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+          ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+          ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
+        FROM gst_invoices
+        WHERE payment_id = @paymentId
+      `);
+
+    const existingRow = checkRes.recordset?.[0];
+    const now = new Date().toISOString();
+
+    if (existingRow) {
+      const finalInvoiceNumber = (existingRow.invoiceNumber && existingRow.invoiceNumber.trim() !== '')
+        ? existingRow.invoiceNumber
+        : defaultInvoiceNum;
+
+      await pool.request()
+        .input('id', existingRow.id)
+        .input('brand', brand)
+        .input('payment_id', payId)
+        .input('project_id', projectId)
+        .input('client_id', clientId)
+        .input('client_name', clientName || 'Direct Client')
+        .input('payment_date', paymentDate)
+        .input('amount_received', amountReceived)
+        .input('currency', currency)
+        .input('amount_inr', amountINR)
+        .input('gst_amount_inr', gstAmountINR)
+        .input('invoice_number', finalInvoiceNumber)
+        .input('updated_at', now)
+        .query(`
+          UPDATE gst_invoices
+          SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+              payment_date=@payment_date, amount_received=@amount_received, currency=@currency,
+              amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr, invoice_number=@invoice_number,
+              updated_at=@updated_at
+          WHERE id = @id OR payment_id = @payment_id
+        `);
+
+      const synced: GstInvoice = {
+        id: existingRow.id,
+        brand: brand as any,
+        paymentId: payId,
+        projectId,
+        clientId,
+        clientName: clientName || 'Direct Client',
+        paymentDate,
+        amountReceived,
+        currency: currency as any,
+        amountINR,
+        gstAmountINR,
+        invoiceNumber: finalInvoiceNumber,
+        uploadedToGstPortal: existingRow.uploadedToGstPortal,
+        gstPortalUploadDate: existingRow.gstPortalUploadDate,
+        notes: existingRow.notes,
+        createdAt: now,
+        updatedAt: now,
+      };
+      mockStore.saveGstInvoice(synced);
+      return synced;
+    } else {
+      const prefix = getBrandSemanticPrefix(brand);
+      const pattern = `${prefix}-GST-%`;
+      let nextSeq = 1;
+
+      try {
+        const seqRes = await pool.request()
+          .input('pattern', pattern)
+          .query(`SELECT CAST(id AS NVARCHAR(100)) as id FROM gst_invoices WHERE id LIKE @pattern`);
+        const rows = seqRes.recordset || [];
+        for (const row of rows) {
+          const match = (row.id || '').match(new RegExp(`^${prefix}-GST-(\\d+)`, 'i'));
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num >= nextSeq) nextSeq = num + 1;
+          }
+        }
+      } catch (err) {
+        console.warn('[syncPaymentToGstInvoiceSql] Sequence calc notice, using fallback:', err);
+        nextSeq = mockStore.getNextGstInvoiceSequence(brand);
+      }
+
+      const gstId = `${prefix}-GST-${String(nextSeq).padStart(3, '0')}`;
+      const autoNotes = payment.notes
+        ? `Auto-synced from Payment ${payId} (GST Invoice Mode). ${payment.notes}`
+        : `Auto-synced from Payment ${payId} (GST Invoice Mode)`;
+
+      await pool.request()
+        .input('id', gstId)
+        .input('brand', brand)
+        .input('payment_id', payId)
+        .input('project_id', projectId)
+        .input('client_id', clientId)
+        .input('client_name', clientName || 'Direct Client')
+        .input('payment_date', paymentDate)
+        .input('amount_received', amountReceived)
+        .input('currency', currency)
+        .input('amount_inr', amountINR)
+        .input('gst_amount_inr', gstAmountINR)
+        .input('invoice_number', defaultInvoiceNum)
+        .input('uploaded_to_gst_portal', 'No')
+        .input('gst_portal_upload_date', '')
+        .input('notes', autoNotes)
+        .input('created_at', now)
+        .input('updated_at', now)
+        .query(`
+          INSERT INTO gst_invoices (
+            id, brand, payment_id, project_id, client_id, client_name,
+            payment_date, amount_received, currency, amount_inr, gst_amount_inr,
+            invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
+            created_at, updated_at
+          ) VALUES (
+            @id, @brand, @payment_id, @project_id, @client_id, @client_name,
+            @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
+            @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
+            @created_at, @updated_at
+          )
+        `);
+
+      const createdInv: GstInvoice = {
+        id: gstId,
+        brand: brand as any,
+        paymentId: payId,
+        projectId,
+        clientId,
+        clientName: clientName || 'Direct Client',
+        paymentDate,
+        amountReceived,
+        currency: currency as any,
+        amountINR,
+        gstAmountINR,
+        invoiceNumber: defaultInvoiceNum,
+        uploadedToGstPortal: 'No',
+        gstPortalUploadDate: '',
+        notes: autoNotes,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      mockStore.saveGstInvoice(createdInv);
+      return createdInv;
+    }
+  } catch (err) {
+    console.warn('[syncPaymentToGstInvoiceSql] Error syncing to SQL, returning mockStore copy:', err);
+    return mockSynced;
+  }
+}
+
+async function handleSavePaymentRoute(req: Request, res: Response) {
   const payment: Payment = req.body;
   const brandContext = getBrandContext(req);
   payment.brand = sanitizeBrand(payment.brand, brandContext) as any;
@@ -1609,7 +1824,13 @@ router.post('/payments', async (req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.savePayment(payment);
-    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
+    const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
+    return res.json({
+      success: true,
+      payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) },
+      gstInvoiceSynced: !!syncedGst,
+      gstInvoice: syncedGst,
+    });
   }
 
   try {
@@ -1659,12 +1880,36 @@ router.post('/payments', async (req: Request, res: Response) => {
           `),
       'payments'
     );
-    return res.json({ success: true, payment });
+
+    // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
+    let syncedGstInvoice: GstInvoice | null = null;
+    if (payment.paymentMode === 'GST Invoice') {
+      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, payment);
+    }
+
+    return res.json({
+      success: true,
+      payment,
+      gstInvoiceSynced: !!syncedGstInvoice,
+      gstInvoice: syncedGstInvoice,
+    });
   } catch (err) {
-    console.warn('[POST /payments] Falling back to mock store:', err);
+    console.warn('[handleSavePaymentRoute] Falling back to mock store:', err);
     const saved = mockStore.savePayment(payment);
-    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
+    const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
+    return res.json({
+      success: true,
+      payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) },
+      gstInvoiceSynced: !!syncedGst,
+      gstInvoice: syncedGst,
+    });
   }
+}
+
+router.post('/payments', handleSavePaymentRoute);
+router.put('/payments/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSavePaymentRoute(req, res);
 });
 
 router.delete('/payments/:id', async (req: Request, res: Response) => {
@@ -1679,9 +1924,17 @@ router.delete('/payments/:id', async (req: Request, res: Response) => {
     const guidId = toGuid(id);
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () =>
+        pool.request()
+          .input('id', guidId)
+          .input('rawId', id)
+          .query(`
+            DELETE FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId;
+            DELETE FROM gst_invoices WHERE (payment_id = @id OR payment_id = @rawId) AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+          `),
       'payments'
     );
+    mockStore.deletePayment(id);
     return res.json({ success: true, id });
   } catch (err) {
     console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, err);
@@ -1825,6 +2078,60 @@ router.get('/gst-invoices', async (req: Request, res: Response) => {
   }
 
   try {
+    // Self-healing synchronization: auto-sync any payment where payment_mode = 'GST Invoice' lacking a gst_invoices row
+    try {
+      const unsyncedRes = await pool.request()
+        .query(`
+          SELECT TOP 50 
+            CAST(p.id AS NVARCHAR(100)) as id,
+            ISNULL(CAST(p.payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
+            ISNULL(CAST(p.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+            ISNULL(CAST(p.project_id AS NVARCHAR(150)), '') as projectId,
+            ISNULL(CAST(p.client_id AS NVARCHAR(100)), '') as clientId,
+            ISNULL(CAST(p.client_name AS NVARCHAR(255)), '') as clientName,
+            ISNULL(CAST(p.payment_date AS NVARCHAR(50)), '') as paymentDate,
+            ISNULL(p.amount_received, 0) as amountReceived,
+            ISNULL(CAST(p.currency AS NVARCHAR(20)), 'INR') as currency,
+            ISNULL(p.amount_inr, 0) as amountINR,
+            ISNULL(CAST(p.notes AS NVARCHAR(MAX)), '') as notes
+          FROM payments p
+          WHERE (p.payment_mode = 'GST Invoice' OR p.payment_mode = N'GST Invoice')
+            AND NOT EXISTS (
+              SELECT 1 FROM gst_invoices g 
+              WHERE g.payment_id = p.id 
+                 OR g.payment_id = p.payment_id_code 
+                 OR (p.payment_id_code IS NOT NULL AND p.payment_id_code <> '' AND g.payment_id = p.payment_id_code)
+            )
+        `);
+
+      const unsyncedList = unsyncedRes.recordset || [];
+      for (const un of unsyncedList) {
+        const dummyPay: Payment = {
+          id: un.paymentIdCode || un.id,
+          brand: un.brand as any,
+          projectId: un.projectId,
+          clientId: un.clientId,
+          clientName: un.clientName,
+          paymentMode: 'GST Invoice',
+          paymentDate: un.paymentDate,
+          dueDate: un.paymentDate,
+          amountReceived: un.amountReceived,
+          currency: un.currency as any,
+          exchangeRate: 1,
+          amountINR: un.amountINR,
+          referenceUtr: '',
+          paymentStatus: 'Received',
+          daysOverdue: 0,
+          notes: un.notes,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await syncPaymentToGstInvoiceSql(pool, dummyPay);
+      }
+    } catch (syncErr) {
+      console.warn('[GET /gst-invoices] Notice during self-healing payment sync:', syncErr);
+    }
+
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
@@ -1858,6 +2165,96 @@ router.get('/gst-invoices', async (req: Request, res: Response) => {
   } catch (err) {
     console.warn('[GET /gst-invoices] Falling back to mock store:', err);
     return res.json(mockStore.getGstInvoices(brand));
+  }
+});
+
+// Explicit Sync endpoint to synchronize all payments where paymentMode === 'GST Invoice'
+router.post('/gst-invoices/sync', async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+
+  if (!pool) {
+    const resSync = mockStore.syncAllGstInvoicesFromPayments();
+    return res.json({ success: true, count: resSync.count, invoices: mockStore.getGstInvoices(brand) });
+  }
+
+  try {
+    const paymentsRes = await pool.request()
+      .input('brandFilter', brand || null)
+      .query(`
+        SELECT CAST(id AS NVARCHAR(100)) as id,
+               ISNULL(CAST(payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
+               ISNULL(amount_received, 0) as amountReceived,
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+               ISNULL(amount_inr, 0) as amountINR,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
+        FROM payments
+        WHERE (payment_mode = 'GST Invoice' OR payment_mode = N'GST Invoice')
+          AND (@brandFilter IS NULL OR brand = @brandFilter)
+      `);
+
+    const paymentsList = paymentsRes.recordset || [];
+    let syncedCount = 0;
+    for (const p of paymentsList) {
+      const payObj: Payment = {
+        id: p.paymentIdCode || p.id,
+        brand: p.brand as any,
+        projectId: p.projectId,
+        clientId: p.clientId,
+        clientName: p.clientName,
+        paymentMode: 'GST Invoice',
+        paymentDate: p.paymentDate,
+        dueDate: p.paymentDate,
+        amountReceived: p.amountReceived,
+        currency: p.currency as any,
+        exchangeRate: 1,
+        amountINR: p.amountINR,
+        referenceUtr: '',
+        paymentStatus: 'Received',
+        daysOverdue: 0,
+        notes: p.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await syncPaymentToGstInvoiceSql(pool, payObj);
+      syncedCount++;
+    }
+
+    const allInvoices = await pool.request()
+      .input('brandFilter', brand || null)
+      .query(`
+        SELECT CAST(id AS NVARCHAR(100)) as id, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
+               ISNULL(amount_received, 0) as amountReceived, 
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
+               ISNULL(amount_inr, 0) as amountINR, 
+               ISNULL(gst_amount_inr, 0) as gstAmountINR, 
+               ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal, 
+               ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM gst_invoices 
+        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+        ORDER BY created_at DESC
+      `);
+
+    return res.json({ success: true, count: syncedCount, invoices: allInvoices.recordset || [] });
+  } catch (err: any) {
+    console.warn('[POST /gst-invoices/sync] Error syncing:', err);
+    const mockRes = mockStore.syncAllGstInvoicesFromPayments();
+    return res.json({ success: true, count: mockRes.count, invoices: mockStore.getGstInvoices(brand) });
   }
 });
 
@@ -2356,11 +2753,16 @@ router.get('/employee-payments', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/employee-payments', async (req: Request, res: Response) => {
+async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   const epay: EmployeePayment = req.body;
   const brandContext = getBrandContext(req);
   epay.brand = sanitizeBrand(epay.brand, brandContext) as any;
-  epay.amountPaid = parseFloat(String(epay.amountPaid ?? 0)) || 0;
+  // Parse arbitrary decimal/numeric precision cleanly without truncating fractional or custom monetary figures
+  const cleanAmount = typeof epay.amountPaid === 'string'
+    ? parseFloat(String(epay.amountPaid).replace(/,/g, '').trim())
+    : Number(epay.amountPaid);
+  epay.amountPaid = isNaN(cleanAmount) ? 0 : cleanAmount;
+
   const now = new Date().toISOString();
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
@@ -2417,6 +2819,12 @@ router.post('/employee-payments', async (req: Request, res: Response) => {
   } catch (err) {
     return handleDbError(res, err, 'POST /employee-payments');
   }
+}
+
+router.post('/employee-payments', handleSaveEmployeePaymentRoute);
+router.put('/employee-payments/:id', (req: Request, res: Response) => {
+  req.body.id = req.params.id;
+  return handleSaveEmployeePaymentRoute(req, res);
 });
 
 router.delete('/employee-payments/:id', async (req: Request, res: Response) => {

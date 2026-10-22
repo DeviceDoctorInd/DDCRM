@@ -60,8 +60,10 @@ export const EmployeePaymentsModule: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<EmployeePayment>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [amountPaidStr, setAmountPaidStr] = useState<string>('');
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [uploadInputKey, setUploadInputKey] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
   const formSessionRef = useRef<string>('');
 
   // Payment Proof Modal Lightbox state
@@ -190,6 +192,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       paymentProof: undefined,
       paymentProofNotes: '',
     });
+    setAmountPaidStr(defaultAmount > 0 ? String(defaultAmount) : '');
 
     formSessionRef.current = `add-emp-${newId}-${Date.now()}`;
     setUploadInputKey((k) => k + 1);
@@ -218,6 +221,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       paymentProof: clonedProof,
       paymentProofNotes: payment.paymentProofNotes || clonedProof?.notes || '',
     });
+    setAmountPaidStr(payment.amountPaid !== undefined && payment.amountPaid !== null ? String(payment.amountPaid) : '');
 
     formSessionRef.current = `edit-emp-${payment.id}-${Date.now()}`;
     setUploadInputKey((k) => k + 1);
@@ -326,6 +330,7 @@ export const EmployeePaymentsModule: React.FC = () => {
     if (!assignment) return;
 
     const remaining = getAssignmentRemainingBalance(assignmentId, isEditing ? formData.id : undefined);
+    const newAmt = formData.amountPaid && Number(formData.amountPaid) <= remaining ? Number(formData.amountPaid) : remaining;
 
     setFormData((prev) => ({
       ...prev,
@@ -333,9 +338,9 @@ export const EmployeePaymentsModule: React.FC = () => {
       projectId: assignment.projectId,
       employeeId: assignment.employeeId,
       employeeName: assignment.employeeName,
-      // If adding new, auto-fill full remaining balance or keep reasonable amount
-      amountPaid: prev.amountPaid && prev.amountPaid <= remaining ? prev.amountPaid : remaining,
+      amountPaid: newAmt,
     }));
+    setAmountPaidStr(newAmt > 0 ? String(newAmt) : '');
   };
 
   // Save Employee Payment
@@ -354,9 +359,12 @@ export const EmployeePaymentsModule: React.FC = () => {
       return;
     }
 
-    const amountPaid = Number(formData.amountPaid) || 0;
-    if (amountPaid <= 0) {
-      setFormError('Amount Paid must be greater than zero.');
+    // Clean and parse arbitrary monetary string (handles commas, decimals, or plain numbers)
+    const cleanedAmountStr = (amountPaidStr || '').replace(/,/g, '').trim();
+    const amountPaid = cleanedAmountStr !== '' ? parseFloat(cleanedAmountStr) : (Number(formData.amountPaid) || 0);
+
+    if (isNaN(amountPaid) || amountPaid <= 0) {
+      setFormError('Please enter a valid Amount Paid greater than zero (e.g. 3,502 or 17250).');
       return;
     }
 
@@ -746,7 +754,7 @@ export const EmployeePaymentsModule: React.FC = () => {
             </div>
 
             {/* Form Container with Internal Scrollable Body & Pinned Footer */}
-            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <form onSubmit={handleSave} noValidate className="flex flex-col flex-1 min-h-0 overflow-hidden font-sans">
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
                 {formError && (
                   <div className="p-3 text-xs rounded bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
@@ -757,12 +765,12 @@ export const EmployeePaymentsModule: React.FC = () => {
 
               {/* 1. Assignment ID Selection (Dropdown populated dynamically from all records in Assignments module) */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <label className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                    1. Assignment ID <span className="text-slate-800 dark:text-slate-200">*</span>
+                    <Layers className="w-3.5 h-3.5 text-black dark:text-white" />
+                    1. Assignment ID <span className="text-black dark:text-white">*</span>
                   </span>
-                  <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                  <span className="text-[11px] font-normal text-neutral-500 dark:text-neutral-400">
                     Select to auto-fill project & employee
                   </span>
                 </label>
@@ -770,7 +778,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                   value={formData.assignmentId || ''}
                   onChange={(e) => handleAssignmentChange(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
+                  className="w-full px-3 py-2 text-xs rounded border border-[#e2e8f0] dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
                 >
                   <option value="" disabled>
                     -- Select Assignment --
@@ -788,44 +796,44 @@ export const EmployeePaymentsModule: React.FC = () => {
                   })}
                 </select>
                 {selectedModalAssignment && (
-                  <div className="p-2.5 rounded-lg bg-slate-50/70 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 dark:border-slate-300 dark:border-slate-700 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                  <div className="p-2.5 rounded bg-neutral-50 dark:bg-neutral-800 border border-[#e2e8f0] dark:border-neutral-700 text-[11px] text-neutral-800 dark:text-neutral-200 flex items-center justify-between">
                     <div>
                       Task: <strong className="font-semibold">{selectedModalAssignment.workAssigned}</strong>
                     </div>
                     <div>
                       Allocated: <strong>{formatINR(selectedModalAssignment.amount)}</strong> | Remaining Balance:{' '}
-                      <strong className="text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">{formatINR(modalRemainingBalance)}</strong>
+                      <strong className="text-black dark:text-white font-mono">{formatINR(modalRemainingBalance)}</strong>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Auto-filled details card */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-4">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+              <div className="p-4 rounded bg-neutral-50 dark:bg-neutral-800/50 border border-[#e2e8f0] dark:border-neutral-800 space-y-4">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-neutral-700 dark:text-neutral-300" />
                   Auto-Filled Relational Fields (Read-Only)
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* 2. Employee Payment ID (Auto-generated & read-only) */}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                      <Hash className="w-3.5 h-3.5 text-slate-400" />
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1">
+                      <Hash className="w-3.5 h-3.5 text-neutral-400" />
                       2. Employee Payment ID (Auto-generated)
                     </label>
                     <input
                       type="text"
                       readOnly
                       value={formData.id || ''}
-                      className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold rounded border border-[#e2e8f0] dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800/80 text-neutral-800 dark:text-neutral-200 cursor-not-allowed"
                     />
                   </div>
 
                   {/* 3. Project ID (Auto-filled & read-only) */}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                      <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1">
+                      <Briefcase className="w-3.5 h-3.5 text-neutral-400" />
                       3. Project ID (Auto-filled)
                     </label>
                     <input
@@ -833,14 +841,14 @@ export const EmployeePaymentsModule: React.FC = () => {
                       readOnly
                       value={formData.projectId || ''}
                       placeholder="Select Assignment ID above"
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 truncate cursor-not-allowed"
+                      className="w-full px-3 py-2 text-xs rounded border border-[#e2e8f0] dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800/80 text-neutral-700 dark:text-neutral-300 truncate cursor-not-allowed"
                     />
                   </div>
 
                   {/* 4. Employee ID (Auto-filled & read-only) */}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-neutral-400" />
                       4. Employee ID (Auto-filled)
                     </label>
                     <input
@@ -848,14 +856,14 @@ export const EmployeePaymentsModule: React.FC = () => {
                       readOnly
                       value={formData.employeeId || ''}
                       placeholder="Auto-filled from Assignment"
-                      className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                      className="w-full px-3 py-2 text-xs font-mono rounded border border-[#e2e8f0] dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800/80 text-neutral-700 dark:text-neutral-300 cursor-not-allowed"
                     />
                   </div>
 
                   {/* 5. Employee Name (Auto-filled & read-only) */}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                      <User className="w-3.5 h-3.5 text-slate-400" />
+                    <label className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-neutral-400" />
                       5. Employee Name (Auto-filled)
                     </label>
                     <input
@@ -863,7 +871,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       readOnly
                       value={formData.employeeName || ''}
                       placeholder="Auto-filled from Assignment"
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-semibold cursor-not-allowed"
+                      className="w-full px-3 py-2 text-xs rounded border border-[#e2e8f0] dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800/80 text-neutral-700 dark:text-neutral-300 font-semibold cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -873,59 +881,74 @@ export const EmployeePaymentsModule: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* 6. Payment Date (Date picker, defaults to today) */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                    6. Payment Date <span className="text-slate-800 dark:text-slate-200">*</span>
+                  <label className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-black dark:text-white" />
+                    6. Payment Date <span className="text-black dark:text-white">*</span>
                   </label>
                   <input
                     type="date"
                     required
                     value={formData.paymentDate || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
+                    className="w-full px-3 py-2 text-xs rounded border border-[#e2e8f0] dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
                   />
                 </div>
 
-                {/* 7. Amount Paid (Numeric in INR, validate <= remaining balance) */}
-                <div className="space-y-1.5">
+                {/* 7. Amount Paid (Numeric in INR, unrestricted arbitrary custom amounts & decimals) */}
+                <div className="space-y-1.5 font-sans">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Wallet className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                      7. Amount Paid (INR) <span className="text-slate-800 dark:text-slate-200">*</span>
+                    <label className="text-xs font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+                      <Wallet className="w-3.5 h-3.5 text-black dark:text-white" />
+                      7. Amount Paid (INR) <span className="text-black dark:text-white">*</span>
                     </label>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="text-[11px] text-neutral-500 dark:text-neutral-400 font-mono">
                       Max: {formatINR(modalRemainingBalance)}
                     </span>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    required
-                    value={formData.amountPaid ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? ('' as any) : parseFloat(e.target.value) || 0;
-                      setFormData((prev) => ({ ...prev, amountPaid: val }));
-                    }}
-                    placeholder="e.g. 3502"
-                    className="w-full px-3 py-2 text-xs font-mono font-bold rounded-lg border border-[#e2e8f0] dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-black dark:focus:ring-white outline-none"
-                    style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-neutral-400 text-xs font-medium select-none">
+                      ₹
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      step="any"
+                      autoComplete="off"
+                      required
+                      value={amountPaidStr}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Allow digits, commas, periods, and empty input
+                        if (/^[\d,.]*$/.test(val) || val === '') {
+                          setAmountPaidStr(val);
+                          const clean = val.replace(/,/g, '').trim();
+                          const num = clean === '' ? 0 : parseFloat(clean);
+                          setFormData((prev) => ({
+                            ...prev,
+                            amountPaid: isNaN(num) ? 0 : num,
+                          }));
+                        }
+                      }}
+                      placeholder="e.g. 3,502 or 17250"
+                      className="w-full pl-7 pr-3 py-2 text-xs font-mono font-bold rounded border border-[#e2e8f0] dark:border-neutral-700 bg-white dark:bg-neutral-900 text-black dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-colors"
+                      style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
+                    />
+                  </div>
                   {Number(formData.amountPaid) > modalRemainingBalance && (
                     <p
-                      className="text-[11px] text-amber-700 dark:text-amber-400 font-medium"
+                      className="text-[11px] text-neutral-700 dark:text-neutral-300 font-medium"
                       style={{ fontFamily: 'Helvetica, "Helvetica Neue", Arial, sans-serif' }}
                     >
-                      Amount Paid exceeds remaining balance of {formatINR(modalRemainingBalance)}.
+                      Note: Amount Paid exceeds remaining balance of {formatINR(modalRemainingBalance)}.
                     </p>
                   )}
                 </div>
 
                 {/* 8. Payment Mode (Dropdown) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                    8. Payment Mode <span className="text-slate-800 dark:text-slate-200">*</span>
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-black dark:text-white" />
+                    8. Payment Mode <span className="text-black dark:text-white">*</span>
                   </label>
                   <select
                     value={formData.paymentMode || 'GST Invoice'}
@@ -936,7 +959,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                       }))
                     }
                     required
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
+                    className="w-full px-3 py-2 text-xs rounded border border-[#e2e8f0] dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
                   >
                     {PAYMENT_MODES.map((mode) => (
                       <option key={mode} value={mode}>
@@ -947,13 +970,13 @@ export const EmployeePaymentsModule: React.FC = () => {
                 </div>
 
                 {/* 9. Reference / UTR (Text input, unique check) */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <Hash className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
+                      <Hash className="w-3.5 h-3.5 text-black dark:text-white" />
                       9. Reference / UTR
                     </span>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-500 font-mono">
                       Must be strictly unique
                     </span>
                   </label>
@@ -962,7 +985,7 @@ export const EmployeePaymentsModule: React.FC = () => {
                     value={formData.referenceUtr || ''}
                     onChange={(e) => setFormData((prev) => ({ ...prev, referenceUtr: e.target.value }))}
                     placeholder="e.g. EPAY-NEFT-991823101"
-                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 outline-none"
+                    className="w-full px-3 py-2 text-xs font-mono rounded border border-[#e2e8f0] dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
                   />
                 </div>
               </div>
@@ -1054,10 +1077,40 @@ export const EmployeePaymentsModule: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      <label className={`flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white rounded cursor-pointer bg-white dark:bg-neutral-900 transition-colors group ${isUploadingProof ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging(true);
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging(false);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsDragging(false);
+                          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                            handleFileUpload(e.dataTransfer.files[0]);
+                          }
+                        }}
+                        className={`flex flex-col items-center justify-center p-5 border-2 border-dashed ${
+                          isDragging
+                            ? 'border-black bg-neutral-100 dark:border-white dark:bg-neutral-800'
+                            : 'border-neutral-300 dark:border-neutral-700 hover:border-black dark:hover:border-white bg-white dark:bg-neutral-900'
+                        } rounded cursor-pointer transition-colors group ${
+                          isUploadingProof ? 'opacity-50 pointer-events-none' : ''
+                        }`}
+                      >
                         <Upload className="w-5 h-5 text-neutral-400 group-hover:text-black dark:group-hover:text-white mb-1 transition-colors" />
-                        <span className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                          {isUploadingProof ? 'Processing and isolating file...' : 'Click to upload employee payment receipt / screenshot'}
+                        <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">
+                          {isUploadingProof
+                            ? 'Processing and isolating file...'
+                            : isDragging
+                            ? 'Drop employee payment receipt here'
+                            : 'Click or drag employee payment receipt / screenshot'}
                         </span>
                         <span className="text-[10px] text-neutral-400">
                           PNG, JPG, JPEG, WEBP, or PDF (Max 10MB • receipt vouchers)

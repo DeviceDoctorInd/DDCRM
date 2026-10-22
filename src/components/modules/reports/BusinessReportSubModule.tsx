@@ -37,19 +37,28 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import {
+  chartTooltipProps,
+  chartXAxisProps,
+  chartYAxisProps,
+  chartGridProps,
+  renderHighContrastLegend,
+  PIE_SLICE_BORDER,
+  HELVETICA_FONT,
+} from './ChartTheme';
 
 type DatePreset = 'this-month' | 'last-3-months' | 'last-6-months' | 'this-fy' | 'all-time';
 
 const COLORS = {
-  received: '#0f172a', // slate-900 / dark charcoal
-  outstanding: '#64748b', // slate-500
-  employeeCost: '#334155', // slate-700
-  expenses: '#94a3b8', // slate-400
-  profitPositive: '#000000', // black
-  profitNegative: '#475569', // slate-600
-  pieProfit: '#0f172a',
-  pieEmployee: '#475569',
-  pieExpense: '#94a3b8',
+  received: '#000000', // pure black
+  outstanding: '#6b7280', // slate-500
+  employeeCost: '#374151', // charcoal
+  expenses: '#9ca3af', // light neutral
+  profitPositive: '#111827', // deep slate
+  profitNegative: '#4b5563', // cool dark gray
+  pieProfit: '#000000',
+  pieEmployee: '#4b5563',
+  pieExpense: '#9ca3af',
 };
 
 export const BusinessReportSubModule: React.FC = () => {
@@ -753,20 +762,20 @@ export const BusinessReportSubModule: React.FC = () => {
       </div>
 
       {/* 4. Visual Interactive Analytics Grid (Powered by Recharts) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 font-sans">
         {/* Chart 1: Financial Breakdown Side-by-Side Bar Graph */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-black dark:text-white" />
                 <span>Financial Breakdown (Bar Graph)</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Comparison of Inflow, Outstanding, Outflows & Net Profit
               </p>
             </div>
-            <span className="text-[11px] font-mono font-semibold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-mono font-semibold text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700">
               P&L Overview
             </span>
           </div>
@@ -774,32 +783,25 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={financialBarData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
+                <CartesianGrid {...chartGridProps} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 11, fill: '#64748b' }}
+                  {...chartXAxisProps}
                   tickLine={false}
                   interval={0}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  {...chartYAxisProps}
                   tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                   width={55}
                 />
                 <Tooltip
+                  {...chartTooltipProps}
                   formatter={(val) => [formatINR(Number(val || 0)), 'Amount']}
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#f8fafc',
-                  }}
-                  itemStyle={{ color: '#ffffff' }}
                 />
-                <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="amount" radius={[2, 2, 0, 0]}>
                   {financialBarData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                    <Cell key={`cell-${index}`} fill={entry.fill} stroke="#ffffff" strokeWidth={1} />
                   ))}
                 </Bar>
               </BarChart>
@@ -808,67 +810,63 @@ export const BusinessReportSubModule: React.FC = () => {
         </div>
 
         {/* Chart 2: Monthly Revenue vs Cost vs Profit Histogram / Grouped Bar */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-black dark:text-white" />
                 <span>Monthly Inflow vs Outflow vs Profit</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Time-series distribution across months in the date window
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700">
               Trend Line
             </span>
           </div>
 
           <div className="h-64 w-full">
             {monthlyData.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
-                <Calendar className="w-6 h-6 mb-1 text-slate-300" />
+              <div className="h-full flex flex-col items-center justify-center text-neutral-500 text-xs font-sans">
+                <Calendar className="w-6 h-6 mb-1 text-neutral-400" />
                 <span>No monthly transactions in this date range</span>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={monthlyData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                  <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                  <CartesianGrid {...chartGridProps} />
+                  <XAxis dataKey="monthLabel" {...chartXAxisProps} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    {...chartYAxisProps}
                     tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`}
                     width={55}
                   />
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val, name) => [
                       formatINR(Number(val || 0)),
                       name === 'received' ? 'Inflow (Received)' : name === 'outflow' ? 'Outflow (Cost)' : 'Net Profit',
                     ]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
                   <Legend
                     verticalAlign="top"
-                    wrapperStyle={{ fontSize: '11px', paddingBottom: '10px' }}
+                    wrapperStyle={{ fontSize: '11px', paddingBottom: '10px', fontFamily: HELVETICA_FONT }}
                     formatter={(val) =>
-                      val === 'received' ? 'Inflow' : val === 'outflow' ? 'Outflow' : 'Profit Line'
+                      renderHighContrastLegend(
+                        val === 'received' ? 'Inflow' : val === 'outflow' ? 'Outflow' : 'Profit Line'
+                      )
                     }
                   />
-                  <Bar dataKey="received" name="received" fill="#0f172a" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="outflow" name="outflow" fill="#64748b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="received" name="received" fill="#000000" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
+                  <Bar dataKey="outflow" name="outflow" fill="#6b7280" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
                   <Line
                     type="monotone"
                     dataKey="profit"
                     name="profit"
-                    stroke="#000000"
+                    stroke="#111827"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#000000' }}
+                    dot={{ r: 4, fill: '#111827', stroke: '#ffffff', strokeWidth: 1.5 }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -877,18 +875,18 @@ export const BusinessReportSubModule: React.FC = () => {
         </div>
 
         {/* Chart 3: Project Value Distribution Histogram */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-black dark:text-white" />
                 <span>Project Value Distribution (Deal Size Histogram)</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Frequency count of projects grouped by contract size brackets
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded border border-[#e2e8f0] dark:border-neutral-700">
               {filteredProjects.length} Projects
             </span>
           </div>
@@ -896,15 +894,16 @@ export const BusinessReportSubModule: React.FC = () => {
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={projectBracketsData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.5} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                <CartesianGrid {...chartGridProps} />
+                <XAxis dataKey="name" {...chartXAxisProps} tickLine={false} />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  {...chartYAxisProps}
                   width={30}
-                  label={{ value: 'Count', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8' }}
+                  label={{ value: 'Count', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#000000', fontFamily: HELVETICA_FONT }}
                 />
                 <Tooltip
+                  {...chartTooltipProps}
                   formatter={(val, name, props) => {
                     if (name === 'count') {
                       return [
@@ -914,57 +913,45 @@ export const BusinessReportSubModule: React.FC = () => {
                     }
                     return [val, name];
                   }}
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#f8fafc',
-                  }}
                 />
-                <Bar dataKey="count" fill="#334155" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" fill="#374151" radius={[2, 2, 0, 0]} stroke="#ffffff" strokeWidth={1} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Chart 4: Revenue vs Cost Split Donut / Pie Chart */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+        <div className="bg-white dark:bg-neutral-900 border border-[#e2e8f0] dark:border-neutral-800 rounded p-5 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <PieChartIcon className="w-4 h-4 text-slate-800 dark:text-slate-200" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
+                <PieChartIcon className="w-4 h-4 text-black dark:text-white" />
                 <span>Revenue Allocation (Profit vs Costs Split)</span>
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                 Proportion of Net Profit, Employee Cost & Expenses from Total Inflow
               </p>
             </div>
-            <span className="text-[11px] font-mono text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-semibold border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-mono text-black dark:text-white bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded font-semibold border border-[#e2e8f0] dark:border-neutral-700">
               {profitMarginPercent.toFixed(1)}% Profit
             </span>
           </div>
 
           <div className="h-64 w-full flex items-center justify-center">
             {pieDistributionData.length === 0 ? (
-              <div className="text-slate-400 text-xs">No revenue data in range to compute allocation</div>
+              <div className="text-neutral-500 text-xs font-sans">No revenue data in range to compute allocation</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip
+                    {...chartTooltipProps}
                     formatter={(val) => [formatINR(Number(val || 0)), 'Amount']}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
                   />
                   <Legend
                     verticalAlign="bottom"
                     iconType="circle"
-                    wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: HELVETICA_FONT }}
+                    formatter={renderHighContrastLegend}
                   />
                   <Pie
                     data={pieDistributionData}
@@ -974,9 +961,10 @@ export const BusinessReportSubModule: React.FC = () => {
                     outerRadius={80}
                     paddingAngle={4}
                     dataKey="value"
+                    {...PIE_SLICE_BORDER}
                   >
                     {pieDistributionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.color} {...PIE_SLICE_BORDER} />
                     ))}
                   </Pie>
                 </PieChart>
