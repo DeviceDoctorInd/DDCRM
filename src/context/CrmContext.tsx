@@ -901,8 +901,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteClient(clientId);
     if (res.success) {
-      showToast(`Client "${clientName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      setRawClients((prev) => prev.filter((c) => c.id !== clientId && (c as any).client_id_code !== clientId));
+      showToast(`Client "${clientName}" deleted successfully.`, 'info');
+      loadAll().catch((err) => console.warn('[Background refresh after deleteClient]', err));
     } else {
       showToast(res.error || 'Failed to delete client from Azure SQL.', 'error');
     }
@@ -964,8 +965,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteCategory(categoryId);
     if (res.success) {
-      showToast(`Category "${catName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      setRawCategories((prev) => prev.filter((c) => c.id !== categoryId && (c as any).category_id_code !== categoryId && (c as any).guid !== categoryId));
+      showToast(`Category "${catName}" deleted successfully.`, 'info');
+      loadAll().catch((err) => console.warn('[Background refresh after deleteCategory]', err));
     } else {
       showToast(res.error || 'Failed to delete category.', 'error');
     }
@@ -1027,8 +1029,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteService(serviceId);
     if (res.success) {
-      showToast(`Service "${srvName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      setRawServices((prev) => prev.filter((s) => s.id !== serviceId && (s as any).service_id_code !== serviceId && (s as any).guid !== serviceId));
+      showToast(`Service "${srvName}" deleted successfully.`, 'info');
+      loadAll().catch((err) => console.warn('[Background refresh after deleteService]', err));
     } else {
       showToast(res.error || 'Failed to delete service.', 'error');
     }
@@ -1109,8 +1112,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteProject(projectId);
     if (res.success) {
-      showToast(`Project "${projectId}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      setRawProjects((prev) => prev.filter((p) => p.id !== projectId && (p as any).project_id_code !== projectId));
+      showToast(`Project "${projectId}" deleted successfully.`, 'info');
+      loadAll().catch((err) => console.warn('[Background refresh after deleteProject]', err));
     } else {
       showToast(res.error || 'Failed to delete project.', 'error');
     }
@@ -1176,8 +1180,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deletePaymentAction = async (paymentId: string) => {
     const res = await storageService.deletePayment(paymentId);
     if (res.success) {
+      setRawPayments((prev) => prev.filter((p) => p.id !== paymentId && (p as any).payment_id_code !== paymentId));
       showToast(`Payment "${paymentId}" removed from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deletePayment]', err));
     } else {
       showToast(res.error || 'Failed to remove payment.', 'error');
     }
@@ -1231,16 +1236,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: check.reason };
     }
 
-    // Optimistically update local state for immediate, instant UI refresh
-    setRawBankAccounts((prev) => prev.filter((b) => b.id !== bankAccountId));
-
     const res = await storageService.deleteBankAccount(bankAccountId);
     if (res.success) {
+      setRawBankAccounts((prev) => prev.filter((b) => b.id !== bankAccountId && (b as any).account_id_code !== bankAccountId));
       showToast(`Bank account "${bnkName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteBankAccount]', err));
     } else {
-      // Revert optimistic removal on failure
-      await loadAll();
       showToast(res.error || 'Failed to delete bank account.', 'error');
     }
     return res;
@@ -1296,8 +1297,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteRole(roleId);
     if (res.success) {
+      setRawRoles((prev) => prev.filter((r) => r.id !== roleId && (r as any).role_id_code !== roleId));
       showToast(`Role "${roleName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteRole]', err));
     } else {
       showToast(res.error || 'Failed to delete role.', 'error');
     }
@@ -1355,8 +1357,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteEmployee(employeeId);
     if (res.success) {
+      setRawEmployees((prev) => prev.filter((e) => e.id !== employeeId && (e as any).employee_id_code !== employeeId));
       showToast(`Employee "${empName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteEmployee]', err));
     } else {
       showToast(res.error || 'Failed to delete employee.', 'error');
     }
@@ -1405,8 +1408,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteAssignment(assignmentId);
     if (res.success) {
+      setRawAssignments((prev) => prev.filter((a) => a.id !== assignmentId && (a as any).assignment_id_code !== assignmentId));
       showToast(`Assignment "${assignmentId}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteAssignment]', err));
     } else {
       showToast(res.error || 'Failed to delete assignment.', 'error');
     }
@@ -1441,8 +1445,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteEmployeePaymentAction = async (paymentId: string) => {
     const res = await storageService.deleteEmployeePayment(paymentId);
     if (res.success) {
+      setRawEmployeePayments((prev) => prev.filter((p) => p.id !== paymentId && (p as any).payment_id_code !== paymentId));
       showToast(`Payout "${paymentId}" removed from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteEmployeePayment]', err));
     } else {
       showToast(res.error || 'Failed to remove payout.', 'error');
     }
@@ -1498,8 +1503,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteExpenseCategory(categoryId);
     if (res.success) {
+      setRawExpenseCategories((prev) => prev.filter((c) => c.id !== categoryId && (c as any).category_id_code !== categoryId));
       showToast(`Expense category "${catName}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteExpenseCategory]', err));
     } else {
       showToast(res.error || 'Failed to delete expense category.', 'error');
     }
@@ -1540,8 +1546,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteExpenseAction = async (expenseId: string) => {
     const res = await storageService.deleteExpense(expenseId);
     if (res.success) {
+      setRawExpenses((prev) => prev.filter((e) => e.id !== expenseId && (e as any).expense_id_code !== expenseId));
       showToast(`Expense "${expenseId}" deleted from Azure SQL.`, 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteExpense]', err));
     } else {
       showToast(res.error || 'Failed to delete expense.', 'error');
     }
@@ -1576,7 +1583,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteGstInvoiceAction = async (invoiceId: string) => {
     const res = await storageService.deleteGstInvoice(invoiceId);
     if (res.success) {
-      setRawGstInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+      setRawGstInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId && (inv as any).invoice_id_code !== invoiceId));
       showToast(`GST Invoice "${invoiceId}" deleted from Azure SQL.`, 'info');
       loadAll().catch((err) => console.warn('[Background refresh after deleteGstInvoice]', err));
     } else {
@@ -1643,8 +1650,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteUserAction = async (userId: string) => {
     const res = await storageService.deleteAppUser(userId);
     if (res.success) {
+      setRawUsers((prev) => prev.filter((u) => u.id !== userId && (u as any).user_id_code !== userId && (u as any).adminId !== userId));
       showToast('User account deleted from Azure SQL.', 'info');
-      await loadAll();
+      loadAll().catch((err) => console.warn('[Background refresh after deleteUser]', err));
     } else {
       showToast(res.error || 'Failed to delete user account.', 'error');
     }

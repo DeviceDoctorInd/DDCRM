@@ -52,6 +52,7 @@ export const UsersModule: React.FC = () => {
     id: '',
     name: '',
     email: '',
+    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
     role: 'Super Admin' as UserRole,
@@ -147,6 +148,7 @@ export const UsersModule: React.FC = () => {
         id: userToEdit.id || '',
         name: userToEdit.name || '',
         email: userToEdit.email || '',
+        currentPassword: '',
         newPassword: '',
         confirmPassword: '',
         role: userToEdit.role || 'Super Admin',
@@ -157,6 +159,7 @@ export const UsersModule: React.FC = () => {
         id: authUser?.id || 'USR-001',
         name: authUser?.name || 'Administrator',
         email: authUser?.email || '',
+        currentPassword: '',
         newPassword: '',
         confirmPassword: '',
         role: 'Super Admin',
@@ -170,6 +173,10 @@ export const UsersModule: React.FC = () => {
     e.preventDefault();
     if (!credsFormData.email) {
       showToast('Email address is required.', 'error');
+      return;
+    }
+    if (!credsFormData.currentPassword) {
+      showToast('Current password is required to update credentials.', 'error');
       return;
     }
     if (credsFormData.newPassword && credsFormData.newPassword.length < 4) {
@@ -187,6 +194,7 @@ export const UsersModule: React.FC = () => {
         id: credsFormData.id,
         email: credsFormData.email.trim().toLowerCase(),
         name: credsFormData.name.trim(),
+        currentPassword: credsFormData.currentPassword,
         newPassword: credsFormData.newPassword ? credsFormData.newPassword.trim() : undefined,
         role: credsFormData.role,
         brand: credsFormData.brand,
@@ -811,6 +819,20 @@ export const UsersModule: React.FC = () => {
                   value={credsFormData.email}
                   onChange={(e) => setCredsFormData({ ...credsFormData, email: e.target.value })}
                   placeholder="admin@devicedoctor.in"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={credsFormData.currentPassword}
+                  onChange={(e) => setCredsFormData({ ...credsFormData, currentPassword: e.target.value })}
+                  placeholder="Enter current security password"
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-[11px]"
                 />
               </div>
