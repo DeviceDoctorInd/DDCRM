@@ -1620,9 +1620,19 @@ class MockStore {
     return created;
   }
 
-  public deleteUser(id: string): boolean {
+  public deleteUser(id: string, brand?: string | null): boolean {
     const initial = this.users.length;
-    this.users = this.users.filter((u) => u.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.users = this.users.filter((u) => {
+      const uId = (u.id || '').trim().toLowerCase();
+      const uEmail = (u.email || '').trim().toLowerCase();
+      const matches = uId === cleanId || uEmail === cleanId || u.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (u.brand && u.brand !== 'All' && u.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.users.length < initial;
   }
 
@@ -1708,9 +1718,19 @@ class MockStore {
     return created;
   }
 
-  public deleteClient(id: string): boolean {
+  public deleteClient(id: string, brand?: string | null): boolean {
     const initial = this.clients.length;
-    this.clients = this.clients.filter((c) => c.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.clients = this.clients.filter((c) => {
+      const cId = (c.id || '').trim().toLowerCase();
+      const codeId = ((c as any).client_id_code || '').trim().toLowerCase();
+      const matches = cId === cleanId || codeId === cleanId || c.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (c.brand && c.brand !== brand) return true; // keep, belongs to another brand
+      }
+      return false;
+    });
     return this.clients.length < initial;
   }
 
@@ -1736,9 +1756,20 @@ class MockStore {
     return created;
   }
 
-  public deleteCategory(id: string): boolean {
+  public deleteCategory(id: string, brand?: string | null): boolean {
     const initial = this.categories.length;
-    this.categories = this.categories.filter((c) => c.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.categories = this.categories.filter((c) => {
+      const cId = (c.id || '').trim().toLowerCase();
+      const codeId = ((c as any).category_id_code || '').trim().toLowerCase();
+      const guidId = ((c as any).guid || '').trim().toLowerCase();
+      const matches = cId === cleanId || codeId === cleanId || guidId === cleanId || c.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (c.brand && c.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.categories.length < initial;
   }
 
@@ -1750,8 +1781,8 @@ class MockStore {
     return this.saveCategory(cat);
   }
 
-  public deleteServiceCategory(id: string): boolean {
-    return this.deleteCategory(id);
+  public deleteServiceCategory(id: string, brand?: string | null): boolean {
+    return this.deleteCategory(id, brand);
   }
 
   // --- Services ---
@@ -1797,9 +1828,20 @@ class MockStore {
     return created;
   }
 
-  public deleteService(id: string): boolean {
+  public deleteService(id: string, brand?: string | null): boolean {
     const initial = this.services.length;
-    this.services = this.services.filter((s) => s.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.services = this.services.filter((s) => {
+      const sId = (s.id || '').trim().toLowerCase();
+      const codeId = ((s as any).service_id_code || '').trim().toLowerCase();
+      const guidId = ((s as any).guid || '').trim().toLowerCase();
+      const matches = sId === cleanId || codeId === cleanId || guidId === cleanId || s.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (s.brand && s.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.services.length < initial;
   }
 
@@ -1877,9 +1919,19 @@ class MockStore {
     return this.projects.find((p) => p.id === id);
   }
 
-  public deleteProject(id: string): boolean {
+  public deleteProject(id: string, brand?: string | null): boolean {
     const initial = this.projects.length;
-    this.projects = this.projects.filter((p) => p.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.projects = this.projects.filter((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const codeId = ((p as any).project_id_code || '').trim().toLowerCase();
+      const matches = pId === cleanId || codeId === cleanId || p.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (p.brand && p.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.projects.length < initial;
   }
 
@@ -1923,12 +1975,28 @@ class MockStore {
     return resultPayment;
   }
 
-  public deletePayment(id: string): boolean {
+  public deletePayment(id: string, brand?: string | null): boolean {
     const initial = this.payments.length;
-    this.payments = this.payments.filter((p) => p.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.payments = this.payments.filter((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const codeId = ((p as any).payment_id_code || '').trim().toLowerCase();
+      const matches = pId === cleanId || codeId === cleanId || p.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (p.brand && p.brand !== brand) return true;
+      }
+      return false;
+    });
     // Remove unfiled synced GST invoice linked to deleted payment
     this.gstInvoices = this.gstInvoices.filter(
-      (inv) => inv.paymentId !== id || inv.uploadedToGstPortal === 'Yes'
+      (inv) => {
+        const invPayId = (inv.paymentId || '').trim().toLowerCase();
+        if (invPayId === cleanId || inv.paymentId === id) {
+          return inv.uploadedToGstPortal === 'Yes';
+        }
+        return true;
+      }
     );
     return this.payments.length < initial;
   }
@@ -2072,9 +2140,19 @@ class MockStore {
     return created;
   }
 
-  public deleteGstInvoice(id: string): boolean {
+  public deleteGstInvoice(id: string, brand?: string | null): boolean {
     const initial = this.gstInvoices.length;
-    this.gstInvoices = this.gstInvoices.filter((i) => i.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.gstInvoices = this.gstInvoices.filter((i) => {
+      const iId = (i.id || '').trim().toLowerCase();
+      const codeId = ((i as any).invoice_id_code || '').trim().toLowerCase();
+      const matches = iId === cleanId || codeId === cleanId || i.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (i.brand && i.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.gstInvoices.length < initial;
   }
 
@@ -2100,9 +2178,19 @@ class MockStore {
     return created;
   }
 
-  public deleteRole(id: string): boolean {
+  public deleteRole(id: string, brand?: string | null): boolean {
     const initial = this.roles.length;
-    this.roles = this.roles.filter((r) => r.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.roles = this.roles.filter((r) => {
+      const rId = (r.id || '').trim().toLowerCase();
+      const codeId = ((r as any).role_id_code || '').trim().toLowerCase();
+      const matches = rId === cleanId || codeId === cleanId || r.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (r.brand && r.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.roles.length < initial;
   }
 
@@ -2114,8 +2202,8 @@ class MockStore {
     return this.saveRole(role);
   }
 
-  public deleteEmployeeRole(id: string): boolean {
-    return this.deleteRole(id);
+  public deleteEmployeeRole(id: string, brand?: string | null): boolean {
+    return this.deleteRole(id, brand);
   }
 
   // --- Employees ---
@@ -2146,9 +2234,19 @@ class MockStore {
     return created;
   }
 
-  public deleteEmployee(id: string): boolean {
+  public deleteEmployee(id: string, brand?: string | null): boolean {
     const initial = this.employees.length;
-    this.employees = this.employees.filter((e) => e.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.employees = this.employees.filter((e) => {
+      const eId = (e.id || '').trim().toLowerCase();
+      const codeId = ((e as any).employee_id_code || '').trim().toLowerCase();
+      const matches = eId === cleanId || codeId === cleanId || e.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (e.brand && e.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.employees.length < initial;
   }
 
@@ -2174,9 +2272,19 @@ class MockStore {
     return created;
   }
 
-  public deleteAssignment(id: string): boolean {
+  public deleteAssignment(id: string, brand?: string | null): boolean {
     const initial = this.assignments.length;
-    this.assignments = this.assignments.filter((a) => a.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.assignments = this.assignments.filter((a) => {
+      const aId = (a.id || '').trim().toLowerCase();
+      const codeId = ((a as any).assignment_id_code || '').trim().toLowerCase();
+      const matches = aId === cleanId || codeId === cleanId || a.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (a.brand && a.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.assignments.length < initial;
   }
 
@@ -2211,9 +2319,19 @@ class MockStore {
     return JSON.parse(JSON.stringify(created));
   }
 
-  public deleteEmployeePayment(id: string): boolean {
+  public deleteEmployeePayment(id: string, brand?: string | null): boolean {
     const initial = this.employeePayments.length;
-    this.employeePayments = this.employeePayments.filter((p) => p.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.employeePayments = this.employeePayments.filter((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const codeId = ((p as any).emp_payment_id_code || '').trim().toLowerCase();
+      const matches = pId === cleanId || codeId === cleanId || p.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (p.brand && p.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.employeePayments.length < initial;
   }
 
@@ -2239,9 +2357,19 @@ class MockStore {
     return created;
   }
 
-  public deleteExpenseCategory(id: string): boolean {
+  public deleteExpenseCategory(id: string, brand?: string | null): boolean {
     const initial = this.expenseCategories.length;
-    this.expenseCategories = this.expenseCategories.filter((c) => c.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.expenseCategories = this.expenseCategories.filter((c) => {
+      const cId = (c.id || '').trim().toLowerCase();
+      const codeId = ((c as any).exp_category_id_code || '').trim().toLowerCase();
+      const matches = cId === cleanId || codeId === cleanId || c.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (c.brand && c.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.expenseCategories.length < initial;
   }
 
@@ -2267,9 +2395,19 @@ class MockStore {
     return created;
   }
 
-  public deleteExpense(id: string): boolean {
+  public deleteExpense(id: string, brand?: string | null): boolean {
     const initial = this.expenses.length;
-    this.expenses = this.expenses.filter((e) => e.id !== id);
+    const cleanId = (id || '').trim().toLowerCase();
+    this.expenses = this.expenses.filter((e) => {
+      const eId = (e.id || '').trim().toLowerCase();
+      const codeId = ((e as any).expense_id_code || '').trim().toLowerCase();
+      const matches = eId === cleanId || codeId === cleanId || e.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (e.brand && e.brand !== brand) return true;
+      }
+      return false;
+    });
     return this.expenses.length < initial;
   }
 
@@ -2324,13 +2462,18 @@ class MockStore {
     return toSave;
   }
 
-  public deleteBankAccount(id: string): boolean {
+  public deleteBankAccount(id: string, brand?: string | null): boolean {
     const initial = this.bankAccounts.length;
     const cleanId = (id || '').trim().toLowerCase();
     this.bankAccounts = this.bankAccounts.filter((b) => {
       const bId = (b.id || '').trim().toLowerCase();
-      if (bId === cleanId || b.id === id) return false;
-      return true;
+      const codeId = ((b as any).account_id_code || '').trim().toLowerCase();
+      const matches = bId === cleanId || codeId === cleanId || b.id === id;
+      if (!matches) return true;
+      if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
+        if (b.brand && b.brand !== brand) return true;
+      }
+      return false;
     });
     return this.bankAccounts.length < initial;
   }

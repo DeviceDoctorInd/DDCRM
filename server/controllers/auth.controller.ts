@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getOrInitPool } from '../db/azureSql';
 import { mockStore } from '../db/mockStore';
-import { generateToken, comparePasswords, hashPassword, AuthenticatedRequest } from '../middleware/auth';
+import { generateToken, comparePasswords, hashPassword, verifyJwtToken, AuthenticatedRequest } from '../middleware/auth';
 
 export class AuthController {
   /**
@@ -158,6 +158,10 @@ export class AuthController {
    */
   public async updateCredentials(req: AuthenticatedRequest, res: Response): Promise<Response> {
     try {
+      const authHeader = req.headers['authorization'];
+      const tokenString = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+      const caller = req.user || (tokenString ? verifyJwtToken(tokenString) : null);
+
       const {
         id,
         adminId,
@@ -166,13 +170,15 @@ export class AuthController {
         currentPassword,
         newPassword,
         password,
-        role,
         brand,
       } = req.body;
 
       // Identify target user: from payload ID, payload email, or authenticated session
-      const targetId = (id || adminId || req.user?.id || '').trim();
-      const targetEmail = (email || req.user?.email || '').trim().toLowerCase();
+      const rawTargetId = (id || adminId || '').trim();
+      const rawTargetEmail = (email || '').trim().toLowerCase();
+
+      const targetId = rawTargetId || (caller ? caller.id : '');
+      const targetEmail = rawTargetEmail || (caller ? caller.email.toLowerCase() : '');
 
       if (!targetId && !targetEmail) {
         return res.status(400).json({
@@ -208,7 +214,8 @@ export class AuthController {
               role,
               ISNULL(brand, 'All') AS brand,
               ISNULL(status, 'Active') AS status,
-              ISNULL(avatar, '') AS avatar
+              ISNULL(avatar, '') AS avatar,
+              created_at
             FROM app_users
             WHERE (NULLIF(@targetId, '') IS NOT NULL AND (id = @targetId OR CAST(id AS NVARCHAR(100)) = @targetId))
                OR (NULLIF(@targetEmail, '') IS NOT NULL AND LOWER(email) = @targetEmail)
@@ -216,9 +223,55 @@ export class AuthController {
 
         const existingUser = findQuery.recordset[0] || null;
 
-        // If currentPassword was provided, verify it unless caller is a Super Admin
-        if (currentPassword && existingUser && req.user?.role !== 'Super Admin') {
-          const isCurrentValid = await comparePasswords(currentPassword.trim(), existingUser.password_hash || '');
+        if (!existingUser) {
+          return res.status(404).json({
+            success: false,
+            error: 'User account not found.',
+          });
+        }
+
+        const existingPasswordHash = (existingUser.password_hash || '').trim();
+        const hasExistingPassword = existingPasswordHash.length > 0;
+
+        // Rule: Unauthenticated request ONLY allowed if password is not set yet (first-time setup)
+        if (!caller) {
+          if (hasExistingPassword) {
+            return res.status(401).json({
+              success: false,
+              error: 'Access denied. Password has already been configured for this account. Authentication token is required.',
+            });
+          }
+          if (!rawNewPassword) {
+            return res.status(400).json({
+              success: false,
+              error: 'Security password is required for initial account setup.',
+            });
+          }
+        } else {
+          // Rule: Authenticated request can ONLY modify caller's own account
+          const callerId = (caller.id || '').trim().toLowerCase();
+          const callerEmail = (caller.email || '').trim().toLowerCase();
+          const targetUserId = (existingUser.id || '').trim().toLowerCase();
+          const targetUserEmail = (existingUser.email || '').trim().toLowerCase();
+
+          const isOwnAccount = callerId === targetUserId || callerEmail === targetUserEmail;
+          if (!isOwnAccount) {
+            return res.status(403).json({
+              success: false,
+              error: 'Access denied. You can only update credentials for your own account.',
+            });
+          }
+
+          // Rule: currentPassword is MANDATORY for authenticated updates
+          const cleanCurrentPassword = (currentPassword || '').trim();
+          if (!cleanCurrentPassword) {
+            return res.status(400).json({
+              success: false,
+              error: 'Current password is required to update credentials.',
+            });
+          }
+
+          const isCurrentValid = await comparePasswords(cleanCurrentPassword, existingPasswordHash);
           if (!isCurrentValid) {
             return res.status(401).json({
               success: false,
@@ -227,24 +280,22 @@ export class AuthController {
           }
         }
 
-        // Determine updated fields
-        const finalId = targetId || existingUser?.id || `USR-${Date.now().toString().slice(-4)}`;
-        const finalName = (name || existingUser?.name || targetEmail.split('@')[0] || 'User').trim();
-        const finalEmail = (email || existingUser?.email || targetEmail).trim().toLowerCase();
-        const finalRole = role || existingUser?.role || 'Super Admin';
-        const finalBrand = brand || existingUser?.brand || 'All';
-        const finalStatus = existingUser?.status || 'Active';
-        const finalAvatar = existingUser?.avatar || '';
+        // Rule: Role cannot be changed via this route; preserve existing role strictly
+        const finalRole = existingUser.role;
+        const finalId = existingUser.id;
+        const finalName = (name || existingUser.name || 'User').trim();
+        const finalEmail = (email || existingUser.email).trim().toLowerCase();
+        const finalBrand = existingUser.brand || brand || 'All';
+        const finalStatus = existingUser.status || 'Active';
+        const finalAvatar = existingUser.avatar || '';
 
         // Determine password_hash
-        let finalPasswordHash = existingUser?.password_hash || '';
+        let finalPasswordHash = existingPasswordHash;
         if (rawNewPassword) {
           finalPasswordHash = await hashPassword(rawNewPassword);
-        } else if (!finalPasswordHash) {
-          finalPasswordHash = await hashPassword('Admin@2026');
         }
 
-        // Execute parameterized UPSERT query with atomic transaction
+        // Execute parameterized UPDATE query with atomic transaction
         const transaction = pool.transaction();
         await transaction.begin();
 
@@ -259,41 +310,23 @@ export class AuthController {
           updateRequest.input('status', finalStatus);
           updateRequest.input('avatar', finalAvatar);
           updateRequest.input('updated_at', now);
-          updateRequest.input('created_at', existingUser?.created_at || now);
-          updateRequest.input('existingId', existingUser ? existingUser.id : finalId);
-          updateRequest.input('existingEmail', existingUser ? existingUser.email.toLowerCase() : finalEmail);
+          updateRequest.input('existingId', existingUser.id);
+          updateRequest.input('existingEmail', existingUser.email.toLowerCase());
 
           await updateRequest.query(`
-            IF EXISTS (
-              SELECT 1 FROM app_users 
-              WHERE id = @existingId 
-                 OR CAST(id AS NVARCHAR(100)) = @existingId 
-                 OR LOWER(email) = @existingEmail
-                 OR id = @id
-                 OR LOWER(email) = @email
-            )
-            BEGIN
-              UPDATE app_users
-              SET 
-                name = @name,
-                email = @email,
-                password_hash = @password_hash,
-                role = @role,
-                brand = @brand,
-                status = @status,
-                avatar = @avatar,
-                updated_at = @updated_at
-              WHERE id = @existingId 
-                 OR CAST(id AS NVARCHAR(100)) = @existingId 
-                 OR LOWER(email) = @existingEmail
-                 OR id = @id
-                 OR LOWER(email) = @email;
-            END
-            ELSE
-            BEGIN
-              INSERT INTO app_users (id, name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-              VALUES (@id, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at);
-            END
+            UPDATE app_users
+            SET 
+              name = @name,
+              email = @email,
+              password_hash = @password_hash,
+              role = @role,
+              brand = @brand,
+              status = @status,
+              avatar = @avatar,
+              updated_at = @updated_at
+            WHERE id = @existingId 
+               OR CAST(id AS NVARCHAR(100)) = @existingId 
+               OR LOWER(email) = @existingEmail;
           `);
 
           await transaction.commit();
@@ -313,11 +346,11 @@ export class AuthController {
           brand: finalBrand as any,
           status: finalStatus as any,
           avatar: finalAvatar,
-          createdAt: existingUser?.created_at || now,
+          createdAt: existingUser.created_at || now,
           updatedAt: now,
         });
 
-        // Issue fresh cryptographically signed session token
+        // Issue fresh cryptographically signed session token only on valid update
         const freshToken = generateToken({
           id: finalId,
           email: finalEmail,
@@ -343,18 +376,93 @@ export class AuthController {
 
       // 2. FALLBACK IN-MEMORY STORE (When pool is not connected)
       console.warn('[AuthController.updateCredentials] Azure SQL offline — updating in-memory store.');
+      const allUsers = mockStore.getUsers();
+      const existingUser = allUsers.find(
+        (u) =>
+          (targetId && (u.id.toLowerCase() === targetId.toLowerCase() || (u as any).adminId === targetId)) ||
+          (targetEmail && u.email.toLowerCase() === targetEmail)
+      ) || null;
+
+      if (!existingUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'User account not found.',
+        });
+      }
+
+      const existingPassword = (existingUser.password || (existingUser as any).password_hash || '').trim();
+      const hasExistingPassword = existingPassword.length > 0;
+
+      // Rule: Unauthenticated request ONLY allowed if password is not set yet (first-time setup)
+      if (!caller) {
+        if (hasExistingPassword) {
+          return res.status(401).json({
+            success: false,
+            error: 'Access denied. Password has already been configured for this account. Authentication token is required.',
+          });
+        }
+        if (!rawNewPassword) {
+          return res.status(400).json({
+            success: false,
+            error: 'Security password is required for initial account setup.',
+          });
+        }
+      } else {
+        // Rule: Authenticated request can ONLY modify caller's own account
+        const callerId = (caller.id || '').trim().toLowerCase();
+        const callerEmail = (caller.email || '').trim().toLowerCase();
+        const targetUserId = (existingUser.id || '').trim().toLowerCase();
+        const targetUserEmail = (existingUser.email || '').trim().toLowerCase();
+
+        const isOwnAccount = callerId === targetUserId || callerEmail === targetUserEmail;
+        if (!isOwnAccount) {
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied. You can only update credentials for your own account.',
+          });
+        }
+
+        // Rule: currentPassword is MANDATORY for authenticated updates
+        const cleanCurrentPassword = (currentPassword || '').trim();
+        if (!cleanCurrentPassword) {
+          return res.status(400).json({
+            success: false,
+            error: 'Current password is required to update credentials.',
+          });
+        }
+
+        const isCurrentValid = await comparePasswords(cleanCurrentPassword, existingPassword);
+        if (!isCurrentValid) {
+          return res.status(401).json({
+            success: false,
+            error: 'Current password verification failed. Please enter your existing password correctly.',
+          });
+        }
+      }
+
+      // Rule: Role cannot be changed via this route; preserve existing role strictly
+      const finalRole = existingUser.role;
+      const finalId = existingUser.id;
+      const finalName = (name || existingUser.name || 'User').trim();
+      const finalEmail = (email || existingUser.email).trim().toLowerCase();
+      const finalBrand = existingUser.brand || brand || 'All';
+      const finalStatus = existingUser.status || 'Active';
+      const finalAvatar = existingUser.avatar || '';
+
       const user = mockStore.saveUser({
-        id: targetId || `USR-${Date.now().toString().slice(-4)}`,
-        name: name || targetEmail.split('@')[0] || 'User',
-        email: targetEmail,
-        password: rawNewPassword || undefined,
-        role: (role as any) || 'Super Admin',
-        brand: (brand as any) || 'All',
-        status: 'Active',
-        createdAt: now,
+        id: finalId,
+        name: finalName,
+        email: finalEmail,
+        password: rawNewPassword || existingPassword || undefined,
+        role: finalRole as any,
+        brand: finalBrand as any,
+        status: finalStatus as any,
+        avatar: finalAvatar,
+        createdAt: existingUser.createdAt || now,
         updatedAt: now,
       });
 
+      // Issue fresh cryptographically signed session token only on valid update
       const freshToken = generateToken({
         id: String(user.id),
         email: user.email,

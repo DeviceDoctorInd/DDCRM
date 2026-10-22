@@ -281,7 +281,7 @@ class StorageService {
 
   public async deleteClient(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/clients/${id}`, 'DELETE');
+      await this.apiCall(`/api/clients/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -307,7 +307,7 @@ class StorageService {
 
   public async deleteCategory(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/categories/${id}`, 'DELETE');
+      await this.apiCall(`/api/categories/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -333,7 +333,7 @@ class StorageService {
 
   public async deleteService(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/services/${id}`, 'DELETE');
+      await this.apiCall(`/api/services/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -383,7 +383,7 @@ class StorageService {
 
   public async deleteProject(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/projects/${id}`, 'DELETE');
+      await this.apiCall(`/api/projects/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -512,7 +512,7 @@ class StorageService {
 
   public async deletePayment(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/payments/${id}`, 'DELETE');
+      await this.apiCall(`/api/payments/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -539,7 +539,7 @@ class StorageService {
 
   public async deleteBankAccount(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/bank-accounts/${id}`, 'DELETE');
+      await this.apiCall(`/api/bank-accounts/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -565,7 +565,7 @@ class StorageService {
 
   public async deleteGstInvoice(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/gst-invoices/${id}`, 'DELETE');
+      await this.apiCall(`/api/gst-invoices/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -591,7 +591,7 @@ class StorageService {
 
   public async deleteRole(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/roles/${id}`, 'DELETE');
+      await this.apiCall(`/api/roles/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -617,7 +617,7 @@ class StorageService {
 
   public async deleteEmployee(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/employees/${id}`, 'DELETE');
+      await this.apiCall(`/api/employees/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -643,7 +643,7 @@ class StorageService {
 
   public async deleteAssignment(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/assignments/${id}`, 'DELETE');
+      await this.apiCall(`/api/assignments/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -678,7 +678,7 @@ class StorageService {
 
   public async deleteEmployeePayment(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/employee-payments/${id}`, 'DELETE');
+      await this.apiCall(`/api/employee-payments/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -704,7 +704,7 @@ class StorageService {
 
   public async deleteExpenseCategory(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/expense-categories/${id}`, 'DELETE');
+      await this.apiCall(`/api/expense-categories/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -730,7 +730,7 @@ class StorageService {
 
   public async deleteExpense(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/expenses/${id}`, 'DELETE');
+      await this.apiCall(`/api/expenses/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {
@@ -756,7 +756,7 @@ class StorageService {
 
   public async deleteAppUser(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.apiCall(`/api/users/${id}`, 'DELETE');
+      await this.apiCall(`/api/users/${encodeURIComponent(id)}`, 'DELETE');
       this.notifyListeners();
       return { success: true };
     } catch (err: unknown) {

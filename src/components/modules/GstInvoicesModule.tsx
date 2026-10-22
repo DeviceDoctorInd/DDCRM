@@ -547,10 +547,10 @@ export const GstInvoicesModule: React.FC = () => {
                                 },
                               })
                             }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950/30 text-slate-700 dark:text-slate-300 hover:text-red-600 text-xs font-semibold shadow-xs transition-colors"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold shadow-xs transition-colors"
                             title="Delete GST Invoice Record"
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-slate-500 hover:text-red-600" />
+                            <Trash2 className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
                             <span>Delete</span>
                           </button>
                         </div>

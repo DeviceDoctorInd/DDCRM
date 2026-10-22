@@ -23,7 +23,7 @@ import {
 import { mockStore } from '../db/mockStore';
 import authRoutes from './auth.routes';
 import { authController } from '../controllers/auth.controller';
-import { authenticateToken, hashPassword } from '../middleware/auth';
+import { authenticateToken, optionalAuthenticateToken, AuthenticatedRequest, hashPassword } from '../middleware/auth';
 
 const router = Router();
 
@@ -398,7 +398,14 @@ router.post('/db/sync-seed', async (_req: Request, res: Response) => {
 });
 
 // --- Clear Demo Data ---
-router.post('/db/clear-demo', async (_req: Request, res: Response) => {
+router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'Super Admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Only Super Admin can clear demo data.',
+    });
+  }
   const pool = await getOrInitPool();
   if (!pool) {
     const resData = mockStore.clearDemo();
@@ -498,15 +505,15 @@ router.use('/auth', authRoutes);
 router.post('/auth/login', (req: Request, res: Response) => {
   authController.login(req, res);
 });
-router.put('/auth/update-credentials', (req: Request, res: Response) => {
-  authController.updateCredentials(req, res);
+router.put('/auth/update-credentials', optionalAuthenticateToken, (req: Request, res: Response) => {
+  authController.updateCredentials(req as AuthenticatedRequest, res);
 });
-router.post('/auth/update-credentials', (req: Request, res: Response) => {
-  authController.updateCredentials(req, res);
+router.post('/auth/update-credentials', optionalAuthenticateToken, (req: Request, res: Response) => {
+  authController.updateCredentials(req as AuthenticatedRequest, res);
 });
 
 // --- CLIENTS ---
-router.get('/clients/next-semantic-id', async (req: Request, res: Response) => {
+router.get('/clients/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
   const brand = sanitizeBrand(req.query.brand as string || getBrandContext(req));
   const clientName = (req.query.name as string || '').trim();
   if (!clientName) {
@@ -518,7 +525,7 @@ router.get('/clients/next-semantic-id', async (req: Request, res: Response) => {
   return res.json({ success: true, clientId, brand });
 });
 
-router.get('/clients', async (req: Request, res: Response) => {
+router.get('/clients', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -680,31 +687,91 @@ async function handleSaveClientRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/clients', handleSaveClientRoute);
-router.put('/clients/:id', (req: Request, res: Response) => {
+router.post('/clients', authenticateToken, handleSaveClientRoute);
+router.put('/clients/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveClientRoute(req, res);
 });
 
-router.delete('/clients/:id', async (req: Request, res: Response) => {
+router.delete('/clients/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteClient(id);
+    const deleted = mockStore.deleteClient(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Client belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id, 
+                     ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as client_name
+        FROM clients 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Client belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('clientName', existing.client_name || '')
+        .query(`
+          SELECT 
+            (SELECT COUNT(1) FROM projects WHERE client_id = @id OR client_id = @rawId OR client_name = @clientName) as projectCount,
+            (SELECT COUNT(1) FROM payments WHERE client_id = @id OR client_id = @rawId OR client_name = @clientName) as paymentCount
+        `);
+      const deps = depRes.recordset?.[0];
+      const projCount = Number(deps?.projectCount || 0);
+      const payCount = Number(deps?.paymentCount || 0);
+      if (projCount > 0 || payCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete client "${existing.client_name || id}": ${projCount} project(s) and ${payCount} payment(s) are linked to it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM clients WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM clients 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'clients'
     );
+    mockStore.deleteClient(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /clients/${id}] Falling back to mock store:`, err);
-    mockStore.deleteClient(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /clients/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteClient(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -801,23 +868,81 @@ router.put('/categories/:id', (req: Request, res: Response) => {
 
 router.delete('/categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteServiceCategory(id);
+    const deleted = mockStore.deleteServiceCategory(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Category belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(category_id_code AS NVARCHAR(150)), '') as category_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name
+        FROM service_categories 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR category_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Service category belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('catName', existing.name || '')
+        .query(`
+          SELECT COUNT(1) as srvCount 
+          FROM services 
+          WHERE category_id = @id OR category_id = @rawId OR category_name = @catName
+        `);
+      const srvCount = Number(depRes.recordset?.[0]?.srvCount || 0);
+      if (srvCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete category "${existing.name || id}": ${srvCount} service(s) are categorized under it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM service_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM service_categories 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR category_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'service_categories'
     );
+    mockStore.deleteServiceCategory(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /categories/${id}] Falling back to mock store:`, err);
-    mockStore.deleteServiceCategory(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /categories/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteServiceCategory(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -943,29 +1068,87 @@ router.put('/services/:id', (req: Request, res: Response) => {
 
 router.delete('/services/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteService(id);
+    const deleted = mockStore.deleteService(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Service belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(service_id_code AS NVARCHAR(150)), '') as service_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name
+        FROM services 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR service_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Service belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('srvName', existing.name || '')
+        .query(`
+          SELECT COUNT(1) as projCount 
+          FROM projects 
+          WHERE service_id = @id OR service_id = @rawId OR service_name = @srvName
+        `);
+      const projCount = Number(depRes.recordset?.[0]?.projCount || 0);
+      if (projCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete service "${existing.name || id}": ${projCount} project(s) are linked to it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM services WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM services 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR service_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'services'
     );
+    mockStore.deleteService(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /services/${id}] Falling back to mock store:`, err);
-    mockStore.deleteService(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /services/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteService(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- PROJECTS ---
-router.get('/projects/next-semantic-id', async (req: Request, res: Response) => {
+router.get('/projects/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
   const brand = sanitizeBrand(req.query.brand as string || getBrandContext(req));
   let clientName = (req.query.clientName as string || '').trim();
   const clientId = (req.query.clientId as string || '').trim();
@@ -1019,7 +1202,7 @@ router.get('/projects/next-semantic-id', async (req: Request, res: Response) => 
   });
 });
 
-router.get('/projects', async (req: Request, res: Response) => {
+router.get('/projects', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -1297,31 +1480,90 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/projects', handleSaveProjectRoute);
-router.put('/projects/:id', (req: Request, res: Response) => {
+router.post('/projects', authenticateToken, handleSaveProjectRoute);
+router.put('/projects/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveProjectRoute(req, res);
 });
 
-router.delete('/projects/:id', async (req: Request, res: Response) => {
+router.delete('/projects/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteProject(id);
+    const deleted = mockStore.deleteProject(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Project belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(title AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as title
+        FROM projects 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Project belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query(`
+          SELECT 
+            (SELECT COUNT(1) FROM payments WHERE project_id = @id OR project_id = @rawId) as payCount,
+            (SELECT COUNT(1) FROM assignments WHERE project_id = @id OR project_id = @rawId) as asnCount
+        `);
+      const deps = depRes.recordset?.[0];
+      const payCount = Number(deps?.payCount || 0);
+      const asnCount = Number(deps?.asnCount || 0);
+      if (payCount > 0 || asnCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete project "${existing.title || id}": ${payCount} payment(s) and ${asnCount} assignment(s) are linked to it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM projects WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM projects 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'projects'
     );
+    mockStore.deleteProject(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /projects/${id}] Falling back to mock store:`, err);
-    mockStore.deleteProject(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /projects/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteProject(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -1498,7 +1740,7 @@ router.get('/projects/:id/documents/:docType', async (req: Request, res: Respons
 });
 
 // --- UPLOAD & PAYMENT PROOF ISOLATION PIPELINE ---
-router.post('/upload-proof', async (req: Request, res: Response) => {
+router.post('/upload-proof', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { fileName, fileType, fileSize, fileData, transactionId, notes } = req.body;
     if (!fileData || typeof fileData !== 'string') {
@@ -1548,7 +1790,7 @@ router.post('/upload-proof', async (req: Request, res: Response) => {
 });
 
 // --- PAYMENTS ---
-router.get('/payments', async (req: Request, res: Response) => {
+router.get('/payments', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -1603,7 +1845,7 @@ router.get('/payments', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/payments/:id/proof', async (req: Request, res: Response) => {
+router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
 
@@ -1969,45 +2211,79 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/payments', handleSavePaymentRoute);
-router.put('/payments/:id', (req: Request, res: Response) => {
+router.post('/payments', authenticateToken, handleSavePaymentRoute);
+router.put('/payments/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSavePaymentRoute(req, res);
 });
 
-router.delete('/payments/:id', async (req: Request, res: Response) => {
+router.delete('/payments/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deletePayment(id);
+    const deleted = mockStore.deletePayment(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Payment voucher belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+        FROM payments 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Payment voucher belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
-          .input('id', guidId)
-          .input('rawId', id)
-          .query(`
-            DELETE FROM payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId;
-            DELETE FROM gst_invoices WHERE (payment_id = @id OR payment_id = @rawId) AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
-          `),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM payments 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter);
+          
+          DELETE FROM gst_invoices 
+          WHERE (payment_id = @id OR payment_id = @rawId) 
+            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+        `),
       'payments'
     );
-    mockStore.deletePayment(id);
+    mockStore.deletePayment(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, err);
-    mockStore.deletePayment(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deletePayment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- BANK ACCOUNTS ---
-router.get('/bank-accounts', async (req: Request, res: Response) => {
+router.get('/bank-accounts', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -2105,44 +2381,95 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/bank-accounts', handleSaveBankAccountRoute);
-router.put('/bank-accounts/:id', (req: Request, res: Response) => {
+router.post('/bank-accounts', authenticateToken, handleSaveBankAccountRoute);
+router.put('/bank-accounts/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveBankAccountRoute(req, res);
 });
 
-router.delete('/bank-accounts/:id', async (req: Request, res: Response) => {
+router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
-  const guidId = toGuid(id);
-
-  mockStore.deleteBankAccount(id);
-  mockStore.deleteBankAccount(guidId);
-
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
+    const deleted = mockStore.deleteBankAccount(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Bank account belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
+    const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(account_id_code AS NVARCHAR(150)), '') as account_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(account_name AS NVARCHAR(255)), '') as account_name
+        FROM bank_accounts 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR account_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Bank account belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('accName', existing.account_name || '')
+        .query(`
+          SELECT COUNT(1) as payCount 
+          FROM payments 
+          WHERE bank_account = @rawId OR bank_account = @accName OR bank_account = CAST(@id AS NVARCHAR(150)) OR bank_account_id = @id OR bank_account_id = @rawId
+        `);
+      const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
+      if (payCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete bank account "${existing.account_name || id}": ${payCount} payment(s) are linked to it. Please reassign payments first.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool
-          .request()
-          .input('id', guidId)
-          .input('rawId', id)
-          .query('DELETE FROM bank_accounts WHERE CAST(id AS NVARCHAR(100)) = @rawId OR CAST(id AS NVARCHAR(100)) = @id'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM bank_accounts 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR account_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'bank_accounts'
     );
+    mockStore.deleteBankAccount(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /bank-accounts/${id}] Falling back to mock store:`, err);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /bank-accounts/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteBankAccount(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- GST INVOICES ---
-router.get('/gst-invoices', async (req: Request, res: Response) => {
+router.get('/gst-invoices', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -2241,7 +2568,7 @@ router.get('/gst-invoices', async (req: Request, res: Response) => {
 });
 
 // Explicit Sync endpoint to synchronize all payments where paymentMode === 'GST Invoice'
-router.post('/gst-invoices/sync', async (req: Request, res: Response) => {
+router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
 
@@ -2394,31 +2721,71 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/gst-invoices', handleSaveGstInvoiceRoute);
-router.put('/gst-invoices/:id', (req: Request, res: Response) => {
+router.post('/gst-invoices', authenticateToken, handleSaveGstInvoiceRoute);
+router.put('/gst-invoices/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveGstInvoiceRoute(req, res);
 });
 
-router.delete('/gst-invoices/:id', async (req: Request, res: Response) => {
+router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteGstInvoice(id);
+    const deleted = mockStore.deleteGstInvoice(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: GST Invoice belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(invoice_id_code AS NVARCHAR(150)), '') as invoice_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(invoice_number AS NVARCHAR(150)), '') as invoice_number,
+                     ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(20)), 'No') as uploaded_to_gst_portal
+        FROM gst_invoices 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR invoice_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: GST Invoice belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM gst_invoices WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM gst_invoices 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR invoice_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'gst_invoices'
     );
+    mockStore.deleteGstInvoice(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /gst-invoices/${id}] Falling back to mock store:`, err);
-    mockStore.deleteGstInvoice(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /gst-invoices/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteGstInvoice(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -2517,29 +2884,86 @@ router.put('/roles/:id', (req: Request, res: Response) => {
 
 router.delete('/roles/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteEmployeeRole(id);
+    const deleted = mockStore.deleteEmployeeRole(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Role belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(role_id_code AS NVARCHAR(150)), '') as role_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(role_name AS NVARCHAR(255)), '') as role_name
+        FROM employee_roles 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR role_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Role belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query(`
+          SELECT COUNT(1) as empCount 
+          FROM employees 
+          WHERE role_id = @id OR role_id = @rawId
+        `);
+      const empCount = Number(depRes.recordset?.[0]?.empCount || 0);
+      if (empCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete role "${existing.role_name || id}": ${empCount} employee(s) are assigned to this role.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employee_roles WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM employee_roles 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR role_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'employee_roles'
     );
+    mockStore.deleteEmployeeRole(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /roles/${id}] Falling back to mock store:`, err);
-    mockStore.deleteEmployeeRole(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /roles/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteEmployeeRole(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- EMPLOYEES ---
-router.get('/employees', async (req: Request, res: Response) => {
+router.get('/employees', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -2643,31 +3067,90 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/employees', handleSaveEmployeeRoute);
-router.put('/employees/:id', (req: Request, res: Response) => {
+router.post('/employees', authenticateToken, handleSaveEmployeeRoute);
+router.put('/employees/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveEmployeeRoute(req, res);
 });
 
-router.delete('/employees/:id', async (req: Request, res: Response) => {
+router.delete('/employees/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteEmployee(id);
+    const deleted = mockStore.deleteEmployee(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Employee belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(employee_id_code AS NVARCHAR(150)), '') as employee_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name
+        FROM employees 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR employee_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Employee belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query(`
+          SELECT 
+            (SELECT COUNT(1) FROM assignments WHERE employee_id = @id OR employee_id = @rawId) as asnCount,
+            (SELECT COUNT(1) FROM employee_payments WHERE employee_id = @id OR employee_id = @rawId) as payCount
+        `);
+      const deps = depRes.recordset?.[0];
+      const asnCount = Number(deps?.asnCount || 0);
+      const payCount = Number(deps?.payCount || 0);
+      if (asnCount > 0 || payCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete employee "${existing.name || id}": ${asnCount} assignment(s) and ${payCount} payout voucher(s) are logged.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employees WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM employees 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR employee_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'employees'
     );
+    mockStore.deleteEmployee(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /employees/${id}] Falling back to mock store:`, err);
-    mockStore.deleteEmployee(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /employees/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteEmployee(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -2794,29 +3277,85 @@ router.put('/assignments/:id', (req: Request, res: Response) => {
 
 router.delete('/assignments/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteAssignment(id);
+    const deleted = mockStore.deleteAssignment(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Assignment belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(assignment_id_code AS NVARCHAR(150)), '') as assignment_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+        FROM assignments 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Assignment belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .query(`
+          SELECT COUNT(1) as payCount 
+          FROM employee_payments 
+          WHERE assignment_id = @id OR assignment_id = @rawId
+        `);
+      const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
+      if (payCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete assignment "${id}": ${payCount} employee payout record(s) are logged against it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM assignments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM assignments 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'assignments'
     );
+    mockStore.deleteAssignment(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /assignments/${id}] Falling back to mock store:`, err);
-    mockStore.deleteAssignment(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /assignments/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteAssignment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- EMPLOYEE PAYMENTS ---
-router.get('/employee-payments', async (req: Request, res: Response) => {
+router.get('/employee-payments', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -2937,31 +3476,69 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/employee-payments', handleSaveEmployeePaymentRoute);
-router.put('/employee-payments/:id', (req: Request, res: Response) => {
+router.post('/employee-payments', authenticateToken, handleSaveEmployeePaymentRoute);
+router.put('/employee-payments/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveEmployeePaymentRoute(req, res);
 });
 
-router.delete('/employee-payments/:id', async (req: Request, res: Response) => {
+router.delete('/employee-payments/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteEmployeePayment(id);
+    const deleted = mockStore.deleteEmployeePayment(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Payout record belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(emp_payment_id_code AS NVARCHAR(150)), '') as emp_payment_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+        FROM employee_payments 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR emp_payment_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Payout voucher belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request().input('id', guidId).input('rawId', id).query('DELETE FROM employee_payments WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+      () => pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM employee_payments 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR emp_payment_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'employee_payments'
     );
+    mockStore.deleteEmployeePayment(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /employee-payments/${id}] Falling back to mock store:`, err);
-    mockStore.deleteEmployeePayment(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /employee-payments/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteEmployeePayment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -3059,32 +3636,87 @@ router.put('/expense-categories/:id', (req: Request, res: Response) => {
 
 router.delete('/expense-categories/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteExpenseCategory(id);
+    const deleted = mockStore.deleteExpenseCategory(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Expense category belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(exp_category_id_code AS NVARCHAR(150)), '') as exp_category_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name
+        FROM expense_categories 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR exp_category_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Expense category belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    if (existing) {
+      const depRes = await pool.request()
+        .input('id', guidId)
+        .input('rawId', id)
+        .input('catName', existing.name || '')
+        .query(`
+          SELECT COUNT(1) as expCount 
+          FROM other_expenses 
+          WHERE expense_category_id = @id OR expense_category_id = @rawId OR expense_category_name = @catName
+        `);
+      const expCount = Number(depRes.recordset?.[0]?.expCount || 0);
+      if (expCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Cannot delete expense category "${existing.name || id}": ${expCount} expense(s) are recorded under it.`
+        });
+      }
+    }
+
     await executeSqlWithAutoMigration(
       pool,
       () => pool.request()
         .input('id', guidId)
         .input('rawId', id)
-        .query('DELETE FROM expense_categories WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM expense_categories 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR exp_category_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'expense_categories'
     );
+    mockStore.deleteExpenseCategory(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /expense-categories/${id}] Falling back to mock store:`, err);
-    mockStore.deleteExpenseCategory(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /expense-categories/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteExpenseCategory(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- OTHER EXPENSES ---
-router.get('/expenses', async (req: Request, res: Response) => {
+router.get('/expenses', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -3211,40 +3843,75 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/expenses', handleSaveExpenseRoute);
-router.put('/expenses/:id', (req: Request, res: Response) => {
+router.post('/expenses', authenticateToken, handleSaveExpenseRoute);
+router.put('/expenses/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveExpenseRoute(req, res);
 });
 
-router.delete('/expenses/:id', async (req: Request, res: Response) => {
+router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteExpense(id);
+    const deleted = mockStore.deleteExpense(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: Expense belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(expense_id_code AS NVARCHAR(150)), '') as expense_id_code,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+        FROM other_expenses 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR expense_id_code = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Expense belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
     await executeSqlWithAutoMigration(
       pool,
       () => pool.request()
         .input('id', guidId)
         .input('rawId', id)
-        .query('DELETE FROM other_expenses WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM other_expenses 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR expense_id_code = @rawId)
+            AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
       'other_expenses'
     );
+    mockStore.deleteExpense(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /expenses/${id}] Falling back to mock store:`, err);
-    mockStore.deleteExpense(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /expenses/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteExpense(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
 
 // --- APP USERS (Admin & User Management) ---
-router.get('/users', async (req: Request, res: Response) => {
+router.get('/users', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
@@ -3361,34 +4028,91 @@ async function handleSaveUserRoute(req: Request, res: Response) {
   }
 }
 
-router.post('/users', handleSaveUserRoute);
-router.put('/users/:id', (req: Request, res: Response) => {
+router.post('/users', authenticateToken, (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'Super Admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Only Super Admin can create users or assign roles.',
+    });
+  }
+  return handleSaveUserRoute(req, res);
+});
+router.put('/users/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveUserRoute(req, res);
 });
 
-router.delete('/users/:id', async (req: Request, res: Response) => {
+router.delete('/users/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  const brand = getBrandContext(req);
+  const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
+
   if (!pool) {
-    mockStore.deleteUser(id);
+    const deleted = mockStore.deleteUser(id, brandFilter);
+    if (!deleted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Deletion prevented: User account belongs to another workspace brand or does not exist.',
+      });
+    }
     return res.json({ success: true, id });
   }
 
   try {
     const guidId = toGuid(id);
+    const checkRes = await pool.request()
+      .input('id', guidId)
+      .input('rawId', id)
+      .query(`
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'All') as brand,
+                     ISNULL(CAST(role AS NVARCHAR(50)), 'Viewer') as role,
+                     ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+        FROM app_users 
+        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
+      `);
+
+    const existing = checkRes.recordset?.[0];
+    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: User account belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
+      });
+    }
+
+    // Safety check: ensure at least one Super Admin remains
+    const superAdminCheck = await pool.request().query(`
+      SELECT COUNT(1) as adminCount FROM app_users WHERE role = 'Super Admin' AND status = 'Active'
+    `);
+    const adminCount = Number(superAdminCheck.recordset?.[0]?.adminCount || 0);
+    if (existing && existing.role === 'Super Admin' && adminCount <= 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'System security protection: Cannot delete the only remaining Super Admin account.'
+      });
+    }
+
     await executeSqlWithAutoMigration(
       pool,
       () => pool.request()
         .input('id', guidId)
         .input('rawId', id)
-        .query('DELETE FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId'),
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM app_users 
+          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId)
+            AND (@brandFilter IS NULL OR brand = 'All' OR brand = @brandFilter)
+        `),
       'app_users'
     );
+    mockStore.deleteUser(id, brandFilter);
     return res.json({ success: true, id });
-  } catch (err) {
-    console.warn(`[DELETE /users/${id}] Falling back to mock store:`, err);
-    mockStore.deleteUser(id);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DELETE /users/${id}] Falling back to mock store:`, errMsg);
+    mockStore.deleteUser(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
