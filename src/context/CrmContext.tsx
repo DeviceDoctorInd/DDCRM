@@ -85,7 +85,7 @@ interface CrmContextType {
 
   // Direct entity getters by ID
   getClientById: (id: string) => Client | undefined;
-  getCategoryById: (id: string) => ServiceCategory | undefined;
+  getCategoryById: (id?: string | null) => ServiceCategory | undefined;
   getServiceById: (id: string) => Service | undefined;
   getRoleById: (id: string) => EmployeeRole | undefined;
   getProjectById: (id: string) => Project | undefined;
@@ -557,7 +557,24 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Relational entity lookup maps
   const clientMap = useMemo(() => new Map(rawClients.map((c) => [c.id, c])), [rawClients]);
-  const categoryMap = useMemo(() => new Map(rawCategories.map((c) => [c.id, c])), [rawCategories]);
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, ServiceCategory>();
+    rawCategories.forEach((c) => {
+      if (c.id) {
+        map.set(c.id, c);
+        map.set(c.id.toLowerCase(), c);
+      }
+      if (c.guid) {
+        map.set(c.guid, c);
+        map.set(c.guid.toLowerCase(), c);
+      }
+      if (c.category_id_code) {
+        map.set(c.category_id_code, c);
+        map.set(c.category_id_code.toLowerCase(), c);
+      }
+    });
+    return map;
+  }, [rawCategories]);
   const serviceMap = useMemo(() => new Map(rawServices.map((s) => [s.id, s])), [rawServices]);
   const roleMap = useMemo(() => new Map(rawRoles.map((r) => [r.id, r])), [rawRoles]);
   const projectMap = useMemo(() => new Map(rawProjects.map((p) => [p.id, p])), [rawProjects]);
@@ -571,7 +588,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const bankAccountMap = useMemo(() => new Map(rawBankAccounts.map((b) => [b.id, b])), [rawBankAccounts]);
 
   const getClientById = (id: string) => clientMap.get(id);
-  const getCategoryById = (id: string) => categoryMap.get(id);
+  const getCategoryById = (id?: string | null) => {
+    if (!id || id === 'NA' || id === 'undefined' || id === 'null') return undefined;
+    return categoryMap.get(id) || categoryMap.get(id.toLowerCase());
+  };
   const getServiceById = (id: string) => serviceMap.get(id);
   const getRoleById = (id: string) => roleMap.get(id);
   const getProjectById = (id: string) => projectMap.get(id);
@@ -663,7 +683,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [rawUsers, activeBrand, isConsolidatedView]);
 
   const getCategoryServicesCount = (catId: string) => {
-    return services.filter((s) => s.categoryId === catId).length;
+    const targetCat = getCategoryById(catId);
+    return services.filter((s) => {
+      if (s.categoryId === catId) return true;
+      if (targetCat && (s.categoryId === targetCat.id || s.categoryId === targetCat.guid || s.categoryId === targetCat.category_id_code)) return true;
+      if (targetCat && (s.categoryName === targetCat.name || s.category_name === targetCat.name)) return true;
+      return false;
+    }).length;
   };
 
   const getClientProjectsCount = (clientId: string) => {

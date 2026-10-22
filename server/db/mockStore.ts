@@ -1756,15 +1756,36 @@ class MockStore {
 
   // --- Services ---
   public getServices(brand?: string | null): Service[] {
-    if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.services.filter((s) => s.brand === brand);
-    }
-    return [...this.services];
+    const list = (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)')
+      ? this.services.filter((s) => s.brand === brand)
+      : [...this.services];
+
+    return list.map((s) => {
+      const cat = this.categories.find(
+        (c) => c.id === s.categoryId || (c as any).guid === s.categoryId || (c as any).category_id_code === s.categoryId
+      );
+      const categoryName = cat ? cat.name : (s.categoryName || s.category_name || '');
+      return {
+        ...s,
+        categoryName,
+        category_name: categoryName,
+      };
+    });
   }
 
   public saveService(srv: Service): Service {
     if (!srv.brand) srv.brand = 'Device Doctor India';
     const cleanId = (srv.id || '').trim();
+
+    // Relational join with categories in-memory
+    const cat = this.categories.find(
+      (c) => c.id === srv.categoryId || (c as any).guid === srv.categoryId || (c as any).category_id_code === srv.categoryId
+    );
+    if (cat) {
+      srv.categoryName = cat.name;
+      srv.category_name = cat.name;
+    }
+
     const idx = cleanId ? this.services.findIndex((s) => s.id === cleanId) : -1;
     if (idx >= 0) {
       this.services[idx] = { ...this.services[idx], ...srv, id: cleanId, updatedAt: new Date().toISOString() };

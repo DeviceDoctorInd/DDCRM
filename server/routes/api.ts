@@ -824,17 +824,26 @@ router.get('/services', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(service_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name, 
-               ISNULL(CAST(category_id AS NVARCHAR(100)), '') as categoryId, 
-               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
-        FROM services 
-        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
-        ORDER BY created_at DESC
+        SELECT 
+          ISNULL(NULLIF(CAST(s.service_id_code AS NVARCHAR(150)), ''), CAST(s.id AS NVARCHAR(150))) AS id, 
+          ISNULL(CAST(s.brand AS NVARCHAR(100)), 'Device Doctor India') AS brand, 
+          ISNULL(CAST(s.name AS NVARCHAR(255)), ISNULL(CAST(s.service_name AS NVARCHAR(255)), '')) AS name, 
+          ISNULL(NULLIF(CAST(c.category_id_code AS NVARCHAR(150)), ''), ISNULL(NULLIF(CAST(s.category_id AS NVARCHAR(100)), ''), '')) AS categoryId, 
+          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS categoryName, 
+          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS category_name, 
+          ISNULL(CAST(s.description AS NVARCHAR(MAX)), '') AS description, 
+          ISNULL(CAST(s.status AS NVARCHAR(50)), 'Active') AS status, 
+          ISNULL(CAST(s.created_at AS NVARCHAR(50)), '') AS createdAt, 
+          ISNULL(CAST(s.updated_at AS NVARCHAR(50)), ISNULL(CAST(s.created_at AS NVARCHAR(50)), '')) AS updatedAt 
+        FROM services s
+        LEFT JOIN service_categories c ON (
+          s.category_id = c.id
+          OR s.category_id = c.category_id_code
+          OR CAST(s.category_id AS NVARCHAR(100)) = CAST(c.id AS NVARCHAR(100))
+          OR CAST(s.category_id AS NVARCHAR(100)) = CAST(c.category_id_code AS NVARCHAR(100))
+        )
+        WHERE (@brandFilter IS NULL OR s.brand = @brandFilter)
+        ORDER BY s.created_at DESC
       `),
       'services'
     );
@@ -863,7 +872,24 @@ router.post('/services', async (req: Request, res: Response) => {
 
   try {
     const guidId = toGuid(srv.id);
-    const catGuid = toGuidOrNull(srv.categoryId);
+    let catGuid = toGuidOrNull(srv.categoryId);
+
+    // Resolve category from service_categories to ensure exact foreign key matching
+    try {
+      const catCheck = await pool.request()
+        .input('catId', srv.categoryId || '')
+        .input('catGuid', catGuid)
+        .query(`SELECT TOP 1 id, category_id_code, name, category_name FROM service_categories WHERE id = @catGuid OR id = @catId OR category_id_code = @catId OR CAST(id AS NVARCHAR(100)) = @catId`);
+      if (catCheck.recordset && catCheck.recordset.length > 0) {
+        const foundCat = catCheck.recordset[0];
+        catGuid = foundCat.id || catGuid;
+        srv.categoryName = foundCat.name || foundCat.category_name || srv.categoryName;
+        srv.category_name = srv.categoryName;
+      }
+    } catch {
+      // Proceed with catGuid
+    }
+
     await executeSqlWithAutoMigration(
       pool,
       () =>

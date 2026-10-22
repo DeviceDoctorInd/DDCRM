@@ -11,9 +11,17 @@ import {
   Edit2,
   Trash2,
   X,
-  Sparkles,
   Filter,
 } from 'lucide-react';
+
+/**
+ * Checks if a string matches the standard 36-character hexadecimal UUID format.
+ * Used to avoid displaying raw database GUIDs in the user-facing ERPNext desk UI.
+ */
+const isUuid = (val?: string | null): boolean => {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+};
 
 export const ServicesModule: React.FC = () => {
   const {
@@ -37,10 +45,22 @@ export const ServicesModule: React.FC = () => {
   const [editingService, setEditingService] = useState<Partial<Service> | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // KPIs (No Base Price - IT solutions are priced per project/client)
+  // KPIs (IT solutions priced per project/client)
   const totalServices = services.length;
   const activeServices = services.filter((s) => s.status === 'Active').length;
-  const distinctCategoriesCount = new Set(services.map((s) => s.categoryId)).size;
+
+  const distinctCategoriesCount = useMemo(() => {
+    const unique = new Set(
+      services
+        .map((s) => {
+          const category = getCategoryById(s.categoryId);
+          return (category?.name || s.categoryName || s.category_name || s.categoryId || '').trim();
+        })
+        .filter(Boolean)
+    );
+    return unique.size;
+  }, [services, getCategoryById]);
+
   const totalAssociatedProjects = services.reduce(
     (acc, s) => acc + getServiceProjectsCount(s.id),
     0
@@ -77,14 +97,24 @@ export const ServicesModule: React.FC = () => {
   const filteredServices = useMemo(() => {
     return services.filter((s) => {
       const category = getCategoryById(s.categoryId);
+      const catName = (category?.name || s.categoryName || s.category_name || '').toLowerCase();
+      const sId = (s.id || '').toLowerCase();
+      const sName = (s.name || '').toLowerCase();
+      const sDesc = (s.description || '').toLowerCase();
+      const q = searchTerm.toLowerCase();
+
       const matchesSearch =
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (category && category.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        sName.includes(q) ||
+        sId.includes(q) ||
+        sDesc.includes(q) ||
+        catName.includes(q);
 
       const matchesStatus = statusFilter === 'ALL' || s.status === statusFilter;
-      const matchesCategory = categoryFilter === 'ALL' || s.categoryId === categoryFilter;
+      const matchesCategory =
+        categoryFilter === 'ALL' ||
+        s.categoryId === categoryFilter ||
+        (category && category.id === categoryFilter) ||
+        (catName && catName === categoryFilter.toLowerCase());
 
       return matchesSearch && matchesStatus && matchesCategory;
     });
@@ -100,9 +130,20 @@ export const ServicesModule: React.FC = () => {
         {
           key: 'category',
           header: 'Category Name',
-          format: (r) => getCategoryById(r.categoryId)?.name || r.categoryId,
+          format: (r) => {
+            const cat = getCategoryById(r.categoryId);
+            return cat?.name || r.categoryName || r.category_name || 'Unassigned';
+          },
         },
-        { key: 'categoryId', header: 'Category ID' },
+        {
+          key: 'categoryId',
+          header: 'Category ID',
+          format: (r) => {
+            const cat = getCategoryById(r.categoryId);
+            const code = cat?.id || r.categoryId;
+            return code && !isUuid(code) ? code : '—';
+          },
+        },
         { key: 'description', header: 'Description' },
         { key: 'status', header: 'Status' },
         {
@@ -134,6 +175,8 @@ export const ServicesModule: React.FC = () => {
       brand: srv.brand || activeBrand,
       name: srv.name,
       categoryId: srv.categoryId,
+      categoryName: srv.categoryName,
+      category_name: srv.category_name,
       description: srv.description,
       status: srv.status,
     });
@@ -188,7 +231,7 @@ export const ServicesModule: React.FC = () => {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="pl-8 pr-7 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer appearance-none max-w-[200px] truncate"
+              className="pl-8 pr-7 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-100 cursor-pointer appearance-none max-w-[200px] truncate"
               title="Filter by Service Category"
             >
               <option value="ALL">All Categories</option>
@@ -222,12 +265,23 @@ export const ServicesModule: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Code className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-medium">No agency services match your current query.</p>
+                    <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No agency services match your current query.</p>
                   </td>
                 </tr>
               ) : (
                 filteredServices.map((srv) => {
                   const category = getCategoryById(srv.categoryId);
+                  const resolvedCategoryName = (category?.name || srv.categoryName || srv.category_name || '').trim();
+                  const hasCategory = Boolean(resolvedCategoryName && resolvedCategoryName !== 'Unassigned');
+
+                  // Extract clean human-readable code (e.g. DDI-CAT-001), strictly suppress raw database UUIDs
+                  const displayCategoryCode = (() => {
+                    if (category?.id && !isUuid(category.id)) return category.id;
+                    if (category?.category_id_code && !isUuid(category.category_id_code)) return category.category_id_code;
+                    if (srv.categoryId && !isUuid(srv.categoryId)) return srv.categoryId;
+                    return null;
+                  })();
+
                   const linkedProjectsCount = getServiceProjectsCount(srv.id);
 
                   return (
@@ -235,34 +289,36 @@ export const ServicesModule: React.FC = () => {
                       key={srv.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                     >
-                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                      <td className="py-3.5 px-4 font-mono font-semibold text-slate-900 dark:text-slate-100">
                         {srv.id}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
                         {srv.name}
                       </td>
                       <td className="py-3.5 px-4">
-                        {category ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-slate-800 dark:text-slate-200">
-                              {category.name}
+                        {hasCategory ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              {resolvedCategoryName}
                             </span>
-                            <span className="font-mono text-[10px] text-slate-400">
-                              ({category.id})
-                            </span>
+                            {displayCategoryCode && (
+                              <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                                ({displayCategoryCode})
+                              </span>
+                            )}
                           </div>
                         ) : (
-                          <span className="text-slate-800 dark:text-slate-200 italic">Unassigned ({srv.categoryId})</span>
+                          <span className="text-slate-400 dark:text-slate-500 italic text-[11px]">Unassigned</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 max-w-md">
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 max-w-md">
                         {srv.description || '—'}
                       </td>
                       <td className="py-3.5 px-4 font-mono tabular-nums">
                         <span
                           className={`px-2 py-0.5 rounded text-xs font-semibold ${
                             linkedProjectsCount > 0
-                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200'
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700'
                               : 'text-slate-400'
                           }`}
                         >
@@ -273,8 +329,8 @@ export const ServicesModule: React.FC = () => {
                         <span
                           className={`inline-block px-2 py-0.5 text-[11px] font-semibold rounded-md ${
                             srv.status === 'Active'
-                              ? 'bg-slate-50 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-800 dark:text-slate-200 dark:border-slate-300 dark:border-slate-700'
-                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700'
+                              : 'bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
                           }`}
                         >
                           {srv.status}
@@ -284,7 +340,7 @@ export const ServicesModule: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             onClick={() => handleOpenEdit(srv)}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Edit Service"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -301,7 +357,7 @@ export const ServicesModule: React.FC = () => {
                                 },
                               });
                             }}
-                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:text-slate-200 dark:hover:text-slate-800 dark:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title="Delete Service (Protected if active in projects)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -327,7 +383,7 @@ export const ServicesModule: React.FC = () => {
                   {editingService.id ? `Edit Service: ${editingService.name}` : 'New IT & Agency Service'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  1. Service ID: <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{editingService.id || 'Auto-generated (e.g. SRV-007)'}</span>
+                  1. Service ID: <span className="font-mono text-slate-900 dark:text-slate-100 font-semibold">{editingService.id || 'Auto-generated (e.g. SRV-007)'}</span>
                 </p>
               </div>
               <button
@@ -341,7 +397,7 @@ export const ServicesModule: React.FC = () => {
 
             <form onSubmit={handleSaveSubmit} className="mt-4 space-y-4">
               {formError && (
-                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200">
+                <div className="p-3 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100">
                   {formError}
                 </div>
               )}
@@ -349,7 +405,7 @@ export const ServicesModule: React.FC = () => {
               {/* 2. Service Name */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  2. Service Name <span className="text-slate-800 dark:text-slate-200">*</span>
+                  2. Service Name <span className="text-slate-900 dark:text-slate-100">*</span>
                 </label>
                 <input
                   type="text"
@@ -357,32 +413,41 @@ export const ServicesModule: React.FC = () => {
                   value={editingService.name || ''}
                   onChange={(e) => setEditingService({ ...editingService, name: e.target.value })}
                   placeholder="e.g. Full-Stack React & Node.js Web App"
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-100"
                 />
               </div>
 
               {/* 3. Category (Dropdown linked strictly by Category ID) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  3. Service Category (Relational Foreign Key) <span className="text-slate-800 dark:text-slate-200">*</span>
+                  3. Service Category (Relational Foreign Key) <span className="text-slate-900 dark:text-slate-100">*</span>
                 </label>
                 <select
                   required
                   value={editingService.categoryId || ''}
-                  onChange={(e) => setEditingService({ ...editingService, categoryId: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const cat = categories.find((c) => c.id === selId);
+                    setEditingService({
+                      ...editingService,
+                      categoryId: selId,
+                      categoryName: cat?.name || '',
+                      category_name: cat?.name || '',
+                    });
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-100"
                 >
                   <option value="" disabled>
                     -- Select Category by ID --
                   </option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name} ({cat.id})
+                      {cat.name} {!isUuid(cat.id) ? `(${cat.id})` : ''}
                     </option>
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Linked strictly by Category ID. Any update to the category name updates here automatically.
+                  Linked strictly by Category ID. Relational joins resolve category name instantly across all views.
                 </p>
               </div>
 
@@ -396,7 +461,7 @@ export const ServicesModule: React.FC = () => {
                   value={editingService.description || ''}
                   onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
                   placeholder="Specify technology stack (e.g. Next.js, Flutter, AWS), core deliverables, architecture patterns, and SLA milestones..."
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-100"
                 />
               </div>
 
@@ -413,7 +478,7 @@ export const ServicesModule: React.FC = () => {
                       status: e.target.value as ServiceStatus,
                     })
                   }
-                  className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-100"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -430,7 +495,7 @@ export const ServicesModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-xs transition-colors"
                 >
                   Save Service
                 </button>

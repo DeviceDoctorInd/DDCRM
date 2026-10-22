@@ -11,6 +11,8 @@ const __dirname = path.dirname(__filename);
 // Ensure execution under tsx loader for TypeScript and ESM resolution support
 const isTsxRunning =
   process.execArgv.some((arg) => arg.includes('tsx')) ||
+  process.argv.some((arg) => arg.includes('tsx')) ||
+  Boolean(process.env.npm_lifecycle_script?.includes('tsx')) ||
   process.env.__TSX_BOOTSTRAPPED__ === '1';
 
 if (!isTsxRunning) {
@@ -36,6 +38,7 @@ if (!isTsxRunning) {
 }
 
 async function startAppServer() {
+  const fs = await import('fs');
   const express = (await import('express')).default;
   const { createServer: createViteServer } = await import('vite');
   const apiRouter = (await import('./server/routes/api')).default;
@@ -63,6 +66,26 @@ async function startAppServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // Serve transformed index.html for SPA page navigation in dev mode
+    app.use('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        const indexPath = path.resolve(process.cwd(), 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        } else {
+          next();
+        }
+      } catch (e: any) {
+        if (vite) {
+          vite.ssrFixStacktrace(e);
+        }
+        next(e);
+      }
+    });
   } else {
     // Production static bundle serving
     const distPath = path.resolve(process.cwd(), 'dist');

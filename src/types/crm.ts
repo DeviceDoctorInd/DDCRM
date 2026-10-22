@@ -122,8 +122,11 @@ export interface Client {
 
 export interface ServiceCategory {
   id: string; // e.g. DDI-CAT-001
+  guid?: string;
+  category_id_code?: string;
   brand?: BrandName;
   name: string; // Unique within brand
+  category_name?: string; // Database alias
   description: string;
   status: CategoryStatus;
   createdAt: string;
@@ -146,7 +149,9 @@ export interface Service {
   id: string; // e.g. DDI-SRV-001
   brand?: BrandName;
   name: string;
-  categoryId: string; // FK to ServiceCategory.id
+  categoryId: string; // FK to ServiceCategory.id or category_id_code
+  categoryName?: string; // Relational joined Category Name
+  category_name?: string; // Database column alias
   description: string;
   status: ServiceStatus;
   createdAt: string;
