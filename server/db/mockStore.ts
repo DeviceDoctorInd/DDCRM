@@ -60,6 +60,10 @@ class MockStore {
 
   public seedDefaultData() {
     const now = new Date().toISOString();
+    const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD || '';
+    const seedViewerPassword = process.env.SEED_VIEWER_PASSWORD || seedAdminPassword;
+    const seedPmPassword = process.env.SEED_PM_PASSWORD || seedAdminPassword;
+    const seedFinancePassword = process.env.SEED_FINANCE_PASSWORD || seedAdminPassword;
 
     // Default users (covering all quick sign-in buttons on LoginScreen)
     this.users = [
@@ -67,7 +71,7 @@ class MockStore {
         id: 'USR-001',
         name: 'Hemant Rathore',
         email: 'rathorehemant114@gmail.com',
-        password: 'Admin@2026',
+        password: seedAdminPassword,
         role: 'Super Admin',
         brand: 'All',
         status: 'Active',
@@ -79,7 +83,7 @@ class MockStore {
         id: 'USR-002',
         name: 'Device Doctor India Admin',
         email: 'devicedoctorindia.in@gmail.com',
-        password: 'Admin@2026',
+        password: seedAdminPassword,
         role: 'Super Admin',
         brand: 'All',
         status: 'Active',
@@ -91,7 +95,7 @@ class MockStore {
         id: 'USR-003',
         name: 'Codestro Brand Admin',
         email: 'admin@codestro.com',
-        password: 'Codestro@2026',
+        password: seedAdminPassword,
         role: 'Brand Admin',
         brand: 'Codestro',
         status: 'Active',
@@ -103,7 +107,7 @@ class MockStore {
         id: 'USR-004',
         name: 'Karthik Rao (PM)',
         email: 'karthik.pm@devicedoctor.in',
-        password: 'Project@2026',
+        password: seedPmPassword,
         role: 'Project Manager',
         brand: 'Device Doctor India',
         status: 'Active',
@@ -115,7 +119,7 @@ class MockStore {
         id: 'USR-005',
         name: 'Finance & Accounts',
         email: 'finance@devicedoctor.in',
-        password: 'Finance@2026',
+        password: seedFinancePassword,
         role: 'Accountant',
         brand: 'Device Doctor India',
         status: 'Active',
@@ -127,7 +131,7 @@ class MockStore {
         id: 'USR-006',
         name: 'Executive Reviewer',
         email: 'viewer@devicedoctor.in',
-        password: 'Viewer@2026',
+        password: seedViewerPassword,
         role: 'Viewer',
         brand: 'All',
         status: 'Active',
@@ -139,7 +143,7 @@ class MockStore {
         id: 'USR-007',
         name: 'DUNS Brand Admin',
         email: 'admin@duns.com',
-        password: 'Duns@2026',
+        password: seedAdminPassword,
         role: 'Brand Admin',
         brand: 'DUNS',
         status: 'Active',
@@ -1599,12 +1603,19 @@ class MockStore {
   }
 
   public saveUser(user: AppUser): AppUser {
-    const idx = this.users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === (user.email || '').toLowerCase());
+    const cleanId = (user.id || '').trim().toLowerCase();
+    const cleanEmail = (user.email || '').trim().toLowerCase();
+    const idx = this.users.findIndex((u) =>
+      (cleanId && u.id.toLowerCase() === cleanId) ||
+      (cleanEmail && u.email.toLowerCase() === cleanEmail)
+    );
     if (idx >= 0) {
       const existing = this.users[idx];
       this.users[idx] = {
         ...existing,
         ...user,
+        name: user.name && user.name.trim() ? user.name.trim() : existing.name,
+        email: user.email && user.email.trim() ? user.email.toLowerCase().trim() : existing.email,
         password: user.password && user.password.trim() ? user.password.trim() : existing.password,
         updatedAt: new Date().toISOString(),
       };
@@ -1612,7 +1623,11 @@ class MockStore {
     }
     const created: AppUser = {
       ...user,
-      password: user.password || 'Admin@2026',
+      status: user.status || 'Active',
+      role: user.role || 'Viewer',
+      brand: user.brand || 'All',
+      avatar: user.avatar || '',
+      password: user.password && user.password.trim() ? user.password.trim() : '',
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

@@ -122,6 +122,10 @@ export const UsersModule: React.FC = () => {
       showToast('Name and email are required.', 'error');
       return;
     }
+    if (!editingUser && (!formData.password || formData.password.trim().length < 8)) {
+      showToast('Password is required and must be at least 8 characters long.', 'error');
+      return;
+    }
 
     const payload: AppUser = {
       id: formData.id || '',
@@ -661,7 +665,9 @@ export const UsersModule: React.FC = () => {
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder={editingUser ? "Leave blank to preserve current password, or enter new password" : "Enter account password (or leave blank for Admin@2026)"}
+                  required={!editingUser}
+                  minLength={editingUser ? undefined : 8}
+                  placeholder={editingUser ? "Leave blank to preserve current password, or enter new password" : "Enter account password (min 8 characters)"}
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono text-[11px]"
                 />
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">

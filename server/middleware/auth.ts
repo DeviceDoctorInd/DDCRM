@@ -14,14 +14,18 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthTokenPayload;
 }
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'ddi-crm-production-jwt-secret-key-2026';
+export const JWT_SECRET = process.env.JWT_SECRET || '';
 export const JWT_EXPIRES_IN = '7d';
 
 /**
  * Generate a cryptographically signed JWT session token
  */
 export function generateToken(payload: AuthTokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  const secret = process.env.JWT_SECRET || JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment variables.');
+  }
+  return jwt.sign(payload, secret, {
     expiresIn: JWT_EXPIRES_IN,
   });
 }
@@ -31,7 +35,9 @@ export function generateToken(payload: AuthTokenPayload): string {
  */
 export function verifyJwtToken(token: string): AuthTokenPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
+    const secret = process.env.JWT_SECRET || JWT_SECRET;
+    if (!secret) return null;
+    const decoded = jwt.verify(token, secret) as AuthTokenPayload;
     return decoded;
   } catch {
     return null;

@@ -414,6 +414,14 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       error: 'Access denied. Only Super Admin can clear demo data.',
     });
   }
+
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedAdminPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'SEED_ADMIN_PASSWORD environment variable is required to execute clear-demo. No admin accounts were inserted.',
+    });
+  }
   const pool = await getOrInitPool();
   if (!pool) {
     const resData = mockStore.clearDemo();
@@ -453,12 +461,13 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       WHERE LOWER(email) NOT IN ('rathorehemant114@gmail.com', 'devicedoctorindia.in@gmail.com');
     `);
 
+    const hashedAdminPass = await hashPassword(seedAdminPassword);
     const nowIso = new Date().toISOString();
     await pool.request()
       .input('u1_id', 'USR-001')
       .input('u1_name', 'Hemant Rathore')
       .input('u1_email', 'rathorehemant114@gmail.com')
-      .input('u1_pass', 'Hemant@1318')
+      .input('u1_pass', hashedAdminPass)
       .input('u1_role', 'Super Admin')
       .input('u1_brand', 'All')
       .input('u1_status', 'Active')
@@ -473,7 +482,7 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       .input('u2_id', 'USR-002')
       .input('u2_name', 'Device Doctor India')
       .input('u2_email', 'devicedoctorindia.in@gmail.com')
-      .input('u2_pass', 'Admin@2026')
+      .input('u2_pass', hashedAdminPass)
       .input('u2_role', 'Super Admin')
       .input('u2_brand', 'All')
       .input('u2_status', 'Active')
@@ -3957,47 +3966,101 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
 
 async function handleSaveUserRoute(req: Request, res: Response) {
   const user: AppUser = req.body;
-  const now = new Date().toISOString();
-  user.updatedAt = now;
-  user.createdAt = user.createdAt || now;
+  const rawId = (user.id || (req.params && req.params.id) || '').trim();
+  const rawEmail = (user.email || '').toLowerCase().trim();
 
-  const rawId = (user.id || `USR-${Date.now().toString().slice(-4)}`).trim();
-  const userEmail = (user.email || '').toLowerCase().trim();
-  const userName = (user.name || user.email || 'User').trim();
-  user.id = rawId;
-  user.email = userEmail;
-  user.name = userName;
+  // Look for existing user in in-memory store or Azure SQL
+  const pool = await getOrInitPool();
+  const mockExisting = mockStore.getUsers().find(
+    (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
+           (rawEmail && u.email.toLowerCase() === rawEmail)
+  );
+
+  let isExisting = Boolean(mockExisting) || req.method === 'PUT';
+  if (!isExisting && pool && (rawId || rawEmail)) {
+    try {
+      const checkExisting = await pool.request()
+        .input('chk_id', rawId ? toGuid(rawId) : null)
+        .input('chk_rawId', rawId || null)
+        .input('chk_email', rawEmail || null)
+        .query(`
+          SELECT TOP 1 id, email FROM app_users 
+          WHERE (@chk_id IS NOT NULL AND (id = @chk_id OR CAST(id AS NVARCHAR(100)) = @chk_rawId))
+             OR (@chk_email IS NOT NULL AND LOWER(email) = @chk_email)
+        `);
+      if (checkExisting.recordset && checkExisting.recordset.length > 0) {
+        isExisting = true;
+      }
+    } catch {
+      // Ignore lookup failure, continue with isExisting status
+    }
+  }
+
+  // Password Policy Validation:
+  // - On new user creation: password is required and must be >= 8 characters
+  // - On existing user edit: password is optional, but if provided must be >= 8 characters
+  const rawPass = (user.password || '').trim();
+  if (!isExisting) {
+    if (!rawPass || rawPass.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password is required and must be at least 8 characters long.',
+      });
+    }
+  } else {
+    if (rawPass && rawPass.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password must be at least 8 characters long.',
+      });
+    }
+  }
+
+  const finalId = rawId || `USR-${Date.now().toString().slice(-4)}`;
+  const finalEmail = rawEmail || (mockExisting ? mockExisting.email : '');
+  const finalName = (user.name && user.name.trim()) || (mockExisting ? mockExisting.name : '') || user.email || 'User';
+
+  const now = new Date().toISOString();
+  user.id = finalId;
+  user.email = finalEmail;
+  user.name = finalName.trim();
+  user.status = user.status || (mockExisting ? mockExisting.status : 'Active');
+  user.role = user.role || (mockExisting ? mockExisting.role : 'Viewer');
+  user.brand = user.brand || (mockExisting ? mockExisting.brand : 'All');
+  user.avatar = user.avatar || (mockExisting ? mockExisting.avatar : '');
+  user.updatedAt = now;
+  user.createdAt = user.createdAt || (mockExisting ? mockExisting.createdAt : now);
 
   // Hash new password if provided
   let hashedPassword = '';
-  if (user.password && user.password.trim()) {
-    hashedPassword = await hashPassword(user.password.trim());
+  if (rawPass) {
+    hashedPassword = await hashPassword(rawPass);
+    user.password = hashedPassword;
+  } else if (mockExisting) {
+    user.password = mockExisting.password;
   }
 
-  const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveUser(user);
     return res.json({ success: true, user: saved });
   }
 
   try {
-    const guidId = toGuid(rawId);
-    const fallbackNewPass = hashedPassword || (await hashPassword('Admin@2026'));
+    const guidId = toGuid(finalId);
 
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', rawId)
-          .input('name', userName)
-          .input('email', userEmail)
+          .input('rawId', finalId)
+          .input('name', user.name)
+          .input('email', user.email)
           .input('password_hash', hashedPassword)
-          .input('fallback_pass', fallbackNewPass)
-          .input('role', user.role || 'Viewer')
-          .input('brand', user.brand || 'All')
-          .input('status', user.status || 'Active')
-          .input('avatar', user.avatar || '')
+          .input('role', user.role || (mockExisting ? mockExisting.role : 'Viewer'))
+          .input('brand', user.brand || (mockExisting ? mockExisting.brand : 'All'))
+          .input('status', user.status || (mockExisting ? mockExisting.status : 'Active'))
+          .input('avatar', user.avatar || (mockExisting ? mockExisting.avatar : ''))
           .input('created_at', user.createdAt)
           .input('updated_at', user.updatedAt)
           .query(`
@@ -4017,7 +4080,7 @@ async function handleSaveUserRoute(req: Request, res: Response) {
             ELSE
             BEGIN
               INSERT INTO app_users (id, name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-              VALUES (@rawId, @name, @email, @fallback_pass, @role, @brand, @status, @avatar, @created_at, @updated_at);
+              VALUES (@rawId, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at);
             END
           `),
       'app_users'

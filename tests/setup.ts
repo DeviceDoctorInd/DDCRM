@@ -3,6 +3,11 @@ import { mockStore } from '../server/db/mockStore';
 
 // Strict safety rule: disable Azure SQL credentials & force mock store mode
 process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'ddi-crm-test-jwt-secret-key-32chars-safety';
+process.env.SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@2026';
+process.env.SEED_VIEWER_PASSWORD = process.env.SEED_VIEWER_PASSWORD || 'Viewer@2026';
+process.env.SEED_PM_PASSWORD = process.env.SEED_PM_PASSWORD || 'Project@2026';
+process.env.SEED_FINANCE_PASSWORD = process.env.SEED_FINANCE_PASSWORD || 'Finance@2026';
 process.env.AZURE_SQL_PASSWORD = '';
 delete process.env.AZURE_SQL_PASSWORD;
 delete process.env.AZURE_SQL_SERVER;
