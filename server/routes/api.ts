@@ -330,36 +330,44 @@ router.get('/db/status', async (_req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (pool) {
     try {
-      const counts = await refreshTableCounts();
       const status = getAzureDbStatus();
+      const { tableCounts: _tc, ...safeStatus } = status;
       return res.json({
         status: 'ok',
-        ...status,
+        ...safeStatus,
         connected: true,
         isMock: false,
-        tableCounts: counts,
       });
     } catch (err) {
-      console.warn('[db/status] refreshTableCounts error:', err);
+      console.warn('[db/status] status check error:', err);
     }
   }
 
   const status = getAzureDbStatus();
+  const { tableCounts: _tc, ...safeStatus } = status;
   return res.json({
     status: 'ok',
+    ...safeStatus,
     connected: false,
     isMock: true,
-    server: status.server,
-    database: status.database,
-    authType: status.authType,
-    user: status.user,
-    error: status.error || 'Operating with high-availability in-memory store',
+    server: safeStatus.server,
+    database: safeStatus.database,
+    authType: safeStatus.authType,
+    user: safeStatus.user,
+    error: safeStatus.error || 'Operating with high-availability in-memory store',
     lastChecked: new Date().toISOString(),
-    tableCounts: mockStore.getTableCounts(),
   });
 });
 
-router.post('/db/reconnect', async (_req: Request, res: Response) => {
+router.post('/db/reconnect', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'Super Admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Only Super Admin can reconnect database and run migrations.',
+    });
+  }
+
   const success = await initAzureSql();
   const pool = getPool();
   if (pool && success) {
