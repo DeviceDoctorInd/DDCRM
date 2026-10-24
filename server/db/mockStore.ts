@@ -60,6 +60,10 @@ class MockStore {
 
   public seedDefaultData() {
     const now = new Date().toISOString();
+    const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD || '';
+    const seedViewerPassword = process.env.SEED_VIEWER_PASSWORD || seedAdminPassword;
+    const seedPmPassword = process.env.SEED_PM_PASSWORD || seedAdminPassword;
+    const seedFinancePassword = process.env.SEED_FINANCE_PASSWORD || seedAdminPassword;
 
     // Default users (covering all quick sign-in buttons on LoginScreen)
     this.users = [
@@ -67,7 +71,7 @@ class MockStore {
         id: 'USR-001',
         name: 'Hemant Rathore',
         email: 'rathorehemant114@gmail.com',
-        password: 'Admin@2026',
+        password: seedAdminPassword,
         role: 'Super Admin',
         brand: 'All',
         status: 'Active',
@@ -79,7 +83,7 @@ class MockStore {
         id: 'USR-002',
         name: 'Device Doctor India Admin',
         email: 'devicedoctorindia.in@gmail.com',
-        password: 'Admin@2026',
+        password: seedAdminPassword,
         role: 'Super Admin',
         brand: 'All',
         status: 'Active',
@@ -91,7 +95,7 @@ class MockStore {
         id: 'USR-003',
         name: 'Codestro Brand Admin',
         email: 'admin@codestro.com',
-        password: 'Codestro@2026',
+        password: seedAdminPassword,
         role: 'Brand Admin',
         brand: 'Codestro',
         status: 'Active',
@@ -103,7 +107,7 @@ class MockStore {
         id: 'USR-004',
         name: 'Karthik Rao (PM)',
         email: 'karthik.pm@devicedoctor.in',
-        password: 'Project@2026',
+        password: seedPmPassword,
         role: 'Project Manager',
         brand: 'Device Doctor India',
         status: 'Active',
@@ -115,7 +119,7 @@ class MockStore {
         id: 'USR-005',
         name: 'Finance & Accounts',
         email: 'finance@devicedoctor.in',
-        password: 'Finance@2026',
+        password: seedFinancePassword,
         role: 'Accountant',
         brand: 'Device Doctor India',
         status: 'Active',
@@ -127,7 +131,7 @@ class MockStore {
         id: 'USR-006',
         name: 'Executive Reviewer',
         email: 'viewer@devicedoctor.in',
-        password: 'Viewer@2026',
+        password: seedViewerPassword,
         role: 'Viewer',
         brand: 'All',
         status: 'Active',
@@ -139,7 +143,7 @@ class MockStore {
         id: 'USR-007',
         name: 'DUNS Brand Admin',
         email: 'admin@duns.com',
-        password: 'Duns@2026',
+        password: seedAdminPassword,
         role: 'Brand Admin',
         brand: 'DUNS',
         status: 'Active',
@@ -1588,6 +1592,11 @@ class MockStore {
         timestamp: now,
       },
     ];
+
+    // Recalculate initial financials for all projects based on seed payments
+    for (const proj of this.projects) {
+      this.recalculateProjectFinancials(proj.id);
+    }
   }
 
   // --- Auth & Users ---
@@ -1599,12 +1608,19 @@ class MockStore {
   }
 
   public saveUser(user: AppUser): AppUser {
-    const idx = this.users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === (user.email || '').toLowerCase());
+    const cleanId = (user.id || '').trim().toLowerCase();
+    const cleanEmail = (user.email || '').trim().toLowerCase();
+    const idx = this.users.findIndex((u) =>
+      (cleanId && u.id.toLowerCase() === cleanId) ||
+      (cleanEmail && u.email.toLowerCase() === cleanEmail)
+    );
     if (idx >= 0) {
       const existing = this.users[idx];
       this.users[idx] = {
         ...existing,
         ...user,
+        name: user.name && user.name.trim() ? user.name.trim() : existing.name,
+        email: user.email && user.email.trim() ? user.email.toLowerCase().trim() : existing.email,
         password: user.password && user.password.trim() ? user.password.trim() : existing.password,
         updatedAt: new Date().toISOString(),
       };
@@ -1612,7 +1628,11 @@ class MockStore {
     }
     const created: AppUser = {
       ...user,
-      password: user.password || 'Admin@2026',
+      status: user.status || 'Active',
+      role: user.role || 'Viewer',
+      brand: user.brand || 'All',
+      avatar: user.avatar || '',
+      password: user.password && user.password.trim() ? user.password.trim() : '',
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1947,24 +1967,95 @@ class MockStore {
     }));
   }
 
+  public recalculateProjectFinancials(projectId?: string | null): void {
+    if (!projectId) return;
+    const cleanProjId = projectId.trim().toLowerCase();
+    const proj = this.projects.find((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const codeId = ((p as any).project_id_code || '').trim().toLowerCase();
+      return pId === cleanProjId || codeId === cleanProjId || p.id === projectId;
+    });
+    if (!proj) return;
+
+    // Filter payments linked to this project with paymentStatus === 'Received' (or missing/empty)
+    const validPayments = this.payments.filter((pay) => {
+      const payProjId = (pay.projectId || (pay as any).project_id || '').trim().toLowerCase();
+      const isLinked = payProjId === cleanProjId || pay.projectId === proj.id || (pay as any).project_id === proj.id;
+      if (!isLinked) return false;
+
+      const status = (pay.paymentStatus || '').trim().toLowerCase();
+      return status === 'received' || status === '';
+    });
+
+    const totalReceived = validPayments.reduce((sum, pay) => {
+      const amt = Number(pay.amountINR) || Number(pay.amountReceived) || 0;
+      return sum + amt;
+    }, 0);
+
+    proj.totalReceived = totalReceived;
+    proj.balance = (Number(proj.contractValue) || 0) - totalReceived;
+    proj.updatedAt = new Date().toISOString();
+  }
+
   public savePayment(payment: Payment): Payment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
     const cleanId = (payment.id || '').trim();
     const finalId = cleanId || generateSemanticEntityId('PAY', payment.brand, this.payments);
-    const clonedPayment: Payment = {
+
+    const idx = cleanId
+      ? this.payments.findIndex(
+          (p) =>
+            (p.id || '').trim().toLowerCase() === cleanId.toLowerCase() ||
+            ((p as any).payment_id_code || '').trim().toLowerCase() === cleanId.toLowerCase()
+        )
+      : -1;
+
+    let oldProjectId: string | undefined = undefined;
+    let existingPayment: Payment | undefined = undefined;
+
+    if (idx >= 0) {
+      existingPayment = this.payments[idx];
+      oldProjectId = existingPayment.projectId;
+    }
+
+    const mergedPayment: Payment = {
+      ...(existingPayment || {}),
       ...payment,
       id: finalId,
-      paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
+      paymentProof:
+        payment.paymentProof !== undefined
+          ? payment.paymentProof
+            ? JSON.parse(JSON.stringify(payment.paymentProof))
+            : undefined
+          : existingPayment?.paymentProof
+          ? JSON.parse(JSON.stringify(existingPayment.paymentProof))
+          : undefined,
     };
-    const idx = cleanId ? this.payments.findIndex((p) => p.id === cleanId) : -1;
+
     let resultPayment: Payment;
     if (idx >= 0) {
-      this.payments[idx] = { ...this.payments[idx], ...clonedPayment, id: finalId, updatedAt: new Date().toISOString() };
+      this.payments[idx] = {
+        ...mergedPayment,
+        updatedAt: new Date().toISOString(),
+      };
       resultPayment = JSON.parse(JSON.stringify(this.payments[idx]));
     } else {
-      const created = { ...clonedPayment, id: finalId, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = {
+        ...mergedPayment,
+        createdAt: mergedPayment.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
       this.payments.unshift(created);
       resultPayment = JSON.parse(JSON.stringify(created));
+    }
+
+    // Recalculate project financials
+    const newProjectId = resultPayment.projectId;
+    if (newProjectId) {
+      this.recalculateProjectFinancials(newProjectId);
+    }
+    if (oldProjectId && oldProjectId !== newProjectId) {
+      this.recalculateProjectFinancials(oldProjectId);
     }
 
     // Auto-sync into GST Invoices module if payment mode is 'GST Invoice'
@@ -1978,6 +2069,15 @@ class MockStore {
   public deletePayment(id: string, brand?: string | null): boolean {
     const initial = this.payments.length;
     const cleanId = (id || '').trim().toLowerCase();
+
+    // Find payment to get its projectId before deleting
+    const targetPayment = this.payments.find((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const codeId = ((p as any).payment_id_code || '').trim().toLowerCase();
+      return pId === cleanId || codeId === cleanId || p.id === id;
+    });
+    const targetProjectId = targetPayment?.projectId;
+
     this.payments = this.payments.filter((p) => {
       const pId = (p.id || '').trim().toLowerCase();
       const codeId = ((p as any).payment_id_code || '').trim().toLowerCase();
@@ -1998,7 +2098,13 @@ class MockStore {
         return true;
       }
     );
-    return this.payments.length < initial;
+
+    const wasDeleted = this.payments.length < initial;
+    if (wasDeleted && targetProjectId) {
+      this.recalculateProjectFinancials(targetProjectId);
+    }
+
+    return wasDeleted;
   }
 
   // --- GST Invoices ---

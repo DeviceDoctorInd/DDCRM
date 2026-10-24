@@ -38,6 +38,10 @@ if (!isTsxRunning) {
 }
 
 async function startAppServer() {
+  if (process.env.NODE_ENV !== 'test' && !process.env.JWT_SECRET) {
+    console.error('[FATAL] JWT_SECRET environment variable is required to start the server. Please set JWT_SECRET in your .env file.');
+    process.exit(1);
+  }
   const fs = await import('fs');
   const express = (await import('express')).default;
   const { createServer: createViteServer } = await import('vite');

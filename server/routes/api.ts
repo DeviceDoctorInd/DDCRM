@@ -330,36 +330,44 @@ router.get('/db/status', async (_req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (pool) {
     try {
-      const counts = await refreshTableCounts();
       const status = getAzureDbStatus();
+      const { tableCounts: _tc, ...safeStatus } = status;
       return res.json({
         status: 'ok',
-        ...status,
+        ...safeStatus,
         connected: true,
         isMock: false,
-        tableCounts: counts,
       });
     } catch (err) {
-      console.warn('[db/status] refreshTableCounts error:', err);
+      console.warn('[db/status] status check error:', err);
     }
   }
 
   const status = getAzureDbStatus();
+  const { tableCounts: _tc, ...safeStatus } = status;
   return res.json({
     status: 'ok',
+    ...safeStatus,
     connected: false,
     isMock: true,
-    server: status.server,
-    database: status.database,
-    authType: status.authType,
-    user: status.user,
-    error: status.error || 'Operating with high-availability in-memory store',
+    server: safeStatus.server,
+    database: safeStatus.database,
+    authType: safeStatus.authType,
+    user: safeStatus.user,
+    error: safeStatus.error || 'Operating with high-availability in-memory store',
     lastChecked: new Date().toISOString(),
-    tableCounts: mockStore.getTableCounts(),
   });
 });
 
-router.post('/db/reconnect', async (_req: Request, res: Response) => {
+router.post('/db/reconnect', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.user?.role !== 'Super Admin') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied. Only Super Admin can reconnect database and run migrations.',
+    });
+  }
+
   const success = await initAzureSql();
   const pool = getPool();
   if (pool && success) {
@@ -406,6 +414,14 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       error: 'Access denied. Only Super Admin can clear demo data.',
     });
   }
+
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedAdminPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'SEED_ADMIN_PASSWORD environment variable is required to execute clear-demo. No admin accounts were inserted.',
+    });
+  }
   const pool = await getOrInitPool();
   if (!pool) {
     const resData = mockStore.clearDemo();
@@ -445,12 +461,13 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       WHERE LOWER(email) NOT IN ('rathorehemant114@gmail.com', 'devicedoctorindia.in@gmail.com');
     `);
 
+    const hashedAdminPass = await hashPassword(seedAdminPassword);
     const nowIso = new Date().toISOString();
     await pool.request()
       .input('u1_id', 'USR-001')
       .input('u1_name', 'Hemant Rathore')
       .input('u1_email', 'rathorehemant114@gmail.com')
-      .input('u1_pass', 'Hemant@1318')
+      .input('u1_pass', hashedAdminPass)
       .input('u1_role', 'Super Admin')
       .input('u1_brand', 'All')
       .input('u1_status', 'Active')
@@ -465,7 +482,7 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       .input('u2_id', 'USR-002')
       .input('u2_name', 'Device Doctor India')
       .input('u2_email', 'devicedoctorindia.in@gmail.com')
-      .input('u2_pass', 'Admin@2026')
+      .input('u2_pass', hashedAdminPass)
       .input('u2_role', 'Super Admin')
       .input('u2_brand', 'All')
       .input('u2_status', 'Active')
@@ -1569,7 +1586,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
 });
 
 // --- PROJECT DOCUMENTS (Preview & Download API) ---
-router.get('/projects/:id/documents/:docType', async (req: Request, res: Response) => {
+router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Request, res: Response) => {
   const { id, docType } = req.params;
   const download = req.query.download === 'true';
   const pool = await getOrInitPool();
@@ -2137,76 +2154,193 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 
   try {
     const guidId = toGuid(payment.id);
-    const projGuid = toGuidOrNull(payment.projectId);
-    const clientGuid = toGuidOrNull(payment.clientId);
+    const cleanId = (payment.id || '').trim();
+
+    // 1. Fetch existing payment if updating to preserve unsupplied fields and track old project
+    let existingPayment: any = null;
+    if (cleanId) {
+      try {
+        const checkRes = await pool.request()
+          .input('id', guidId)
+          .input('rawId', cleanId)
+          .query(`
+            SELECT TOP 1 *
+            FROM payments
+            WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
+          `);
+        existingPayment = checkRes.recordset?.[0] || null;
+      } catch (checkErr) {
+        console.warn('[handleSavePaymentRoute] Could not check existing payment:', checkErr);
+      }
+    }
+
+    const oldProjectId = existingPayment?.project_id ? String(existingPayment.project_id) : null;
+    const targetProjectId = payment.projectId || oldProjectId || null;
+    const projGuid = toGuidOrNull(targetProjectId);
+    const clientGuid = toGuidOrNull(payment.clientId || existingPayment?.client_id);
+
+    // Merge payment fields (partial PUT support)
+    const finalBrand = payment.brand || existingPayment?.brand || 'Device Doctor India';
+    const finalClientId = payment.clientId || existingPayment?.client_id || clientGuid || '';
+    const finalClientName = payment.clientName ?? (existingPayment?.client_name || '');
+    const finalPaymentMode = payment.paymentMode ?? (existingPayment?.payment_mode || 'GST Invoice');
+    const finalBankAccountId = payment.bankAccountId ?? (existingPayment?.bank_account_id || '');
+    const finalBankAccountName = payment.bankAccountName ?? (existingPayment?.bank_account_name || '');
+    const finalPaymentDate = payment.paymentDate ?? (existingPayment?.payment_date || '');
+    const finalDueDate = payment.dueDate ?? (existingPayment?.due_date || '');
+    const finalAmountReceived = payment.amountReceived !== undefined ? payment.amountReceived : (existingPayment?.amount_received ?? 0);
+    const finalCurrency = payment.currency ?? (existingPayment?.currency || 'INR');
+    const finalExchangeRate = payment.exchangeRate !== undefined ? payment.exchangeRate : (existingPayment?.exchange_rate ?? 1);
+    const finalAmountINR = payment.amountINR !== undefined ? payment.amountINR : (existingPayment?.amount_inr ?? 0);
+    const finalReferenceUtr = payment.referenceUtr ?? (existingPayment?.reference_utr || '');
+    const finalPaymentStatus = payment.paymentStatus ?? (existingPayment?.payment_status || 'Received');
+    const finalDaysOverdue = payment.daysOverdue !== undefined ? payment.daysOverdue : (existingPayment?.days_overdue ?? 0);
+    const finalNotes = payment.notes ?? (existingPayment?.notes || '');
+    const finalPaymentProof = serializedProof ?? (existingPayment?.payment_proof || null);
+    const finalProofNotes = payment.paymentProofNotes || (payment.paymentProof?.notes) || existingPayment?.payment_proof_notes || '';
+    const finalCreatedAt = payment.createdAt || existingPayment?.created_at || now;
+
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', payment.id || '')
-          .input('brand', payment.brand || 'Device Doctor India')
-          .input('project_id', projGuid)
-          .input('client_id', clientGuid)
-          .input('client_name', payment.clientName || '')
-          .input('payment_mode', payment.paymentMode || 'GST Invoice')
-          .input('bank_account_id', payment.bankAccountId || '')
-          .input('bank_account_name', payment.bankAccountName || '')
-          .input('payment_date', payment.paymentDate || '')
-          .input('due_date', payment.dueDate || '')
-          .input('amount_received', payment.amountReceived || 0)
-          .input('currency', payment.currency || 'INR')
-          .input('exchange_rate', payment.exchangeRate || 1)
-          .input('amount_inr', payment.amountINR || 0)
-          .input('reference_utr', payment.referenceUtr || '')
-          .input('payment_status', payment.paymentStatus || 'Received')
-          .input('days_overdue', payment.daysOverdue || 0)
-          .input('notes', payment.notes || '')
-          .input('payment_proof', serializedProof)
-          .input('payment_proof_notes', payment.paymentProofNotes || (payment.paymentProof?.notes || ''))
-          .input('created_at', payment.createdAt)
+          .input('rawId', cleanId)
+          .input('brand', finalBrand)
+          .input('project_id', projGuid || targetProjectId)
+          .input('target_project_id', targetProjectId || '')
+          .input('old_project_id', oldProjectId || '')
+          .input('client_id', finalClientId)
+          .input('client_name', finalClientName)
+          .input('payment_mode', finalPaymentMode)
+          .input('bank_account_id', finalBankAccountId)
+          .input('bank_account_name', finalBankAccountName)
+          .input('payment_date', finalPaymentDate)
+          .input('due_date', finalDueDate)
+          .input('amount_received', finalAmountReceived)
+          .input('currency', finalCurrency)
+          .input('exchange_rate', finalExchangeRate)
+          .input('amount_inr', finalAmountINR)
+          .input('reference_utr', finalReferenceUtr)
+          .input('payment_status', finalPaymentStatus)
+          .input('days_overdue', finalDaysOverdue)
+          .input('notes', finalNotes)
+          .input('payment_proof', finalPaymentProof)
+          .input('payment_proof_notes', finalProofNotes)
+          .input('created_at', finalCreatedAt)
           .input('updated_at', payment.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                 payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
-                                 payment_date=@payment_date, due_date=@due_date,
-                                 amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
-                                 amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
-                                 days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
-                                 payment_proof_notes=@payment_proof_notes, updated_at=@updated_at,
-                                 payment_id_code=@rawId
-              WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
-            ELSE
-              INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+            SET XACT_ABORT ON;
+            BEGIN TRY
+              BEGIN TRANSACTION;
+                -- 1. Insert or Update Payment
+                IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
+                  UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                                     payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
+                                     payment_date=@payment_date, due_date=@due_date,
+                                     amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
+                                     amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
+                                     days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
+                                     payment_proof_notes=@payment_proof_notes, updated_at=@updated_at,
+                                     payment_id_code=@rawId
+                  WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL);
+                ELSE
+                  INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+                  VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at);
+
+                -- 2. Recalculate target project totals (only payment_status = 'Received' or NULL/empty)
+                IF @target_project_id IS NOT NULL AND @target_project_id <> ''
+                BEGIN
+                  UPDATE p
+                  SET 
+                    total_received = ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @target_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    balance = ISNULL(p.contract_value, 0) - ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @target_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    updated_at = @updated_at
+                  FROM projects p
+                  WHERE p.id = @target_project_id OR p.project_id_code = @target_project_id OR CAST(p.id AS NVARCHAR(150)) = @target_project_id;
+                END;
+
+                -- 3. If project changed from an old project, recalculate old project too
+                IF @old_project_id IS NOT NULL AND @old_project_id <> '' AND @old_project_id <> @target_project_id
+                BEGIN
+                  UPDATE p
+                  SET 
+                    total_received = ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @old_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    balance = ISNULL(p.contract_value, 0) - ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @old_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    updated_at = @updated_at
+                  FROM projects p
+                  WHERE p.id = @old_project_id OR p.project_id_code = @old_project_id OR CAST(p.id AS NVARCHAR(150)) = @old_project_id;
+                END;
+              COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+              IF @@TRANCOUNT > 0
+                ROLLBACK TRANSACTION;
+              THROW;
+            END CATCH;
           `),
       'payments'
     );
 
-    mockStore.savePayment(payment);
+    mockStore.savePayment({
+      ...payment,
+      projectId: targetProjectId || undefined,
+      amountReceived: finalAmountReceived,
+      amountINR: finalAmountINR,
+      paymentStatus: finalPaymentStatus as any,
+    });
 
     // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
     let syncedGstInvoice: GstInvoice | null = null;
-    if (payment.paymentMode === 'GST Invoice') {
-      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, payment);
+    if (finalPaymentMode === 'GST Invoice') {
+      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
+        ...payment,
+        projectId: targetProjectId || undefined,
+        paymentMode: finalPaymentMode,
+        amountReceived: finalAmountReceived,
+        amountINR: finalAmountINR,
+      });
     }
 
     return res.json({
       success: true,
-      payment,
+      payment: {
+        ...payment,
+        projectId: targetProjectId || undefined,
+        amountReceived: finalAmountReceived,
+        amountINR: finalAmountINR,
+        paymentStatus: finalPaymentStatus,
+      },
       gstInvoiceSynced: !!syncedGstInvoice,
       gstInvoice: syncedGstInvoice,
     });
-  } catch (err) {
-    console.warn('[handleSavePaymentRoute] Falling back to mock store:', err);
-    const saved = mockStore.savePayment(payment);
-    const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
-    return res.json({
-      success: true,
-      payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) },
-      gstInvoiceSynced: !!syncedGst,
-      gstInvoice: syncedGst,
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[handleSavePaymentRoute] SQL Transaction Error:', errMsg);
+    return res.status(500).json({
+      success: false,
+      error: 'An internal database error occurred while processing the payment voucher.',
+      message: 'Failed to record payment voucher and update project financials in Azure SQL.',
     });
   }
 }
@@ -2242,7 +2376,8 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
       .query(`
         SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code,
-                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(project_id AS NVARCHAR(150)), '') as project_id
         FROM payments 
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
       `);
@@ -2255,20 +2390,59 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
       });
     }
 
+    const linkedProjectId = existing?.project_id || null;
+    const now = new Date().toISOString();
+
     await executeSqlWithAutoMigration(
       pool,
       () => pool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
+        .input('linkedProjectId', linkedProjectId)
+        .input('now', now)
         .query(`
-          DELETE FROM payments 
-          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
-            AND (@brandFilter IS NULL OR brand = @brandFilter);
-          
-          DELETE FROM gst_invoices 
-          WHERE (payment_id = @id OR payment_id = @rawId) 
-            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+          SET XACT_ABORT ON;
+          BEGIN TRY
+            BEGIN TRANSACTION;
+              -- 1. Delete payment voucher
+              DELETE FROM payments 
+              WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
+                AND (@brandFilter IS NULL OR brand = @brandFilter);
+              
+              -- 2. Delete unfiled linked GST invoices
+              DELETE FROM gst_invoices 
+              WHERE (payment_id = @id OR payment_id = @rawId) 
+                AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+
+              -- 3. Recalculate linked project financials if project_id exists
+              IF @linkedProjectId IS NOT NULL AND @linkedProjectId <> ''
+              BEGIN
+                UPDATE p
+                SET 
+                  total_received = ISNULL((
+                    SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                    FROM payments 
+                    WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @linkedProjectId)
+                      AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                  ), 0),
+                  balance = ISNULL(p.contract_value, 0) - ISNULL((
+                    SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                    FROM payments 
+                    WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @linkedProjectId)
+                      AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                  ), 0),
+                  updated_at = @now
+                FROM projects p
+                WHERE p.id = @linkedProjectId OR p.project_id_code = @linkedProjectId OR CAST(p.id AS NVARCHAR(150)) = @linkedProjectId;
+              END;
+            COMMIT TRANSACTION;
+          END TRY
+          BEGIN CATCH
+            IF @@TRANCOUNT > 0
+              ROLLBACK TRANSACTION;
+            THROW;
+          END CATCH;
         `),
       'payments'
     );
@@ -2276,9 +2450,12 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
     return res.json({ success: true, id });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deletePayment(id, brandFilter);
-    return res.json({ success: true, id });
+    console.error(`[DELETE /payments/${id}] Error in SQL transaction:`, errMsg);
+    return res.status(500).json({
+      success: false,
+      error: 'An internal database error occurred while removing the payment voucher.',
+      message: 'Failed to delete payment voucher and update project in Azure SQL.',
+    });
   }
 });
 
@@ -3949,47 +4126,101 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
 
 async function handleSaveUserRoute(req: Request, res: Response) {
   const user: AppUser = req.body;
-  const now = new Date().toISOString();
-  user.updatedAt = now;
-  user.createdAt = user.createdAt || now;
+  const rawId = (user.id || (req.params && req.params.id) || '').trim();
+  const rawEmail = (user.email || '').toLowerCase().trim();
 
-  const rawId = (user.id || `USR-${Date.now().toString().slice(-4)}`).trim();
-  const userEmail = (user.email || '').toLowerCase().trim();
-  const userName = (user.name || user.email || 'User').trim();
-  user.id = rawId;
-  user.email = userEmail;
-  user.name = userName;
+  // Look for existing user in in-memory store or Azure SQL
+  const pool = await getOrInitPool();
+  const mockExisting = mockStore.getUsers().find(
+    (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
+           (rawEmail && u.email.toLowerCase() === rawEmail)
+  );
+
+  let isExisting = Boolean(mockExisting) || req.method === 'PUT';
+  if (!isExisting && pool && (rawId || rawEmail)) {
+    try {
+      const checkExisting = await pool.request()
+        .input('chk_id', rawId ? toGuid(rawId) : null)
+        .input('chk_rawId', rawId || null)
+        .input('chk_email', rawEmail || null)
+        .query(`
+          SELECT TOP 1 id, email FROM app_users 
+          WHERE (@chk_id IS NOT NULL AND (id = @chk_id OR CAST(id AS NVARCHAR(100)) = @chk_rawId))
+             OR (@chk_email IS NOT NULL AND LOWER(email) = @chk_email)
+        `);
+      if (checkExisting.recordset && checkExisting.recordset.length > 0) {
+        isExisting = true;
+      }
+    } catch {
+      // Ignore lookup failure, continue with isExisting status
+    }
+  }
+
+  // Password Policy Validation:
+  // - On new user creation: password is required and must be >= 8 characters
+  // - On existing user edit: password is optional, but if provided must be >= 8 characters
+  const rawPass = (user.password || '').trim();
+  if (!isExisting) {
+    if (!rawPass || rawPass.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password is required and must be at least 8 characters long.',
+      });
+    }
+  } else {
+    if (rawPass && rawPass.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password must be at least 8 characters long.',
+      });
+    }
+  }
+
+  const finalId = rawId || `USR-${Date.now().toString().slice(-4)}`;
+  const finalEmail = rawEmail || (mockExisting ? mockExisting.email : '');
+  const finalName = (user.name && user.name.trim()) || (mockExisting ? mockExisting.name : '') || user.email || 'User';
+
+  const now = new Date().toISOString();
+  user.id = finalId;
+  user.email = finalEmail;
+  user.name = finalName.trim();
+  user.status = user.status || (mockExisting ? mockExisting.status : 'Active');
+  user.role = user.role || (mockExisting ? mockExisting.role : 'Viewer');
+  user.brand = user.brand || (mockExisting ? mockExisting.brand : 'All');
+  user.avatar = user.avatar || (mockExisting ? mockExisting.avatar : '');
+  user.updatedAt = now;
+  user.createdAt = user.createdAt || (mockExisting ? mockExisting.createdAt : now);
 
   // Hash new password if provided
   let hashedPassword = '';
-  if (user.password && user.password.trim()) {
-    hashedPassword = await hashPassword(user.password.trim());
+  if (rawPass) {
+    hashedPassword = await hashPassword(rawPass);
+    user.password = hashedPassword;
+  } else if (mockExisting) {
+    user.password = mockExisting.password;
   }
 
-  const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveUser(user);
     return res.json({ success: true, user: saved });
   }
 
   try {
-    const guidId = toGuid(rawId);
-    const fallbackNewPass = hashedPassword || (await hashPassword('Admin@2026'));
+    const guidId = toGuid(finalId);
 
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', rawId)
-          .input('name', userName)
-          .input('email', userEmail)
+          .input('rawId', finalId)
+          .input('name', user.name)
+          .input('email', user.email)
           .input('password_hash', hashedPassword)
-          .input('fallback_pass', fallbackNewPass)
-          .input('role', user.role || 'Viewer')
-          .input('brand', user.brand || 'All')
-          .input('status', user.status || 'Active')
-          .input('avatar', user.avatar || '')
+          .input('role', user.role || (mockExisting ? mockExisting.role : 'Viewer'))
+          .input('brand', user.brand || (mockExisting ? mockExisting.brand : 'All'))
+          .input('status', user.status || (mockExisting ? mockExisting.status : 'Active'))
+          .input('avatar', user.avatar || (mockExisting ? mockExisting.avatar : ''))
           .input('created_at', user.createdAt)
           .input('updated_at', user.updatedAt)
           .query(`
@@ -4009,7 +4240,7 @@ async function handleSaveUserRoute(req: Request, res: Response) {
             ELSE
             BEGIN
               INSERT INTO app_users (id, name, email, password_hash, role, brand, status, avatar, created_at, updated_at)
-              VALUES (@rawId, @name, @email, @fallback_pass, @role, @brand, @status, @avatar, @created_at, @updated_at);
+              VALUES (@rawId, @name, @email, @password_hash, @role, @brand, @status, @avatar, @created_at, @updated_at);
             END
           `),
       'app_users'

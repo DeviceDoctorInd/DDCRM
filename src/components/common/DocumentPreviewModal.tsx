@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, ExternalLink, FileText, FileCheck, Printer, CheckCircle } from 'lucide-react';
 import { ProjectDocument } from '../../types/crm';
-import { base64ToBlob, downloadDocument, normalizeDocument } from '../../utils/documentViewer';
+import {
+  base64ToBlob,
+  downloadDocument,
+  normalizeDocument,
+  fetchAuthenticatedDocumentBlob,
+  openDocumentPreview,
+} from '../../utils/documentViewer';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -29,6 +35,9 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
   const fileName = normalizedDoc?.name || (isProposal ? `${projectId}_Proposal.pdf` : `${projectId}_Contract.pdf`);
 
   useEffect(() => {
+    let activeObjUrl: string | null = null;
+    let isCancelled = false;
+
     if (!isOpen || !normalizedDoc) {
       if (blobUrl) {
         URL.revokeObjectURL(blobUrl);
@@ -40,19 +49,32 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
     if (normalizedDoc.url && normalizedDoc.url.startsWith('data:')) {
       const res = base64ToBlob(normalizedDoc.url);
       if (res) {
-        const objUrl = URL.createObjectURL(res.blob);
-        setBlobUrl(objUrl);
+        activeObjUrl = URL.createObjectURL(res.blob);
+        setBlobUrl(activeObjUrl);
         setMimeType(res.mimeType);
-        return () => {
-          URL.revokeObjectURL(objUrl);
-          setBlobUrl(null);
-        };
       }
     } else {
-      // Use backend static document route as iframe source
-      setBlobUrl(`/api/projects/${encodeURIComponent(projectId)}/documents/${documentType}`);
-      setMimeType('application/pdf');
+      // Authenticated fetch from backend with session JWT
+      fetchAuthenticatedDocumentBlob(projectId, documentType, false)
+        .then(({ blob, mimeType: fetchedMime }) => {
+          if (!isCancelled) {
+            activeObjUrl = URL.createObjectURL(blob);
+            setBlobUrl(activeObjUrl);
+            setMimeType(fetchedMime);
+          }
+        })
+        .catch((err) => {
+          console.error('[DocumentPreviewModal] Error loading document preview:', err);
+        });
     }
+
+    return () => {
+      isCancelled = true;
+      if (activeObjUrl) {
+        URL.revokeObjectURL(activeObjUrl);
+      }
+      setBlobUrl(null);
+    };
   }, [isOpen, normalizedDoc?.url, projectId, documentType]);
 
   if (!isOpen || !normalizedDoc) return null;
@@ -66,10 +88,10 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
       window.open(normalizedDoc.externalUrl, '_blank', 'noopener,noreferrer');
       return;
     }
-    if (blobUrl) {
+    if (blobUrl && blobUrl.startsWith('blob:')) {
       window.open(blobUrl, '_blank');
     } else {
-      window.open(`/api/projects/${encodeURIComponent(projectId)}/documents/${documentType}`, '_blank');
+      openDocumentPreview(projectId, normalizedDoc, documentType);
     }
   };
 
