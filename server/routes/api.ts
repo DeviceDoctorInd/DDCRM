@@ -1347,6 +1347,44 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
 });
 
 async function handleSaveProjectRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/projects) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Client Identity (required on POST: at least clientId or clientName)
+  const rawClientId = req.body.clientId ?? req.body.client_id;
+  const rawClientName = req.body.clientName ?? req.body.client_name;
+  const hasClientId = rawClientId !== undefined && rawClientId !== null && String(rawClientId).trim().length > 0;
+  const hasClientName = rawClientName !== undefined && rawClientName !== null && String(rawClientName).trim().length > 0;
+
+  if (isPost && !hasClientId && !hasClientName) {
+    return res.status(400).json({ success: false, error: 'Client identity (clientId or clientName) is required.' });
+  }
+
+  // 2. Contract Amount Validation (must be non-negative number if provided; skip empty/whitespace string; 0 is valid)
+  const rawContract = req.body.contract;
+  if (rawContract !== undefined && rawContract !== null) {
+    if (typeof rawContract === 'string' && rawContract.trim() === '') {
+      // Empty or whitespace-only string: skip validation, do not reject
+    } else {
+      const numContract = typeof rawContract === 'number' ? rawContract : Number(String(rawContract).trim());
+      if (isNaN(numContract) || numContract < 0) {
+        return res.status(400).json({ success: false, error: 'Contract amount must be a non-negative number.' });
+      }
+    }
+  }
+
+  // 3. Start Date Validation (optional, but if provided and not empty must be a valid date)
+  const rawStartDate = req.body.startDate ?? req.body.start_date;
+  if (rawStartDate !== undefined && rawStartDate !== null) {
+    const dateStr = String(rawStartDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid startDate format.' });
+      }
+    }
+  }
+
   const proj: Project = req.body;
   const brandContext = getBrandContext(req);
   proj.brand = sanitizeBrand(proj.brand, brandContext) as any;
