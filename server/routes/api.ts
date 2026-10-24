@@ -589,7 +589,47 @@ router.get('/clients', authenticateToken, async (req: Request, res: Response) =>
 });
 
 async function handleSaveClientRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/clients) ---
+  const isPost = req.method === 'POST';
+  const hasNameProp = 'name' in req.body || 'clientName' in req.body || 'client_name' in req.body;
+  const rawName = req.body.name ?? req.body.clientName ?? req.body.client_name;
+
+  if (isPost) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Client name is required.' });
+    }
+  } else if (hasNameProp) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Client name cannot be empty.' });
+    }
+  }
+
+  // Validate email format if provided and not empty
+  if (req.body.email !== undefined && req.body.email !== null) {
+    const emailStr = String(req.body.email).trim();
+    if (emailStr.length > 0) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailStr)) {
+        return res.status(400).json({ success: false, error: 'Invalid email address format.' });
+      }
+    }
+  }
+
+  // Validate clientSince date format if provided and not empty
+  if (req.body.clientSince !== undefined && req.body.clientSince !== null) {
+    const dateStr = String(req.body.clientSince).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid clientSince date format.' });
+      }
+    }
+  }
+
   const client: Client = req.body;
+  if (rawName && typeof rawName === 'string') {
+    client.name = rawName.trim();
+  }
   const brandContext = getBrandContext(req);
   client.brand = sanitizeBrand(client.brand, brandContext) as any;
   const now = new Date().toISOString();
