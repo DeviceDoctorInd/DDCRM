@@ -1,4 +1,5 @@
 import { ProjectDocument } from '../types/crm';
+import { storageService } from '../services/storageService';
 
 /**
  * Normalizes a document object which might be a JSON string or raw object
@@ -54,6 +55,32 @@ export function base64ToBlob(dataUrl: string): { blob: Blob; mimeType: string } 
 }
 
 /**
+ * Authenticated fetch helper to fetch document blob from the backend
+ */
+export async function fetchAuthenticatedDocumentBlob(
+  projectId: string,
+  docType: 'proposal' | 'contract',
+  download: boolean = false
+): Promise<{ blob: Blob; mimeType: string }> {
+  const token = storageService.getAuthToken();
+  const url = `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(docType)}${download ? '?download=true' : ''}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to load document (${res.status} ${res.statusText})`);
+  }
+
+  const mimeType = res.headers.get('content-type') || 'application/octet-stream';
+  const blob = await res.blob();
+  return { blob, mimeType };
+}
+
+/**
  * Opens a document in preview mode (in a new tab or via Blob URL / Server API)
  */
 export function openDocumentPreview(
@@ -89,9 +116,36 @@ export function openDocumentPreview(
     }
   }
 
-  // 3. Fallback to secure server API route which serves the file inline
-  const serverUrl = `/api/projects/${encodeURIComponent(projectId)}/documents/${docType}`;
-  window.open(serverUrl, '_blank', 'noopener,noreferrer');
+  // 3. Fallback to secure server API route:
+  // Open blank tab immediately to satisfy pop-up blockers, fetch with JWT token, then redirect to blob URL
+  const newWin = window.open('', '_blank');
+  if (newWin) {
+    try {
+      newWin.document.title = 'Loading document...';
+    } catch {
+      // Ignore cross-origin / iframe restrictions
+    }
+  }
+
+  fetchAuthenticatedDocumentBlob(projectId, docType, false)
+    .then(({ blob }) => {
+      const blobUrl = URL.createObjectURL(blob);
+      if (newWin && !newWin.closed) {
+        newWin.location.href = blobUrl;
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 60000);
+      } else {
+        URL.revokeObjectURL(blobUrl);
+      }
+    })
+    .catch((err) => {
+      console.error('[openDocumentPreview] Failed to fetch document:', err);
+      if (newWin && !newWin.closed) {
+        newWin.close();
+      }
+      alert('Failed to load document. Please ensure you are logged in and have access.');
+    });
 }
 
 /**
@@ -120,7 +174,7 @@ export function downloadDocument(
       document.body.removeChild(link);
       setTimeout(() => {
         URL.revokeObjectURL(blobUrl);
-      }, 5000);
+      }, 10000);
       return;
     }
   }
@@ -131,13 +185,23 @@ export function downloadDocument(
     return;
   }
 
-  // 3. Trigger download via server endpoint with ?download=true
-  const downloadUrl = `/api/projects/${encodeURIComponent(projectId)}/documents/${docType}?download=true`;
-  const link = document.createElement('a');
-  link.href = downloadUrl;
-  link.download = fallbackFileName;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  // 3. Trigger download via server endpoint with authenticated fetch and Blob
+  fetchAuthenticatedDocumentBlob(projectId, docType, true)
+    .then(({ blob }) => {
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fallbackFileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+      }, 10000);
+    })
+    .catch((err) => {
+      console.error('[downloadDocument] Download failed:', err);
+      alert('Failed to download document. Please ensure you are logged in and have access.');
+    });
 }

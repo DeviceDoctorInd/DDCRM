@@ -1586,7 +1586,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
 });
 
 // --- PROJECT DOCUMENTS (Preview & Download API) ---
-router.get('/projects/:id/documents/:docType', async (req: Request, res: Response) => {
+router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Request, res: Response) => {
   const { id, docType } = req.params;
   const download = req.query.download === 'true';
   const pool = await getOrInitPool();
