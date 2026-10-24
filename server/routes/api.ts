@@ -2154,76 +2154,193 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 
   try {
     const guidId = toGuid(payment.id);
-    const projGuid = toGuidOrNull(payment.projectId);
-    const clientGuid = toGuidOrNull(payment.clientId);
+    const cleanId = (payment.id || '').trim();
+
+    // 1. Fetch existing payment if updating to preserve unsupplied fields and track old project
+    let existingPayment: any = null;
+    if (cleanId) {
+      try {
+        const checkRes = await pool.request()
+          .input('id', guidId)
+          .input('rawId', cleanId)
+          .query(`
+            SELECT TOP 1 *
+            FROM payments
+            WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
+          `);
+        existingPayment = checkRes.recordset?.[0] || null;
+      } catch (checkErr) {
+        console.warn('[handleSavePaymentRoute] Could not check existing payment:', checkErr);
+      }
+    }
+
+    const oldProjectId = existingPayment?.project_id ? String(existingPayment.project_id) : null;
+    const targetProjectId = payment.projectId || oldProjectId || null;
+    const projGuid = toGuidOrNull(targetProjectId);
+    const clientGuid = toGuidOrNull(payment.clientId || existingPayment?.client_id);
+
+    // Merge payment fields (partial PUT support)
+    const finalBrand = payment.brand || existingPayment?.brand || 'Device Doctor India';
+    const finalClientId = payment.clientId || existingPayment?.client_id || clientGuid || '';
+    const finalClientName = payment.clientName ?? (existingPayment?.client_name || '');
+    const finalPaymentMode = payment.paymentMode ?? (existingPayment?.payment_mode || 'GST Invoice');
+    const finalBankAccountId = payment.bankAccountId ?? (existingPayment?.bank_account_id || '');
+    const finalBankAccountName = payment.bankAccountName ?? (existingPayment?.bank_account_name || '');
+    const finalPaymentDate = payment.paymentDate ?? (existingPayment?.payment_date || '');
+    const finalDueDate = payment.dueDate ?? (existingPayment?.due_date || '');
+    const finalAmountReceived = payment.amountReceived !== undefined ? payment.amountReceived : (existingPayment?.amount_received ?? 0);
+    const finalCurrency = payment.currency ?? (existingPayment?.currency || 'INR');
+    const finalExchangeRate = payment.exchangeRate !== undefined ? payment.exchangeRate : (existingPayment?.exchange_rate ?? 1);
+    const finalAmountINR = payment.amountINR !== undefined ? payment.amountINR : (existingPayment?.amount_inr ?? 0);
+    const finalReferenceUtr = payment.referenceUtr ?? (existingPayment?.reference_utr || '');
+    const finalPaymentStatus = payment.paymentStatus ?? (existingPayment?.payment_status || 'Received');
+    const finalDaysOverdue = payment.daysOverdue !== undefined ? payment.daysOverdue : (existingPayment?.days_overdue ?? 0);
+    const finalNotes = payment.notes ?? (existingPayment?.notes || '');
+    const finalPaymentProof = serializedProof ?? (existingPayment?.payment_proof || null);
+    const finalProofNotes = payment.paymentProofNotes || (payment.paymentProof?.notes) || existingPayment?.payment_proof_notes || '';
+    const finalCreatedAt = payment.createdAt || existingPayment?.created_at || now;
+
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', payment.id || '')
-          .input('brand', payment.brand || 'Device Doctor India')
-          .input('project_id', projGuid)
-          .input('client_id', clientGuid)
-          .input('client_name', payment.clientName || '')
-          .input('payment_mode', payment.paymentMode || 'GST Invoice')
-          .input('bank_account_id', payment.bankAccountId || '')
-          .input('bank_account_name', payment.bankAccountName || '')
-          .input('payment_date', payment.paymentDate || '')
-          .input('due_date', payment.dueDate || '')
-          .input('amount_received', payment.amountReceived || 0)
-          .input('currency', payment.currency || 'INR')
-          .input('exchange_rate', payment.exchangeRate || 1)
-          .input('amount_inr', payment.amountINR || 0)
-          .input('reference_utr', payment.referenceUtr || '')
-          .input('payment_status', payment.paymentStatus || 'Received')
-          .input('days_overdue', payment.daysOverdue || 0)
-          .input('notes', payment.notes || '')
-          .input('payment_proof', serializedProof)
-          .input('payment_proof_notes', payment.paymentProofNotes || (payment.paymentProof?.notes || ''))
-          .input('created_at', payment.createdAt)
+          .input('rawId', cleanId)
+          .input('brand', finalBrand)
+          .input('project_id', projGuid || targetProjectId)
+          .input('target_project_id', targetProjectId || '')
+          .input('old_project_id', oldProjectId || '')
+          .input('client_id', finalClientId)
+          .input('client_name', finalClientName)
+          .input('payment_mode', finalPaymentMode)
+          .input('bank_account_id', finalBankAccountId)
+          .input('bank_account_name', finalBankAccountName)
+          .input('payment_date', finalPaymentDate)
+          .input('due_date', finalDueDate)
+          .input('amount_received', finalAmountReceived)
+          .input('currency', finalCurrency)
+          .input('exchange_rate', finalExchangeRate)
+          .input('amount_inr', finalAmountINR)
+          .input('reference_utr', finalReferenceUtr)
+          .input('payment_status', finalPaymentStatus)
+          .input('days_overdue', finalDaysOverdue)
+          .input('notes', finalNotes)
+          .input('payment_proof', finalPaymentProof)
+          .input('payment_proof_notes', finalProofNotes)
+          .input('created_at', finalCreatedAt)
           .input('updated_at', payment.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                 payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
-                                 payment_date=@payment_date, due_date=@due_date,
-                                 amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
-                                 amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
-                                 days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
-                                 payment_proof_notes=@payment_proof_notes, updated_at=@updated_at,
-                                 payment_id_code=@rawId
-              WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
-            ELSE
-              INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
-              VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
+            SET XACT_ABORT ON;
+            BEGIN TRY
+              BEGIN TRANSACTION;
+                -- 1. Insert or Update Payment
+                IF EXISTS (SELECT 1 FROM payments WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
+                  UPDATE payments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                                     payment_mode=@payment_mode, bank_account_id=@bank_account_id, bank_account_name=@bank_account_name,
+                                     payment_date=@payment_date, due_date=@due_date,
+                                     amount_received=@amount_received, currency=@currency, exchange_rate=@exchange_rate,
+                                     amount_inr=@amount_inr, reference_utr=@reference_utr, payment_status=@payment_status,
+                                     days_overdue=@days_overdue, notes=@notes, payment_proof=@payment_proof,
+                                     payment_proof_notes=@payment_proof_notes, updated_at=@updated_at,
+                                     payment_id_code=@rawId
+                  WHERE id = @id OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL);
+                ELSE
+                  INSERT INTO payments (id, payment_id_code, brand, project_id, client_id, client_name, payment_mode, bank_account_id, bank_account_name, payment_date, due_date, amount_received, currency, exchange_rate, amount_inr, reference_utr, payment_status, days_overdue, notes, payment_proof, payment_proof_notes, created_at, updated_at)
+                  VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at);
+
+                -- 2. Recalculate target project totals (only payment_status = 'Received' or NULL/empty)
+                IF @target_project_id IS NOT NULL AND @target_project_id <> ''
+                BEGIN
+                  UPDATE p
+                  SET 
+                    total_received = ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @target_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    balance = ISNULL(p.contract_value, 0) - ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @target_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    updated_at = @updated_at
+                  FROM projects p
+                  WHERE p.id = @target_project_id OR p.project_id_code = @target_project_id OR CAST(p.id AS NVARCHAR(150)) = @target_project_id;
+                END;
+
+                -- 3. If project changed from an old project, recalculate old project too
+                IF @old_project_id IS NOT NULL AND @old_project_id <> '' AND @old_project_id <> @target_project_id
+                BEGIN
+                  UPDATE p
+                  SET 
+                    total_received = ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @old_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    balance = ISNULL(p.contract_value, 0) - ISNULL((
+                      SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                      FROM payments 
+                      WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @old_project_id)
+                        AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                    ), 0),
+                    updated_at = @updated_at
+                  FROM projects p
+                  WHERE p.id = @old_project_id OR p.project_id_code = @old_project_id OR CAST(p.id AS NVARCHAR(150)) = @old_project_id;
+                END;
+              COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+              IF @@TRANCOUNT > 0
+                ROLLBACK TRANSACTION;
+              THROW;
+            END CATCH;
           `),
       'payments'
     );
 
-    mockStore.savePayment(payment);
+    mockStore.savePayment({
+      ...payment,
+      projectId: targetProjectId || undefined,
+      amountReceived: finalAmountReceived,
+      amountINR: finalAmountINR,
+      paymentStatus: finalPaymentStatus as any,
+    });
 
     // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
     let syncedGstInvoice: GstInvoice | null = null;
-    if (payment.paymentMode === 'GST Invoice') {
-      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, payment);
+    if (finalPaymentMode === 'GST Invoice') {
+      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
+        ...payment,
+        projectId: targetProjectId || undefined,
+        paymentMode: finalPaymentMode,
+        amountReceived: finalAmountReceived,
+        amountINR: finalAmountINR,
+      });
     }
 
     return res.json({
       success: true,
-      payment,
+      payment: {
+        ...payment,
+        projectId: targetProjectId || undefined,
+        amountReceived: finalAmountReceived,
+        amountINR: finalAmountINR,
+        paymentStatus: finalPaymentStatus,
+      },
       gstInvoiceSynced: !!syncedGstInvoice,
       gstInvoice: syncedGstInvoice,
     });
-  } catch (err) {
-    console.warn('[handleSavePaymentRoute] Falling back to mock store:', err);
-    const saved = mockStore.savePayment(payment);
-    const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
-    return res.json({
-      success: true,
-      payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) },
-      gstInvoiceSynced: !!syncedGst,
-      gstInvoice: syncedGst,
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('[handleSavePaymentRoute] SQL Transaction Error:', errMsg);
+    return res.status(500).json({
+      success: false,
+      error: 'An internal database error occurred while processing the payment voucher.',
+      message: 'Failed to record payment voucher and update project financials in Azure SQL.',
     });
   }
 }
@@ -2259,7 +2376,8 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
       .query(`
         SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code,
-                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                     ISNULL(CAST(project_id AS NVARCHAR(150)), '') as project_id
         FROM payments 
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
       `);
@@ -2272,20 +2390,59 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
       });
     }
 
+    const linkedProjectId = existing?.project_id || null;
+    const now = new Date().toISOString();
+
     await executeSqlWithAutoMigration(
       pool,
       () => pool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
+        .input('linkedProjectId', linkedProjectId)
+        .input('now', now)
         .query(`
-          DELETE FROM payments 
-          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
-            AND (@brandFilter IS NULL OR brand = @brandFilter);
-          
-          DELETE FROM gst_invoices 
-          WHERE (payment_id = @id OR payment_id = @rawId) 
-            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+          SET XACT_ABORT ON;
+          BEGIN TRY
+            BEGIN TRANSACTION;
+              -- 1. Delete payment voucher
+              DELETE FROM payments 
+              WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
+                AND (@brandFilter IS NULL OR brand = @brandFilter);
+              
+              -- 2. Delete unfiled linked GST invoices
+              DELETE FROM gst_invoices 
+              WHERE (payment_id = @id OR payment_id = @rawId) 
+                AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+
+              -- 3. Recalculate linked project financials if project_id exists
+              IF @linkedProjectId IS NOT NULL AND @linkedProjectId <> ''
+              BEGIN
+                UPDATE p
+                SET 
+                  total_received = ISNULL((
+                    SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                    FROM payments 
+                    WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @linkedProjectId)
+                      AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                  ), 0),
+                  balance = ISNULL(p.contract_value, 0) - ISNULL((
+                    SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
+                    FROM payments 
+                    WHERE (project_id = p.id OR project_id = p.project_id_code OR CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) OR project_id = @linkedProjectId)
+                      AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
+                  ), 0),
+                  updated_at = @now
+                FROM projects p
+                WHERE p.id = @linkedProjectId OR p.project_id_code = @linkedProjectId OR CAST(p.id AS NVARCHAR(150)) = @linkedProjectId;
+              END;
+            COMMIT TRANSACTION;
+          END TRY
+          BEGIN CATCH
+            IF @@TRANCOUNT > 0
+              ROLLBACK TRANSACTION;
+            THROW;
+          END CATCH;
         `),
       'payments'
     );
@@ -2293,9 +2450,12 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
     return res.json({ success: true, id });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[DELETE /payments/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deletePayment(id, brandFilter);
-    return res.json({ success: true, id });
+    console.error(`[DELETE /payments/${id}] Error in SQL transaction:`, errMsg);
+    return res.status(500).json({
+      success: false,
+      error: 'An internal database error occurred while removing the payment voucher.',
+      message: 'Failed to delete payment voucher and update project in Azure SQL.',
+    });
   }
 });
 
