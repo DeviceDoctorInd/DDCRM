@@ -2205,6 +2205,47 @@ export async function syncPaymentToGstInvoiceSql(
 }
 
 async function handleSavePaymentRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/payments) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amountReceived ?? req.body.amount ?? req.body.amount_received ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Amount received is required.' });
+  }
+
+  if (hasAmount) {
+    const numAmount = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Payment amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Payment Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
+  // 3. Due Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawDueDate = req.body.dueDate ?? req.body.due_date;
+  if (rawDueDate !== undefined && rawDueDate !== null) {
+    const dueDateStr = String(rawDueDate).trim();
+    if (dueDateStr.length > 0) {
+      const parsedTime = Date.parse(dueDateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid dueDate format.' });
+      }
+    }
+  }
   const payment: Payment = req.body;
   const brandContext = getBrandContext(req);
   payment.brand = sanitizeBrand(payment.brand, brandContext) as any;
