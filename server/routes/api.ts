@@ -4058,6 +4058,50 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
 });
 
 async function handleSaveExpenseRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/expenses) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amount ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Expense amount is required.' });
+  }
+
+  if (hasAmount) {
+    const numAmount = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Expense amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Expense Date Validation (optional, but if provided and not empty must be a valid date)
+  const rawExpenseDate = req.body.expenseDate ?? req.body.expense_date;
+  if (rawExpenseDate !== undefined && rawExpenseDate !== null) {
+    const dateStr = String(rawExpenseDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid expenseDate format.' });
+      }
+    }
+  }
+
+  // 3. Vendor Validation (required on POST; on PUT validate only if vendor key is present in body)
+  const rawVendor = req.body.vendor;
+  const hasVendorProp = 'vendor' in req.body;
+  const hasVendor = rawVendor !== undefined && rawVendor !== null && typeof rawVendor === 'string' && rawVendor.trim().length > 0;
+
+  if (isPost && !hasVendor) {
+    return res.status(400).json({ success: false, error: 'Vendor name is required.' });
+  } else if (!isPost && hasVendorProp) {
+    if (typeof rawVendor === 'string' && !rawVendor.trim()) {
+      return res.status(400).json({ success: false, error: 'Vendor name cannot be empty.' });
+    }
+  }
+
   const exp: Expense = req.body;
   const brandContext = getBrandContext(req);
   exp.brand = sanitizeBrand(exp.brand, brandContext) as any;
