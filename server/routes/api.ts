@@ -2620,6 +2620,131 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
 });
 
 async function handleSaveBankAccountRoute(req: Request, res: Response) {
+  const isPost = req.method === 'POST';
+  const accountId = (req.params.id || req.body?.id || '').trim();
+  const pool = await getOrInitPool();
+
+  // Look up existing bank account to support safe edits
+  let existingAccount: BankAccount | undefined = undefined;
+  if (accountId) {
+    if (pool) {
+      try {
+        const guidId = toGuid(accountId);
+        const checkRes = await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidId)
+              .input('rawId', accountId)
+              .query(`
+                SELECT TOP 1
+                  ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+                  brand,
+                  account_name as accountName,
+                  bank_name as bankName,
+                  account_number as accountNumber,
+                  ISNULL(CAST(ifsc_code AS NVARCHAR(50)), '') as ifscCode,
+                  account_type as accountType
+                FROM bank_accounts
+                WHERE id = @id OR account_id_code = @rawId OR CAST(id AS NVARCHAR(100)) = @rawId
+              `),
+          'bank_accounts'
+        );
+        if (checkRes?.recordset && checkRes.recordset.length > 0) {
+          existingAccount = checkRes.recordset[0];
+        }
+      } catch (err) {
+        console.warn('[handleSaveBankAccountRoute] Could not fetch existing account from Azure SQL:', err);
+      }
+    }
+    if (!existingAccount) {
+      existingAccount = mockStore.getBankAccountById(accountId) ||
+        mockStore.getBankAccounts().find((b) => b.id === accountId);
+    }
+  }
+
+  const isExistingRecord = Boolean(existingAccount);
+
+  // 1. Account Number Validation
+  // POST on new account: mandatory (non-empty string after trim)
+  // PUT or edit on existing account: only check if field provided in body
+  const hasAccountNumber = 'accountNumber' in req.body || 'account_number' in req.body;
+  const rawAccountNumber = req.body.accountNumber ?? req.body.account_number;
+  if (isPost && !isExistingRecord) {
+    if (!rawAccountNumber || typeof rawAccountNumber !== 'string' || !rawAccountNumber.trim()) {
+      return res.status(400).json({ success: false, error: 'Account number is required.' });
+    }
+  } else if (hasAccountNumber) {
+    if (!rawAccountNumber || typeof rawAccountNumber !== 'string' || !rawAccountNumber.trim()) {
+      return res.status(400).json({ success: false, error: 'Account number cannot be empty.' });
+    }
+  }
+
+  // 2. Bank Name Validation
+  // POST on new account: mandatory (non-empty string after trim)
+  // PUT or edit on existing account: only check if field provided in body
+  const hasBankName = 'bankName' in req.body || 'bank_name' in req.body;
+  const rawBankName = req.body.bankName ?? req.body.bank_name;
+  if (isPost && !isExistingRecord) {
+    if (!rawBankName || typeof rawBankName !== 'string' || !rawBankName.trim()) {
+      return res.status(400).json({ success: false, error: 'Bank name is required.' });
+    }
+  } else if (hasBankName) {
+    if (!rawBankName || typeof rawBankName !== 'string' || !rawBankName.trim()) {
+      return res.status(400).json({ success: false, error: 'Bank name cannot be empty.' });
+    }
+  }
+
+  // 3. IFSC Code Validation
+  // - Skip for 'Crypto Wallet'
+  // - Skip if omitted, null, or empty string
+  // - On PUT: if existing account cannot be loaded from SQL or mockStore, SKIP validation.
+  //   If loaded, validate ONLY if ifscCode is changed from the saved database value.
+  // - On POST (new account): validate if provided and non-empty. If existing account found, only if changed.
+  const currentAccountType = req.body.accountType ?? req.body.account_type ?? existingAccount?.accountType;
+  const hasIfsc = 'ifscCode' in req.body || 'ifsc_code' in req.body;
+  const rawIfsc = req.body.ifscCode ?? req.body.ifsc_code;
+
+  if (currentAccountType !== 'Crypto Wallet' && hasIfsc && rawIfsc !== undefined && rawIfsc !== null) {
+    const ifscStr = String(rawIfsc).trim();
+    if (ifscStr.length > 0) {
+      let shouldValidateIfsc = false;
+      if (!isPost) {
+        // PUT request:
+        // Agar existing account (SQL ya mockStore) load na ho sake, to IFSC validation SKIP karo
+        if (existingAccount) {
+          const oldIfsc = String(existingAccount.ifscCode || '').trim();
+          if (ifscStr.toUpperCase() !== oldIfsc.toUpperCase()) {
+            shouldValidateIfsc = true;
+          }
+        } else {
+          // existingAccount load nahi ho saka -> safe fallback: SKIP validation
+          shouldValidateIfsc = false;
+        }
+      } else {
+        // POST request:
+        // Naye account par hamesha validate karo (khali par upar hi skip ho chuka hai).
+        // Agar existing account mila ho, to sirf badli hone par validate karo.
+        if (existingAccount) {
+          const oldIfsc = String(existingAccount.ifscCode || '').trim();
+          if (ifscStr.toUpperCase() !== oldIfsc.toUpperCase()) {
+            shouldValidateIfsc = true;
+          }
+        } else {
+          shouldValidateIfsc = true;
+        }
+      }
+
+      if (shouldValidateIfsc) {
+        const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+        const swiftRegex = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/i;
+        if (!ifscRegex.test(ifscStr) && !swiftRegex.test(ifscStr)) {
+          return res.status(400).json({ success: false, error: 'Invalid IFSC code format.' });
+        }
+      }
+    }
+  }
+
   const account: BankAccount = req.body;
   const brandContext = getBrandContext(req);
   account.brand = sanitizeBrand(account.brand, brandContext) as any;
@@ -2629,7 +2754,6 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
 
   account.id = (account.id || '').trim() || generateSemanticEntityId('ACC', account.brand, mockStore.getBankAccounts(account.brand));
 
-  const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: saved });
