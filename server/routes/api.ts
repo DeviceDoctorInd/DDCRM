@@ -2954,6 +2954,69 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
 });
 
 async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/gst-invoices) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Client Details Validation (Required on POST; on PUT skip if not provided or empty string)
+  const rawClientName = req.body.clientName ?? req.body.client_name;
+  const rawClientId = req.body.clientId ?? req.body.client_id;
+  const hasClientIdent = (rawClientName !== undefined && rawClientName !== null && String(rawClientName).trim().length > 0) ||
+                         (rawClientId !== undefined && rawClientId !== null && String(rawClientId).trim().length > 0);
+
+  // 2. Amount Validation (Required on POST; on PUT validate only if provided; 0 is valid; negative is rejected)
+  const rawAmount = req.body.amountReceived ?? req.body.amount ?? req.body.amount_received ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && (!hasClientIdent || !hasAmount)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Client details and invoice amount are required.',
+    });
+  }
+
+  // Reject negative tax / invoice amounts if provided and non-empty (0 is allowed)
+  const amountsToCheck = [
+    { name: 'amountReceived', val: req.body.amountReceived ?? req.body.amount_received },
+    { name: 'amountINR', val: req.body.amountINR ?? req.body.amount_inr },
+    { name: 'gstAmountINR', val: req.body.gstAmountINR ?? req.body.gst_amount_inr },
+  ];
+  for (const item of amountsToCheck) {
+    if (item.val !== undefined && item.val !== null && !(typeof item.val === 'string' && item.val.trim() === '')) {
+      const num = typeof item.val === 'number' ? item.val : Number(String(item.val).trim());
+      if (isNaN(num) || num < 0) {
+        return res.status(400).json({
+          success: false,
+          error: `${item.name} must be a non-negative number.`,
+        });
+      }
+    }
+  }
+
+  // 3. Payment Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
+  // 4. GST Portal Upload Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawUploadDate = req.body.gstPortalUploadDate ?? req.body.gst_portal_upload_date;
+  if (rawUploadDate !== undefined && rawUploadDate !== null) {
+    const dateStr = String(rawUploadDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid gstPortalUploadDate format.' });
+      }
+    }
+  }
   const inv: GstInvoice = req.body;
   const brandContext = getBrandContext(req);
   inv.brand = sanitizeBrand(inv.brand, brandContext) as any;
