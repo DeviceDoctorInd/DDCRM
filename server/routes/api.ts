@@ -3746,6 +3746,49 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
 });
 
 async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/employee-payments) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amountPaid ?? req.body.amount ?? req.body.amount_paid ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Employee payment amount is required.' });
+  }
+
+  if (hasAmount) {
+    const cleanAmountStr = typeof rawAmount === 'string' ? rawAmount.replace(/,/g, '').trim() : rawAmount;
+    const numAmount = typeof cleanAmountStr === 'number' ? cleanAmountStr : Number(cleanAmountStr);
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Employee payment amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Employee Details Validation (required on POST: employeeId or employeeName; on PUT validate only if provided)
+  const rawEmployeeName = req.body.employeeName ?? req.body.employee_name;
+  const rawEmployeeId = req.body.employeeId ?? req.body.employee_id;
+  const hasEmployeeName = rawEmployeeName !== undefined && rawEmployeeName !== null && typeof rawEmployeeName === 'string' && rawEmployeeName.trim().length > 0;
+  const hasEmployeeId = rawEmployeeId !== undefined && rawEmployeeId !== null && typeof rawEmployeeId === 'string' && rawEmployeeId.trim().length > 0;
+  const hasEmployee = hasEmployeeName || hasEmployeeId;
+
+  if (isPost && !hasEmployee) {
+    return res.status(400).json({ success: false, error: 'Employee details (employeeName or employeeId) are required.' });
+  }
+
+  // 3. Payment Date Validation (optional; skip on empty string; validate if provided)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
   const epay: EmployeePayment = req.body;
   const brandContext = getBrandContext(req);
   epay.brand = sanitizeBrand(epay.brand, brandContext) as any;
