@@ -3304,7 +3304,53 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
 });
 
 async function handleSaveEmployeeRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/employees) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Employee Name Validation (required on POST; on PUT validate only if provided in body)
+  const rawName = req.body.name ?? req.body.employee_name ?? req.body.employeeName;
+  const hasNameProp = 'name' in req.body || 'employee_name' in req.body || 'employeeName' in req.body;
+
+  if (isPost) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Employee name is required.' });
+    }
+  } else if (hasNameProp) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Employee name cannot be empty.' });
+    }
+  }
+
+  // 2. Cost of Employee Validation (must be non-negative number if provided; skip empty string; 0 is valid)
+  const rawCost = req.body.costOfEmployee ?? req.body.cost_of_employee ?? req.body.salary ?? req.body.monthlyCost;
+  if (rawCost !== undefined && rawCost !== null) {
+    if (typeof rawCost === 'string' && rawCost.trim() === '') {
+      // Empty string: skip validation, do not reject
+    } else {
+      const numCost = typeof rawCost === 'number' ? rawCost : Number(String(rawCost).trim());
+      if (isNaN(numCost) || numCost < 0) {
+        return res.status(400).json({ success: false, error: 'Cost of employee must be a non-negative number.' });
+      }
+    }
+  }
+
+  // 3. Joining Date Validation (optional; if provided and not empty, must be a valid date)
+  const rawJoiningDate = req.body.joiningDate ?? req.body.joining_date ?? req.body.joinedDate;
+  if (rawJoiningDate !== undefined && rawJoiningDate !== null) {
+    const dateStr = String(rawJoiningDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid joiningDate format.' });
+      }
+    }
+  }
+
   const emp: Employee = req.body;
+  if (rawName && typeof rawName === 'string') {
+    emp.name = rawName.trim();
+  }
   const brandContext = getBrandContext(req);
   emp.brand = sanitizeBrand(emp.brand, brandContext) as any;
   emp.costOfEmployee = parseFloat(String(emp.costOfEmployee ?? 0)) || 0;
