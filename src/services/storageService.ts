@@ -22,10 +22,11 @@ import {
 
 export interface DatabaseStatus {
   connected: boolean;
-  server: string;
-  database: string;
-  authType: string;
-  user: string;
+  isMock?: boolean;
+  server?: string;
+  database?: string;
+  authType?: string;
+  user?: string;
   error?: string | null;
   timestamp: string;
   tables?: Record<string, number>;
@@ -117,15 +118,20 @@ class StorageService {
   // --- Live Azure SQL Database Diagnostics & Actions ---
   public async getDatabaseStatus(): Promise<DatabaseStatus> {
     try {
-      const res = await fetch('/api/db/status');
+      const token = this.getAuthToken();
+      const headers: Record<string, string> = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch('/api/db/status', { headers });
       if (res.ok) {
         const data = await res.json();
         return {
           connected: data.connected ?? false,
-          server: data.server || 'ddrcm.database.windows.net',
-          database: data.database || 'DDCRM',
-          authType: data.authType || 'SQL Server Authentication (Native)',
-          user: data.user || 'CloudSA995f9e29',
+          isMock: data.isMock ?? false,
+          server: data.server,
+          database: data.database,
+          authType: data.authType,
+          user: data.user,
           error: data.error,
           timestamp: data.lastChecked || new Date().toISOString(),
           tables: data.tableCounts || {},
@@ -136,10 +142,7 @@ class StorageService {
     }
     return {
       connected: false,
-      server: 'ddrcm.database.windows.net',
-      database: 'DDCRM',
-      authType: 'SQL Server Authentication (Native)',
-      user: 'CloudSA995f9e29',
+      isMock: true,
       error: 'Connecting to Azure SQL Database...',
       timestamp: new Date().toISOString(),
       tables: {},

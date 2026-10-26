@@ -326,8 +326,22 @@ function handleDbError(res: Response, err: unknown, context: string) {
 }
 
 // --- Status & Diagnostics Route ---
-router.get('/db/status', async (_req: Request, res: Response) => {
+router.get('/db/status', optionalAuthenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const isSuperAdmin = authReq.user?.role === 'Super Admin';
   const pool = await getOrInitPool();
+  const isConnected = Boolean(pool);
+
+  // Public (bina token / non-admin): strictly return { status, connected, isMock }
+  if (!isSuperAdmin) {
+    return res.json({
+      status: 'ok',
+      connected: isConnected,
+      isMock: !isConnected,
+    });
+  }
+
+  // Super Admin: full diagnostics & server metadata
   if (pool) {
     try {
       const status = getAzureDbStatus();

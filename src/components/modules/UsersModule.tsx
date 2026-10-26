@@ -241,7 +241,7 @@ export const UsersModule: React.FC = () => {
     confirmDelete({
       moduleName: 'Demo Data',
       recordTitle: 'All Demo Clients, Projects, and Financial Records',
-      warningNote: 'This will permanently purge demo records from Azure SQL Database and server cache. Primary admin accounts rathorehemant114@gmail.com and devicedoctorindia.in@gmail.com will remain strictly protected.',
+      warningNote: 'This will permanently purge demo records from Azure SQL Database and server cache. Primary admin accounts will remain strictly protected.',
       confirmLabel: 'Purge Demo Data',
       onConfirm: async () => {
         setIsClearingDemo(true);
@@ -285,8 +285,10 @@ export const UsersModule: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Role-Based Access Control (RBAC) backed by Microsoft Azure SQL Database (
-            <span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.server} / {databaseStatus.database}</span>) using <span className="font-semibold text-slate-200">{databaseStatus.authType}</span> as <span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.user}</span>.
+            Role-Based Access Control (RBAC) backed by Microsoft Azure SQL Database
+            {databaseStatus.server && databaseStatus.database ? (
+              <> (<span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.server} / {databaseStatus.database}</span>) using <span className="font-semibold text-slate-200">{databaseStatus.authType || 'Active Directory'}</span> as <span className="font-mono text-slate-800 dark:text-slate-200">{databaseStatus.user || 'Admin'}</span></>
+            ) : ''}.
             {databaseStatus.connected ? (
               <span className="ml-2 text-slate-800 dark:text-slate-200 font-semibold">● Connected</span>
             ) : (
@@ -359,7 +361,7 @@ export const UsersModule: React.FC = () => {
                 {databaseStatus.error || 'Connection to Azure SQL Database could not be established.'}
               </p>
               <div className="mt-2 text-[11px] text-slate-800 dark:text-slate-200 dark:text-slate-800 dark:text-slate-200/90 font-medium">
-                💡 <span className="font-semibold">Quick Fix:</span> In the Azure Portal, open SQL server <span className="font-mono font-semibold">{databaseStatus.server.split('.')[0]}</span> &rarr; <span className="font-semibold">Networking</span> &rarr; Add Firewall rule for the server IP or check <span className="font-semibold">"Allow Azure services and resources to access this server"</span>.
+                💡 <span className="font-semibold">Quick Fix:</span> In the Azure Portal, open SQL server <span className="font-mono font-semibold">{databaseStatus.server?.split('.')[0] || 'your-sql-server'}</span> &rarr; <span className="font-semibold">Networking</span> &rarr; Add Firewall rule for the server IP or check <span className="font-semibold">"Allow Azure services and resources to access this server"</span>.
               </div>
             </div>
           </div>
@@ -652,7 +654,7 @@ export const UsersModule: React.FC = () => {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="rathorehemant114@gmail.com"
+                  placeholder="admin@devicedoctor.in"
                   className="w-full px-3 py-2 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono text-[11px]"
                 />
               </div>

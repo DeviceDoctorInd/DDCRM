@@ -235,10 +235,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Live Azure SQL Database Connection Diagnostics
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>({
     connected: false,
-    server: 'ddrcm.database.windows.net',
-    database: 'DDCRM',
-    authType: 'SQL Server Authentication (Native)',
-    user: 'CloudSA995f9e29',
+    isMock: true,
     error: 'Connecting to Azure SQL Database...',
     timestamp: new Date().toISOString(),
     tables: {},
