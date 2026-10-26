@@ -123,7 +123,15 @@ interface CrmContextType {
   deleteProject: (projectId: string) => Promise<{ success: boolean; error?: string }>;
   setProjectStatus: (projectId: string, status: Project['status']) => Promise<void>;
 
-  savePayment: (payment: Payment) => Promise<{ success: boolean; error?: string }>;
+  savePayment: (payment: Payment) => Promise<{
+    success: boolean;
+    payment?: Payment;
+    gstInvoice?: GstInvoice;
+    gstInvoiceSynced?: boolean;
+    warning?: string;
+    gstSyncError?: string;
+    error?: string;
+  }>;
   deletePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
 
   saveBankAccount: (account: BankAccount) => Promise<{ success: boolean; error?: string }>;
@@ -1166,7 +1174,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           .catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
       }
 
-      showToast(`Payment voucher "${payment.id}" recorded in Azure SQL.`, 'success');
+      if (savedPayment.paymentMode === 'GST Invoice' && res.gstInvoiceSynced === false) {
+        const warnMsg =
+          res.warning ||
+          `Payment voucher "${savedPayment.id}" recorded in Azure SQL, but GST Invoice synchronization is pending.`;
+        showToast(warnMsg, 'warning');
+      } else {
+        showToast(`Payment voucher "${savedPayment.id}" recorded in Azure SQL.`, 'success');
+      }
       loadAll().catch((err) => console.warn('[Background refresh after savePayment]', err));
     } else {
       showToast(res.error || 'Failed to record payment in Azure SQL.', 'error');

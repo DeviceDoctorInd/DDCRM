@@ -3,6 +3,7 @@ import { mockStore } from '../server/db/mockStore';
 
 // Strict safety rule: disable Azure SQL credentials & force mock store mode
 process.env.NODE_ENV = 'test';
+process.env.ALLOW_MOCK_FALLBACK = 'true';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'ddi-crm-test-jwt-secret-key-32chars-safety';
 process.env.SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@2026';
 process.env.SEED_VIEWER_PASSWORD = process.env.SEED_VIEWER_PASSWORD || 'Viewer@2026';
@@ -30,6 +31,7 @@ vi.mock('../server/db/azureSql', () => ({
   initAzureSql: vi.fn(async () => false),
   migrateAzureSqlSchema: vi.fn(async () => {}),
   isTransientError: vi.fn(() => false),
+  isMockFallbackAllowed: vi.fn(() => true),
 }));
 
 // Also mock server/db/db to be doubly sure
@@ -51,6 +53,7 @@ vi.mock('../server/db/db', () => ({
   refreshTableCounts: vi.fn(async () => ({})),
   migrateAzureSqlSchema: vi.fn(async () => {}),
   isTransientError: vi.fn(() => false),
+  isMockFallbackAllowed: vi.fn(() => true),
 }));
 
 beforeAll(() => {

@@ -1997,7 +1997,7 @@ class MockStore {
     proj.updatedAt = new Date().toISOString();
   }
 
-  public savePayment(payment: Payment): Payment {
+  public savePayment(payment: Payment, autoSyncGst: boolean = true): Payment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
     const cleanId = (payment.id || '').trim();
     const finalId = cleanId || generateSemanticEntityId('PAY', payment.brand, this.payments);
@@ -2058,8 +2058,8 @@ class MockStore {
       this.recalculateProjectFinancials(oldProjectId);
     }
 
-    // Auto-sync into GST Invoices module if payment mode is 'GST Invoice'
-    if (resultPayment.paymentMode === 'GST Invoice') {
+    // Auto-sync into GST Invoices module if payment mode is 'GST Invoice' and autoSyncGst is enabled
+    if (autoSyncGst && resultPayment.paymentMode === 'GST Invoice') {
       this.syncPaymentToGstInvoice(resultPayment);
     }
 
@@ -2258,6 +2258,16 @@ class MockStore {
         if (i.brand && i.brand !== brand) return true;
       }
       return false;
+    });
+    return this.gstInvoices.length < initial;
+  }
+
+  public deleteGstInvoiceByPaymentId(paymentId: string): boolean {
+    const initial = this.gstInvoices.length;
+    const cleanId = (paymentId || '').trim().toLowerCase();
+    this.gstInvoices = this.gstInvoices.filter((i) => {
+      const pId = (i.paymentId || '').trim().toLowerCase();
+      return pId !== cleanId;
     });
     return this.gstInvoices.length < initial;
   }
