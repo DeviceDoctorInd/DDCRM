@@ -463,6 +463,8 @@ class StorageService {
     payment?: Payment;
     gstInvoice?: GstInvoice;
     gstInvoiceSynced?: boolean;
+    warning?: string;
+    gstSyncError?: string;
     error?: string;
   }> {
     try {
@@ -471,12 +473,18 @@ class StorageService {
         ...payment,
         paymentProof: this.parseProofDocument(payment.paymentProof),
       };
+      const customHeaders: Record<string, string> = {};
+      if (payload.id) {
+        customHeaders['Idempotency-Key'] = payload.id;
+      }
       const res = await this.apiCall<{
         success: boolean;
         payment: Payment;
         gstInvoiceSynced?: boolean;
         gstInvoice?: GstInvoice;
-      }>('/api/payments', 'POST', payload);
+        warning?: string;
+        gstSyncError?: string;
+      }>('/api/payments', 'POST', payload, customHeaders);
       this.notifyListeners();
       const saved = res.payment
         ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) }
@@ -486,6 +494,8 @@ class StorageService {
         payment: saved,
         gstInvoice: res.gstInvoice,
         gstInvoiceSynced: res.gstInvoiceSynced,
+        warning: res.warning,
+        gstSyncError: res.gstSyncError,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

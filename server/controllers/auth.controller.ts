@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getOrInitPool } from '../db/azureSql';
+import { getOrInitPool, isMockFallbackAllowed } from '../db/azureSql';
 import { mockStore } from '../db/mockStore';
 import { generateToken, comparePasswords, hashPassword, verifyJwtToken, AuthenticatedRequest } from '../middleware/auth';
 
@@ -108,7 +108,15 @@ export class AuthController {
       }
     }
 
-    // 2. FALLBACK IN-MEMORY STORE (ONLY when Azure SQL pool is completely disconnected)
+    // 2. FALLBACK IN-MEMORY STORE (ONLY when Azure SQL pool is completely disconnected AND fallback is permitted)
+    if (!isMockFallbackAllowed()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Azure SQL Database Unavailable',
+        message: 'Database connection is offline. Authentication service is currently unavailable.',
+      });
+    }
+
     console.warn('[AuthController.login] Azure SQL offline — validating against in-memory store.');
     const user = mockStore.authenticate(cleanIdentifier, loginPassword);
 
@@ -337,7 +345,8 @@ export class AuthController {
         }
 
         // Also sync in-memory store so fallback stays identical
-        mockStore.saveUser({
+        if (isMockFallbackAllowed()) {
+          mockStore.saveUser({
           id: finalId,
           name: finalName,
           email: finalEmail,
@@ -349,6 +358,7 @@ export class AuthController {
           createdAt: existingUser.created_at || now,
           updatedAt: now,
         });
+        }
 
         // Issue fresh cryptographically signed session token only on valid update
         const freshToken = generateToken({
@@ -374,7 +384,15 @@ export class AuthController {
         });
       }
 
-      // 2. FALLBACK IN-MEMORY STORE (When pool is not connected)
+      // 2. FALLBACK IN-MEMORY STORE (When pool is not connected AND fallback is permitted)
+      if (!isMockFallbackAllowed()) {
+        return res.status(503).json({
+          success: false,
+          error: 'Azure SQL Database Unavailable',
+          message: 'Database connection is offline. Credential updates are blocked to prevent data loss.',
+        });
+      }
+
       console.warn('[AuthController.updateCredentials] Azure SQL offline — updating in-memory store.');
       const allUsers = mockStore.getUsers();
       const existingUser = allUsers.find(
@@ -557,6 +575,14 @@ export class AuthController {
     }
 
     // If pool is offline or in mock mode
+    if (!isMockFallbackAllowed()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Azure SQL Database Unavailable',
+        message: 'Database connection is offline. Unable to fetch user permissions.',
+      });
+    }
+
     const mockUser = mockStore.getUsers().find((u) => u.email.toLowerCase() === req.user?.email.toLowerCase());
     if (mockUser) {
       if (mockUser.status !== 'Active') {

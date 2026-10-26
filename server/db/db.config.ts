@@ -128,3 +128,23 @@ export function isTransientError(err: any): boolean {
   }
   return false;
 }
+
+/**
+ * Policy helper to safely gate in-memory mockStore fallback:
+ * 1. Test Mode (NODE_ENV === 'test'): Always allowed so that automated test suites
+ *    run cleanly against in-memory state without needing live Azure SQL.
+ * 2. Production (NODE_ENV === 'production'): STRICTLY DISABLED. Even if an environment
+ *    variable like ALLOW_MOCK_FALLBACK=true is accidentally set, production will NEVER
+ *    fall back to mockStore.
+ * 3. Development / Staging: Disabled by default. Enabled ONLY when explicitly opted-in
+ *    with ALLOW_MOCK_FALLBACK='true' (e.g., for offline local coding).
+ */
+export function isMockFallbackAllowed(): boolean {
+  if (process.env.NODE_ENV === 'test') {
+    return true;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  return process.env.ALLOW_MOCK_FALLBACK === 'true';
+}

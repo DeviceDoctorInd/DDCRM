@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema, isTransientError } from '../db/azureSql';
+import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema, isTransientError, isMockFallbackAllowed } from '../db/azureSql';
 import sql from 'mssql';
 import crypto from 'crypto';
 import {
@@ -158,6 +158,9 @@ export async function calculateNextProjectSequenceSql(
   const basePrefix = getBaseProjectPrefix(brand, clientName, serviceName);
 
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate project sequence.');
+    }
     const nextSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
     const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSeq);
     return { nextSequence: nextSeq, projectId, basePrefix };
@@ -202,13 +205,16 @@ export async function calculateNextProjectSequenceSql(
       }
     }
 
-    const mockSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
+    const mockSeq = isMockFallbackAllowed() ? mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId) : 1;
     const nextSequence = Math.max(maxSeq + 1, mockSeq > 1 ? mockSeq : 1);
     const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSequence);
 
     return { nextSequence, projectId, basePrefix };
   } catch (err) {
-    console.warn('[calculateNextProjectSequenceSql] Error querying DB sequence, using mockStore:', err);
+    console.warn('[calculateNextProjectSequenceSql] Error querying DB sequence:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL sequence query failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
     const nextSeq = mockStore.getNextProjectSequence(brand, clientName, serviceName, clientId, serviceId);
     const projectId = generateSemanticProjectId(brand, clientName, serviceName, nextSeq);
     return { nextSequence: nextSeq, projectId, basePrefix };
@@ -226,6 +232,9 @@ export async function calculateNextClientIdSql(
   const baseId = generateSemanticClientId(brand, clientName);
 
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate client ID.');
+    }
     return mockStore.getNextClientId(brand, clientName);
   }
 
@@ -262,8 +271,66 @@ export async function calculateNextClientIdSql(
 
     return `${baseId}-${maxSeq + 1}`;
   } catch (err) {
-    console.warn('[calculateNextClientIdSql] Error, using mockStore fallback:', err);
+    console.warn('[calculateNextClientIdSql] Error, using fallback:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL client ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return mockStore.getNextClientId(brand, clientName);
+  }
+}
+
+export async function calculateNextPaymentIdSql(
+  pool: sql.ConnectionPool | null,
+  brand: string | null
+): Promise<string> {
+  const prefix = getBrandSemanticPrefix(brand);
+  const pattern = `${prefix}-PAY-%`;
+
+  if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate payment ID.');
+    }
+    return generateSemanticEntityId('PAY', brand, mockStore.getPayments(brand));
+  }
+
+  try {
+    const res = await pool.request()
+      .input('pattern', pattern)
+      .query(`
+        SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(100)), ''), CAST(id AS NVARCHAR(100))) as id
+        FROM payments
+        WHERE id LIKE @pattern OR payment_id_code LIKE @pattern
+      `);
+
+    const rows = res.recordset || [];
+    let maxSeq = 0;
+    const regex = new RegExp(`^${prefix}-PAY-(\\d+)$`, 'i');
+    for (const row of rows) {
+      const match = (row.id || '').match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    const mockSeq = isMockFallbackAllowed()
+      ? (() => {
+          const m = generateSemanticEntityId('PAY', brand, mockStore.getPayments(brand));
+          const match = m.match(regex);
+          return match && match[1] ? parseInt(match[1], 10) : 1;
+        })()
+      : 1;
+
+    const nextSequence = Math.max(maxSeq + 1, mockSeq > 1 ? mockSeq : 1);
+    return `${prefix}-PAY-${String(nextSequence).padStart(3, '0')}`;
+  } catch (err) {
+    console.warn('[calculateNextPaymentIdSql] Error querying DB sequence:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL payment ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return generateSemanticEntityId('PAY', brand, mockStore.getPayments(brand));
   }
 }
 
@@ -324,6 +391,16 @@ function handleDbError(res: Response, err: unknown, context: string) {
     message: `Azure SQL Error during ${context}: ${msg}`,
   });
 }
+
+export function sendDatabaseUnavailable(res: Response, operation: string, details?: string) {
+  return res.status(503).json({
+    success: false,
+    error: 'Azure SQL Database Unavailable',
+    message: `Cannot complete ${operation}: Azure SQL database is offline or unreachable. Operation blocked to prevent data loss.`,
+    ...(details ? { details } : {}),
+  });
+}
+
 
 // --- Status & Diagnostics Route ---
 router.get('/db/status', optionalAuthenticateToken, async (req: Request, res: Response) => {
@@ -438,6 +515,9 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
   }
   const pool = await getOrInitPool();
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'clear demo data');
+    }
     const resData = mockStore.clearDemo();
     return res.json({
       success: true,
@@ -518,6 +598,11 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
       tableCounts,
     });
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[POST /db/clear-demo] Azure SQL Error:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'clear demo data', errMsg);
+    }
     const resData = mockStore.clearDemo();
     return res.json({
       success: true,
@@ -552,15 +637,28 @@ router.get('/clients/next-semantic-id', authenticateToken, async (req: Request, 
   }
 
   const pool = await getOrInitPool();
-  const clientId = await calculateNextClientIdSql(pool, brand, clientName);
-  return res.json({ success: true, clientId, brand });
+  if (!pool && !isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'calculate next client ID');
+  }
+  try {
+    const clientId = await calculateNextClientIdSql(pool, brand, clientName);
+    return res.json({ success: true, clientId, brand });
+  } catch (err) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next client ID');
+    }
+    throw err;
+  }
 });
 
 router.get('/clients', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getClients(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch clients');
+  }
+  return res.json(mockStore.getClients(brand));
   }
 
   try {
@@ -598,7 +696,10 @@ router.get('/clients', authenticateToken, async (req: Request, res: Response) =>
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /clients] Falling back to mock store:', err);
-    return res.json(mockStore.getClients(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch clients', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getClients(brand));
   }
 });
 
@@ -654,11 +755,21 @@ async function handleSaveClientRoute(req: Request, res: Response) {
 
   // Enforce semantic Client ID only if missing (new client onboarding)
   if (!client.id) {
-    client.id = await calculateNextClientIdSql(pool, client.brand || 'Device Doctor India', client.name);
+    try {
+      client.id = await calculateNextClientIdSql(pool, client.brand || 'Device Doctor India', client.name);
+    } catch (err) {
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'calculate client ID');
+      }
+      throw err;
+    }
   }
 
   if (!pool) {
-    const saved = mockStore.saveClient(client);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save client');
+  }
+  const saved = mockStore.saveClient(client);
     mockStore.addAuditLog({
       brand: client.brand || 'All',
       module: 'Clients',
@@ -753,7 +864,10 @@ async function handleSaveClientRoute(req: Request, res: Response) {
       }
     }
     console.warn('[POST /clients] Falling back to mock store:', err);
-    const saved = mockStore.saveClient(client);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save client', err instanceof Error ? err.message : String(err));
+  }
+  const saved = mockStore.saveClient(client);
     return res.json({ success: true, client: saved });
   }
 }
@@ -771,7 +885,10 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteClient(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete client');
+  }
+  const deleted = mockStore.deleteClient(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -842,7 +959,10 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /clients/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteClient(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete client', errMsg);
+  }
+  mockStore.deleteClient(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -852,7 +972,10 @@ router.get('/categories', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getServiceCategories(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch categories');
+  }
+  return res.json(mockStore.getServiceCategories(brand));
   }
 
   try {
@@ -878,7 +1001,10 @@ router.get('/categories', async (req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /categories] Falling back to mock store:', err);
-    return res.json(mockStore.getServiceCategories(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch categories', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getServiceCategories(brand));
   }
 });
 
@@ -890,11 +1016,14 @@ async function handleSaveCategoryRoute(req: Request, res: Response) {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
-  cat.id = (cat.id || '').trim() || generateSemanticEntityId('CAT', cat.brand, mockStore.getServiceCategories(cat.brand));
+  cat.id = (cat.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('CAT', cat.brand, mockStore.getServiceCategories(cat.brand)) : generateSemanticEntityId('CAT', cat.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveServiceCategory(cat);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save category');
+  }
+  const saved = mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: saved });
   }
 
@@ -925,7 +1054,11 @@ async function handleSaveCategoryRoute(req: Request, res: Response) {
     mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
-    console.warn('[handleSaveCategoryRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveCategoryRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save category', errMsg);
+    }
     const saved = mockStore.saveServiceCategory(cat);
     return res.json({ success: true, category: saved });
   }
@@ -944,7 +1077,10 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteServiceCategory(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete category');
+  }
+  const deleted = mockStore.deleteServiceCategory(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -1013,7 +1149,10 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /categories/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteServiceCategory(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete category', errMsg);
+  }
+  mockStore.deleteServiceCategory(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -1023,7 +1162,10 @@ router.get('/services', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getServices(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch services');
+  }
+  return res.json(mockStore.getServices(brand));
   }
 
   try {
@@ -1059,7 +1201,10 @@ router.get('/services', async (req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /services] Falling back to mock store:', err);
-    return res.json(mockStore.getServices(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch services', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getServices(brand));
   }
 });
 
@@ -1071,11 +1216,14 @@ async function handleSaveServiceRoute(req: Request, res: Response) {
   srv.updatedAt = now;
   srv.createdAt = srv.createdAt || now;
 
-  srv.id = (srv.id || '').trim() || generateSemanticEntityId('SRV', srv.brand, mockStore.getServices(srv.brand));
+  srv.id = (srv.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('SRV', srv.brand, mockStore.getServices(srv.brand)) : generateSemanticEntityId('SRV', srv.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveService(srv);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save service');
+  }
+  const saved = mockStore.saveService(srv);
     return res.json({ success: true, service: saved });
   }
 
@@ -1125,7 +1273,11 @@ async function handleSaveServiceRoute(req: Request, res: Response) {
     mockStore.saveService(srv);
     return res.json({ success: true, service: srv });
   } catch (err) {
-    console.warn('[handleSaveServiceRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveServiceRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save service', errMsg);
+    }
     const saved = mockStore.saveService(srv);
     return res.json({ success: true, service: saved });
   }
@@ -1144,7 +1296,10 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteService(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete service');
+  }
+  const deleted = mockStore.deleteService(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -1213,7 +1368,10 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /services/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteService(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete service', errMsg);
+  }
+  mockStore.deleteService(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -1227,6 +1385,9 @@ router.get('/projects/next-semantic-id', authenticateToken, async (req: Request,
   const serviceId = (req.query.serviceId as string || '').trim();
 
   const pool = await getOrInitPool();
+  if (!pool && !isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'calculate next project ID');
+  }
 
   if (!clientName && clientId) {
     if (pool) {
@@ -1235,7 +1396,7 @@ router.get('/projects/next-semantic-id', authenticateToken, async (req: Request,
         clientName = cRow?.name || cRow?.client_name || '';
       } catch {}
     }
-    if (!clientName) {
+    if (!clientName && isMockFallbackAllowed()) {
       clientName = mockStore.getClientById(clientId)?.name || '';
     }
   }
@@ -1247,7 +1408,7 @@ router.get('/projects/next-semantic-id', authenticateToken, async (req: Request,
         serviceName = sRow?.name || sRow?.service_name || '';
       } catch {}
     }
-    if (!serviceName) {
+    if (!serviceName && isMockFallbackAllowed()) {
       serviceName = mockStore.getServices().find((s) => s.id === serviceId)?.name || '';
     }
   }
@@ -1255,29 +1416,39 @@ router.get('/projects/next-semantic-id', authenticateToken, async (req: Request,
   clientName = clientName || 'CLIENT';
   serviceName = serviceName || 'SERVICE';
 
-  const calculated = await calculateNextProjectSequenceSql(
-    pool,
-    brand,
-    clientName,
-    serviceName,
-    clientId,
-    serviceId
-  );
+  try {
+    const calculated = await calculateNextProjectSequenceSql(
+      pool,
+      brand,
+      clientName,
+      serviceName,
+      clientId,
+      serviceId
+    );
 
-  return res.json({
-    success: true,
-    projectId: calculated.projectId,
-    sequence: calculated.nextSequence,
-    basePrefix: calculated.basePrefix,
-    brand,
-  });
+    return res.json({
+      success: true,
+      projectId: calculated.projectId,
+      sequence: calculated.nextSequence,
+      basePrefix: calculated.basePrefix,
+      brand,
+    });
+  } catch (err) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next project sequence');
+    }
+    throw err;
+  }
 });
 
 router.get('/projects', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getProjects(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch projects');
+  }
+  return res.json(mockStore.getProjects(brand));
   }
 
   try {
@@ -1356,7 +1527,10 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
     return res.json(formatted);
   } catch (err) {
     console.warn('[GET /projects] Falling back to mock store:', err);
-    return res.json(mockStore.getProjects(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch projects', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getProjects(brand));
   }
 });
 
@@ -1420,7 +1594,7 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
           clientName = cRow?.name || cRow?.client_name || '';
         } catch {}
       }
-      if (!clientName) {
+      if (!clientName && isMockFallbackAllowed()) {
         clientName = mockStore.getClientById(proj.clientId)?.name || '';
       }
     }
@@ -1432,7 +1606,7 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
           serviceName = sRow?.name || sRow?.service_name || '';
         } catch {}
       }
-      if (!serviceName) {
+      if (!serviceName && isMockFallbackAllowed()) {
         serviceName = mockStore.getServices().find((s) => s.id === proj.serviceId)?.name || '';
       }
     }
@@ -1440,19 +1614,29 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
     clientName = clientName || 'CLIENT';
     serviceName = serviceName || 'SERVICE';
 
-    const calculated = await calculateNextProjectSequenceSql(
-      pool,
-      proj.brand || 'Device Doctor India',
-      clientName,
-      serviceName,
-      proj.clientId,
-      proj.serviceId
-    );
-    proj.id = calculated.projectId;
+    try {
+      const calculated = await calculateNextProjectSequenceSql(
+        pool,
+        proj.brand || 'Device Doctor India',
+        clientName,
+        serviceName,
+        proj.clientId,
+        proj.serviceId
+      );
+      proj.id = calculated.projectId;
+    } catch (err) {
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'calculate project ID');
+      }
+      throw err;
+    }
   }
 
   if (!pool) {
-    const saved = mockStore.saveProject(proj);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save project');
+  }
+  const saved = mockStore.saveProject(proj);
     mockStore.addAuditLog({
       brand: proj.brand || 'All',
       module: 'Projects',
@@ -1583,7 +1767,10 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         console.warn('[handleSaveProjectRoute] Fallback retry failed:', innerErr);
       }
     }
-    console.warn('[handleSaveProjectRoute] Falling back to mock store:', err);
+    console.warn('[handleSaveProjectRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save project', errMsg);
+    }
     const saved = mockStore.saveProject(proj);
     return res.json({ success: true, project: saved });
   }
@@ -1602,7 +1789,10 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteProject(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete project');
+  }
+  const deleted = mockStore.deleteProject(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -1672,7 +1862,10 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /projects/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteProject(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete project', errMsg);
+  }
+  mockStore.deleteProject(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -1685,7 +1878,10 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
 
   let project: any;
   if (!pool) {
-    project = mockStore.getProjectById(id);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'generate project document');
+  }
+  project = mockStore.getProjectById(id);
   } else {
     try {
       const guidId = toGuid(id);
@@ -1727,11 +1923,15 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
         project = { ...row, proposalDocument: pDoc, contractDocument: cDoc };
       }
     } catch (err) {
-      console.warn(`[GET /projects/${id}/documents/${docType}] SQL query error:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[GET /projects/${id}/documents/${docType}] SQL query error:`, errMsg);
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'generate project document', errMsg);
+      }
     }
   }
 
-  if (!project) {
+  if (!project && isMockFallbackAllowed()) {
     project = mockStore.getProjectById(id);
   }
 
@@ -1899,10 +2099,29 @@ router.post('/upload-proof', authenticateToken, async (req: Request, res: Respon
 });
 
 // --- PAYMENTS ---
+router.get('/payments/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  try {
+    const nextId = await calculateNextPaymentIdSql(pool, brand);
+    return res.json({ success: true, nextId });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next payment ID', errMsg);
+    }
+    const nextId = generateSemanticEntityId('PAY', brand, mockStore.getPayments(brand));
+    return res.json({ success: true, nextId });
+  }
+});
+
 router.get('/payments', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch payments');
+    }
     const list = mockStore.getPayments(brand);
     return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
@@ -1948,7 +2167,11 @@ router.get('/payments', authenticateToken, async (req: Request, res: Response) =
     }));
     return res.json(parsedRows);
   } catch (err) {
-    console.warn('[GET /payments] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[GET /payments] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch payments', errMsg);
+    }
     const list = mockStore.getPayments(brand);
     return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
@@ -1957,6 +2180,25 @@ router.get('/payments', authenticateToken, async (req: Request, res: Response) =
 router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
   const pool = await getOrInitPool();
+  if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch payment proof');
+    }
+    const payment = mockStore.getPayments(null).find((p) => p.id === id);
+    if (!payment) {
+      return res.status(404).json({ success: false, error: 'Payment transaction record not found.' });
+    }
+    const proofDoc = parsePaymentProof(payment.paymentProof);
+    if (!proofDoc) {
+      return res.status(404).json({ success: false, error: 'No payment proof document attached to this record.' });
+    }
+    return res.json({
+      success: true,
+      paymentId: payment.id,
+      proofDocument: proofDoc,
+      paymentProofNotes: payment.paymentProofNotes || proofDoc.notes || '',
+    });
+  }
 
   try {
     let payment: any = null;
@@ -1978,7 +2220,7 @@ router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: R
         payment = resDb.recordset[0];
       }
     }
-    if (!payment) {
+    if (!payment && isMockFallbackAllowed()) {
       payment = mockStore.getPayments(null).find((p) => p.id === id);
     }
 
@@ -1998,7 +2240,11 @@ router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: R
       paymentProofNotes: payment.paymentProofNotes || proofDoc.notes || '',
     });
   } catch (err: any) {
-    console.error(`[GET /payments/${id}/proof] Error:`, err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[GET /payments/${id}/proof] Error:`, errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch payment proof', errMsg);
+    }
     return res.status(500).json({ success: false, error: 'Failed to retrieve payment proof.' });
   }
 });
@@ -2033,11 +2279,11 @@ export async function syncPaymentToGstInvoiceSql(
   let clientId = payment.clientId || '';
   let projectId = payment.projectId || '';
 
-  // Synchronize mockStore in-memory cache first
-  const mockSynced = mockStore.syncPaymentToGstInvoice(payment);
-
   if (!pool) {
-    return mockSynced;
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot synchronize GST invoice.');
+    }
+    return mockStore.syncPaymentToGstInvoice(payment);
   }
 
   try {
@@ -2148,7 +2394,11 @@ export async function syncPaymentToGstInvoiceSql(
           }
         }
       } catch (err) {
-        console.warn('[syncPaymentToGstInvoiceSql] Sequence calc notice, using fallback:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn('[syncPaymentToGstInvoiceSql] Sequence calc notice, using fallback:', errMsg);
+        if (!isMockFallbackAllowed()) {
+          throw new Error(`Azure SQL sequence calculation failure: ${errMsg}`);
+        }
         nextSeq = mockStore.getNextGstInvoiceSequence(brand);
       }
 
@@ -2176,20 +2426,33 @@ export async function syncPaymentToGstInvoiceSql(
         .input('created_at', now)
         .input('updated_at', now)
         .query(`
-          INSERT INTO gst_invoices (
-            id, brand, payment_id, project_id, client_id, client_name,
-            payment_date, amount_received, currency, amount_inr, gst_amount_inr,
-            invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
-            created_at, updated_at
-          ) VALUES (
-            @id, @brand, @payment_id, @project_id, @client_id, @client_name,
-            @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
-            @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
-            @created_at, @updated_at
-          )
+          IF EXISTS (SELECT 1 FROM gst_invoices WITH (UPDLOCK, HOLDLOCK) WHERE payment_id = @payment_id)
+          BEGIN
+            UPDATE gst_invoices
+            SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                payment_date=@payment_date, amount_received=@amount_received, currency=@currency,
+                amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr, invoice_number=@invoice_number,
+                updated_at=@updated_at
+            WHERE payment_id = @payment_id;
+          END
+          ELSE
+          BEGIN
+            INSERT INTO gst_invoices (
+              id, brand, payment_id, project_id, client_id, client_name,
+              payment_date, amount_received, currency, amount_inr, gst_amount_inr,
+              invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
+              created_at, updated_at
+            ) VALUES (
+              @id, @brand, @payment_id, @project_id, @client_id, @client_name,
+              @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
+              @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
+              @created_at, @updated_at
+            );
+          END
         `);
 
-      const createdInv: GstInvoice = {
+      // Re-fetch persisted row to return the authoritative record from SQL
+      let finalInvoice: GstInvoice = {
         id: gstId,
         brand: brand as any,
         paymentId: payId,
@@ -2209,12 +2472,45 @@ export async function syncPaymentToGstInvoiceSql(
         updatedAt: now,
       };
 
-      mockStore.saveGstInvoice(createdInv);
-      return createdInv;
+      try {
+        const fetchRes = await pool.request()
+          .input('paymentId', payId)
+          .query(`SELECT TOP 1 * FROM gst_invoices WHERE payment_id = @paymentId`);
+        const row = fetchRes.recordset?.[0];
+        if (row) {
+          finalInvoice = {
+            id: row.invoice_id_code || row.id,
+            brand: (row.brand || brand) as any,
+            paymentId: payId,
+            projectId: row.project_id || projectId,
+            clientId: row.client_id || clientId,
+            clientName: row.client_name || clientName || 'Direct Client',
+            paymentDate: row.payment_date || paymentDate,
+            amountReceived: Number(row.amount_received) || amountReceived,
+            currency: (row.currency || currency) as any,
+            amountINR: Number(row.amount_inr) || amountINR,
+            gstAmountINR: Number(row.gst_amount_inr) || gstAmountINR,
+            invoiceNumber: row.invoice_number || defaultInvoiceNum,
+            uploadedToGstPortal: row.uploaded_to_gst_portal || 'No',
+            gstPortalUploadDate: row.gst_portal_upload_date || '',
+            notes: row.notes || autoNotes,
+            createdAt: row.created_at || now,
+            updatedAt: row.updated_at || now,
+          };
+        }
+      } catch {
+        // Fall back to finalInvoice initialized above
+      }
+
+      mockStore.saveGstInvoice(finalInvoice);
+      return finalInvoice;
     }
   } catch (err) {
-    console.warn('[syncPaymentToGstInvoiceSql] Error syncing to SQL, returning mockStore copy:', err);
-    return mockSynced;
+    console.warn('[syncPaymentToGstInvoiceSql] Error syncing to SQL:', err);
+    if (isMockFallbackAllowed()) {
+      return mockStore.syncPaymentToGstInvoice(payment);
+    }
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
 
@@ -2267,7 +2563,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
 
-  payment.id = (payment.id || '').trim() || generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand));
+  payment.id = (payment.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand)) : generateSemanticEntityId('PAY', payment.brand));
 
   // Normalize payment proof into a clean object or undefined
   payment.paymentProof = parsePaymentProof(payment.paymentProof);
@@ -2275,7 +2571,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.savePayment(payment);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save payment');
+  }
+  const saved = mockStore.savePayment(payment);
     const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
     return res.json({
       success: true,
@@ -2435,38 +2734,70 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       'payments'
     );
 
-    mockStore.savePayment({
-      ...payment,
-      projectId: targetProjectId || undefined,
-      amountReceived: finalAmountReceived,
-      amountINR: finalAmountINR,
-      paymentStatus: finalPaymentStatus as any,
-    });
-
     // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
     let syncedGstInvoice: GstInvoice | null = null;
+    let gstSyncError: string | null = null;
     if (finalPaymentMode === 'GST Invoice') {
-      syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
-        ...payment,
-        projectId: targetProjectId || undefined,
-        paymentMode: finalPaymentMode,
-        amountReceived: finalAmountReceived,
-        amountINR: finalAmountINR,
-      });
+      try {
+        syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
+          ...payment,
+          projectId: targetProjectId || '',
+          paymentMode: finalPaymentMode,
+          amountReceived: finalAmountReceived,
+          amountINR: finalAmountINR,
+        });
+        mockStore.savePayment(
+          {
+            ...payment,
+            projectId: targetProjectId || '',
+            amountReceived: finalAmountReceived,
+            amountINR: finalAmountINR,
+            paymentStatus: finalPaymentStatus as any,
+          },
+          false
+        );
+      } catch (gstErr: unknown) {
+        const errMsg = gstErr instanceof Error ? gstErr.message : String(gstErr);
+        console.error('[handleSavePaymentRoute] GST invoice synchronization failed after payment commit:', errMsg);
+        gstSyncError = errMsg;
+        syncedGstInvoice = null;
+        if (!isMockFallbackAllowed()) {
+          mockStore.deleteGstInvoiceByPaymentId(cleanId || payment.id);
+          mockStore.deletePayment(cleanId || payment.id);
+        }
+      }
+    } else {
+      mockStore.savePayment(
+        {
+          ...payment,
+          projectId: targetProjectId || '',
+          amountReceived: finalAmountReceived,
+          amountINR: finalAmountINR,
+          paymentStatus: finalPaymentStatus as any,
+        },
+        false
+      );
     }
 
-    return res.json({
+    const responsePayload: Record<string, any> = {
       success: true,
       payment: {
         ...payment,
-        projectId: targetProjectId || undefined,
+        projectId: targetProjectId || '',
         amountReceived: finalAmountReceived,
         amountINR: finalAmountINR,
         paymentStatus: finalPaymentStatus,
       },
-      gstInvoiceSynced: !!syncedGstInvoice,
+      gstInvoiceSynced: Boolean(syncedGstInvoice),
       gstInvoice: syncedGstInvoice,
-    });
+    };
+
+    if (gstSyncError) {
+      responsePayload.warning = 'Payment was saved, but automatic GST invoice synchronization failed.';
+      responsePayload.gstSyncError = gstSyncError;
+    }
+
+    return res.json(responsePayload);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error('[handleSavePaymentRoute] SQL Transaction Error:', errMsg);
@@ -2491,7 +2822,10 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deletePayment(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete payment');
+  }
+  const deleted = mockStore.deletePayment(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -2597,7 +2931,10 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getBankAccounts(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch bank-accounts');
+  }
+  return res.json(mockStore.getBankAccounts(brand));
   }
 
   try {
@@ -2629,7 +2966,10 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /bank-accounts] Falling back to mock store:', err);
-    return res.json(mockStore.getBankAccounts(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch bank-accounts', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getBankAccounts(brand));
   }
 });
 
@@ -2671,7 +3011,7 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
         console.warn('[handleSaveBankAccountRoute] Could not fetch existing account from Azure SQL:', err);
       }
     }
-    if (!existingAccount) {
+    if (!existingAccount && isMockFallbackAllowed()) {
       existingAccount = mockStore.getBankAccountById(accountId) ||
         mockStore.getBankAccounts().find((b) => b.id === accountId);
     }
@@ -2766,10 +3106,13 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
   account.updatedAt = now;
   account.createdAt = account.createdAt || now;
 
-  account.id = (account.id || '').trim() || generateSemanticEntityId('ACC', account.brand, mockStore.getBankAccounts(account.brand));
+  account.id = (account.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('ACC', account.brand, mockStore.getBankAccounts(account.brand)) : generateSemanticEntityId('ACC', account.brand));
 
   if (!pool) {
-    const saved = mockStore.saveBankAccount(account);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save bank account');
+  }
+  const saved = mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: saved });
   }
 
@@ -2809,7 +3152,11 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
     mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: account });
   } catch (err) {
-    console.warn('[handleSaveBankAccountRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveBankAccountRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save bank account', errMsg);
+    }
     const saved = mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: saved });
   }
@@ -2828,7 +3175,10 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteBankAccount(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete bank account');
+  }
+  const deleted = mockStore.deleteBankAccount(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -2897,7 +3247,10 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /bank-accounts/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteBankAccount(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete bank account', errMsg);
+  }
+  mockStore.deleteBankAccount(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -2907,7 +3260,10 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getGstInvoices(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch gst-invoices');
+  }
+  return res.json(mockStore.getGstInvoices(brand));
   }
 
   try {
@@ -2997,7 +3353,10 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /gst-invoices] Falling back to mock store:', err);
-    return res.json(mockStore.getGstInvoices(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch gst-invoices', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getGstInvoices(brand));
   }
 });
 
@@ -3007,7 +3366,10 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const resSync = mockStore.syncAllGstInvoicesFromPayments();
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'sync GST invoices');
+  }
+  const resSync = mockStore.syncAllGstInvoicesFromPayments();
     return res.json({ success: true, count: resSync.count, invoices: mockStore.getGstInvoices(brand) });
   }
 
@@ -3085,7 +3447,11 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
 
     return res.json({ success: true, count: syncedCount, invoices: allInvoices.recordset || [] });
   } catch (err: any) {
-    console.warn('[POST /gst-invoices/sync] Error syncing:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[POST /gst-invoices/sync] Error syncing:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'sync GST invoices', errMsg);
+    }
     const mockRes = mockStore.syncAllGstInvoicesFromPayments();
     return res.json({ success: true, count: mockRes.count, invoices: mockStore.getGstInvoices(brand) });
   }
@@ -3162,11 +3528,14 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
 
-  inv.id = (inv.id || '').trim() || generateSemanticEntityId('GST', inv.brand, mockStore.getGstInvoices(inv.brand));
+  inv.id = (inv.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('GST', inv.brand, mockStore.getGstInvoices(inv.brand)) : generateSemanticEntityId('GST', inv.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveGstInvoice(inv);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save GST invoice');
+  }
+  const saved = mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: saved });
   }
 
@@ -3212,7 +3581,11 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
     mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: inv });
   } catch (err) {
-    console.warn('[handleSaveGstInvoiceRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveGstInvoiceRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save GST invoice', errMsg);
+    }
     const saved = mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: saved });
   }
@@ -3231,7 +3604,10 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteGstInvoice(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete GST invoice');
+  }
+  const deleted = mockStore.deleteGstInvoice(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -3282,7 +3658,10 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /gst-invoices/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteGstInvoice(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete GST invoice', errMsg);
+  }
+  mockStore.deleteGstInvoice(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -3292,7 +3671,10 @@ router.get('/roles', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getEmployeeRoles(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch roles');
+  }
+  return res.json(mockStore.getEmployeeRoles(brand));
   }
 
   try {
@@ -3319,7 +3701,10 @@ router.get('/roles', async (req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /roles] Falling back to mock store:', err);
-    return res.json(mockStore.getEmployeeRoles(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch roles', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getEmployeeRoles(brand));
   }
 });
 
@@ -3331,11 +3716,14 @@ async function handleSaveRoleRoute(req: Request, res: Response) {
   role.updatedAt = now;
   role.createdAt = role.createdAt || now;
 
-  role.id = (role.id || '').trim() || generateSemanticEntityId('ROL', role.brand, mockStore.getEmployeeRoles(role.brand));
+  role.id = (role.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('ROL', role.brand, mockStore.getEmployeeRoles(role.brand)) : generateSemanticEntityId('ROL', role.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveEmployeeRole(role);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save role');
+  }
+  const saved = mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role: saved });
   }
 
@@ -3367,7 +3755,11 @@ async function handleSaveRoleRoute(req: Request, res: Response) {
     mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role });
   } catch (err) {
-    console.warn('[handleSaveRoleRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveRoleRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save role', errMsg);
+    }
     const saved = mockStore.saveEmployeeRole(role);
     return res.json({ success: true, role: saved });
   }
@@ -3386,7 +3778,10 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteEmployeeRole(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete role');
+  }
+  const deleted = mockStore.deleteEmployeeRole(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -3454,7 +3849,10 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /roles/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteEmployeeRole(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete role', errMsg);
+  }
+  mockStore.deleteEmployeeRole(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -3464,7 +3862,10 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getEmployees(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch employees');
+  }
+  return res.json(mockStore.getEmployees(brand));
   }
 
   try {
@@ -3500,7 +3901,10 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /employees] Falling back to mock store:', err);
-    return res.json(mockStore.getEmployees(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch employees', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getEmployees(brand));
   }
 });
 
@@ -3559,11 +3963,14 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
-  emp.id = (emp.id || '').trim() || generateSemanticEntityId('EMP', emp.brand, mockStore.getEmployees(emp.brand));
+  emp.id = (emp.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EMP', emp.brand, mockStore.getEmployees(emp.brand)) : generateSemanticEntityId('EMP', emp.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveEmployee(emp);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save employee');
+  }
+  const saved = mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: saved });
   }
 
@@ -3604,7 +4011,11 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
     mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: emp });
   } catch (err) {
-    console.warn('[handleSaveEmployeeRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveEmployeeRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save employee', errMsg);
+    }
     const saved = mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: saved });
   }
@@ -3623,7 +4034,10 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteEmployee(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete employee');
+  }
+  const deleted = mockStore.deleteEmployee(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -3693,7 +4107,10 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /employees/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteEmployee(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete employee', errMsg);
+  }
+  mockStore.deleteEmployee(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -3703,7 +4120,10 @@ router.get('/assignments', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getAssignments(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch assignments');
+  }
+  return res.json(mockStore.getAssignments(brand));
   }
 
   try {
@@ -3739,7 +4159,10 @@ router.get('/assignments', async (req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /assignments] Falling back to mock store:', err);
-    return res.json(mockStore.getAssignments(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch assignments', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getAssignments(brand));
   }
 });
 
@@ -3753,11 +4176,14 @@ async function handleSaveAssignmentRoute(req: Request, res: Response) {
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
-  asn.id = (asn.id || '').trim() || generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand));
+  asn.id = (asn.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand)) : generateSemanticEntityId('ASN', asn.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveAssignment(asn);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save assignment');
+  }
+  const saved = mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: saved });
   }
 
@@ -3806,7 +4232,11 @@ async function handleSaveAssignmentRoute(req: Request, res: Response) {
     mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: asn });
   } catch (err) {
-    console.warn('[handleSaveAssignmentRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveAssignmentRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save assignment', errMsg);
+    }
     const saved = mockStore.saveAssignment(asn);
     return res.json({ success: true, assignment: saved });
   }
@@ -3825,7 +4255,10 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteAssignment(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete assignment');
+  }
+  const deleted = mockStore.deleteAssignment(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -3892,7 +4325,10 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /assignments/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteAssignment(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete assignment', errMsg);
+  }
+  mockStore.deleteAssignment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -3902,6 +4338,9 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch employee payments');
+    }
     const list = mockStore.getEmployeePayments(brand);
     return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
@@ -3940,7 +4379,11 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
     }));
     return res.json(parsedRows);
   } catch (err) {
-    console.warn('[GET /employee-payments] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[GET /employee-payments] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch employee payments', errMsg);
+    }
     const list = mockStore.getEmployeePayments(brand);
     return res.json(list.map((p) => ({ ...p, paymentProof: parsePaymentProof(p.paymentProof) })));
   }
@@ -4003,14 +4446,17 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
-  epay.id = (epay.id || '').trim() || generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand));
+  epay.id = (epay.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand)) : generateSemanticEntityId('EPAY', epay.brand));
 
   epay.paymentProof = parsePaymentProof(epay.paymentProof);
   const serializedProof = serializePaymentProof(epay.paymentProof);
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveEmployeePayment(epay);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save employee payment');
+  }
+  const saved = mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
 
@@ -4056,7 +4502,11 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
     mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: epay });
   } catch (err) {
-    console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save employee payment', errMsg);
+    }
     const saved = mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
   }
@@ -4075,7 +4525,10 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteEmployeePayment(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete employee payment');
+  }
+  const deleted = mockStore.deleteEmployeePayment(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -4124,7 +4577,10 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /employee-payments/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteEmployeePayment(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete employee payment', errMsg);
+  }
+  mockStore.deleteEmployeePayment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -4134,6 +4590,9 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch expense categories');
+    }
     return res.json(mockStore.getExpenseCategories(brand));
   }
 
@@ -4159,7 +4618,11 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
     );
     return res.json(q.recordset || []);
   } catch (err) {
-    console.warn('[GET /expense-categories] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[GET /expense-categories] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'fetch expense categories', errMsg);
+    }
     return res.json(mockStore.getExpenseCategories(brand));
   }
 });
@@ -4172,11 +4635,14 @@ async function handleSaveExpenseCategoryRoute(req: Request, res: Response) {
   cat.updatedAt = now;
   cat.createdAt = cat.createdAt || now;
 
-  cat.id = (cat.id || '').trim() || generateSemanticEntityId('EXC', cat.brand, mockStore.getExpenseCategories(cat.brand));
+  cat.id = (cat.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EXC', cat.brand, mockStore.getExpenseCategories(cat.brand)) : generateSemanticEntityId('EXC', cat.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveExpenseCategory(cat);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save expense category');
+  }
+  const saved = mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: saved });
   }
 
@@ -4208,7 +4674,11 @@ async function handleSaveExpenseCategoryRoute(req: Request, res: Response) {
     mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: cat });
   } catch (err) {
-    console.warn('[handleSaveExpenseCategoryRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveExpenseCategoryRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save expense category', errMsg);
+    }
     const saved = mockStore.saveExpenseCategory(cat);
     return res.json({ success: true, category: saved });
   }
@@ -4227,7 +4697,10 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteExpenseCategory(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete expense category');
+  }
+  const deleted = mockStore.deleteExpenseCategory(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -4296,7 +4769,10 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /expense-categories/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteExpenseCategory(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete expense category', errMsg);
+  }
+  mockStore.deleteExpenseCategory(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -4306,7 +4782,10 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getExpenses(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch expenses');
+  }
+  return res.json(mockStore.getExpenses(brand));
   }
 
   try {
@@ -4343,7 +4822,10 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /expenses] Falling back to mock store:', err);
-    return res.json(mockStore.getExpenses(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch expenses', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getExpenses(brand));
   }
 });
 
@@ -4399,11 +4881,14 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
   exp.updatedAt = now;
   exp.createdAt = exp.createdAt || now;
 
-  exp.id = (exp.id || '').trim() || generateSemanticEntityId('EXP', exp.brand, mockStore.getExpenses(exp.brand));
+  exp.id = (exp.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EXP', exp.brand, mockStore.getExpenses(exp.brand)) : generateSemanticEntityId('EXP', exp.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const saved = mockStore.saveExpense(exp);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save expense');
+  }
+  const saved = mockStore.saveExpense(exp);
     return res.json({ success: true, expense: saved });
   }
 
@@ -4467,7 +4952,11 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
     mockStore.saveExpense(exp);
     return res.json({ success: true, expense: exp });
   } catch (err) {
-    console.warn('[handleSaveExpenseRoute] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveExpenseRoute] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'save expense', errMsg);
+    }
     const saved = mockStore.saveExpense(exp);
     return res.json({ success: true, expense: saved });
   }
@@ -4486,7 +4975,10 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteExpense(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete expense');
+  }
+  const deleted = mockStore.deleteExpense(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -4535,7 +5027,10 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /expenses/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteExpense(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete expense', errMsg);
+  }
+  mockStore.deleteExpense(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -4545,7 +5040,10 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getUsers(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch users');
+  }
+  return res.json(mockStore.getUsers(brand));
   }
 
   try {
@@ -4573,7 +5071,10 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /users] Falling back to mock store:', err);
-    return res.json(mockStore.getUsers(brand));
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch users', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getUsers(brand));
   }
 });
 
@@ -4584,10 +5085,12 @@ async function handleSaveUserRoute(req: Request, res: Response) {
 
   // Look for existing user in in-memory store or Azure SQL
   const pool = await getOrInitPool();
-  let mockExisting = mockStore.getUsers().find(
-    (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
-           (rawEmail && u.email.toLowerCase() === rawEmail)
-  );
+  let mockExisting = isMockFallbackAllowed()
+    ? mockStore.getUsers().find(
+        (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
+               (rawEmail && u.email.toLowerCase() === rawEmail)
+      )
+    : undefined;
 
   let isExisting = Boolean(mockExisting) || req.method === 'PUT';
   let savedEmail: string | null = mockExisting?.email ? mockExisting.email.trim() : null;
@@ -4724,7 +5227,10 @@ async function handleSaveUserRoute(req: Request, res: Response) {
   }
 
   if (!pool) {
-    const saved = mockStore.saveUser(user);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'save user');
+  }
+  const saved = mockStore.saveUser(user);
     return res.json({ success: true, user: saved });
   }
 
@@ -4804,7 +5310,10 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
   const pool = await getOrInitPool();
 
   if (!pool) {
-    const deleted = mockStore.deleteUser(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete user');
+  }
+  const deleted = mockStore.deleteUser(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,
@@ -4866,7 +5375,10 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /users/${id}] Falling back to mock store:`, errMsg);
-    mockStore.deleteUser(id, brandFilter);
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'delete user', errMsg);
+  }
+  mockStore.deleteUser(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -4875,7 +5387,10 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
 router.get('/audit', async (_req: Request, res: Response) => {
   const pool = await getOrInitPool();
   if (!pool) {
-    return res.json(mockStore.getAuditLog());
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch audit log');
+  }
+  return res.json(mockStore.getAuditLog());
   }
 
   try {
@@ -4885,7 +5400,10 @@ router.get('/audit', async (_req: Request, res: Response) => {
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /audit] Falling back to mock store:', err);
-    return res.json(mockStore.getAuditLog());
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'fetch audit log', err instanceof Error ? err.message : String(err));
+  }
+  return res.json(mockStore.getAuditLog());
   }
 });
 
@@ -4895,7 +5413,10 @@ router.post('/audit', async (req: Request, res: Response) => {
 
   const pool = await getOrInitPool();
   if (!pool) {
-    const entry = mockStore.addAuditLog({
+    if (!isMockFallbackAllowed()) {
+    return sendDatabaseUnavailable(res, 'record audit log');
+  }
+  const entry = mockStore.addAuditLog({
       brand: brand || 'All',
       module: module || 'General',
       action: action || 'LOG',
@@ -4923,7 +5444,11 @@ router.post('/audit', async (req: Request, res: Response) => {
     );
     return res.json({ success: true });
   } catch (err) {
-    console.warn('[POST /audit] Falling back to mock store:', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[POST /audit] Falling back to mock store:', errMsg);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'record audit log', errMsg);
+    }
     const entry = mockStore.addAuditLog({
       brand: brand || 'All',
       module: module || 'General',
