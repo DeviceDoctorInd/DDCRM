@@ -2205,6 +2205,47 @@ export async function syncPaymentToGstInvoiceSql(
 }
 
 async function handleSavePaymentRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/payments) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amountReceived ?? req.body.amount ?? req.body.amount_received ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Amount received is required.' });
+  }
+
+  if (hasAmount) {
+    const numAmount = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Payment amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Payment Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
+  // 3. Due Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawDueDate = req.body.dueDate ?? req.body.due_date;
+  if (rawDueDate !== undefined && rawDueDate !== null) {
+    const dueDateStr = String(rawDueDate).trim();
+    if (dueDateStr.length > 0) {
+      const parsedTime = Date.parse(dueDateStr);
+      if (isNaN(parsedTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid dueDate format.' });
+      }
+    }
+  }
   const payment: Payment = req.body;
   const brandContext = getBrandContext(req);
   payment.brand = sanitizeBrand(payment.brand, brandContext) as any;
@@ -2579,6 +2620,131 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
 });
 
 async function handleSaveBankAccountRoute(req: Request, res: Response) {
+  const isPost = req.method === 'POST';
+  const accountId = (req.params.id || req.body?.id || '').trim();
+  const pool = await getOrInitPool();
+
+  // Look up existing bank account to support safe edits
+  let existingAccount: BankAccount | undefined = undefined;
+  if (accountId) {
+    if (pool) {
+      try {
+        const guidId = toGuid(accountId);
+        const checkRes = await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidId)
+              .input('rawId', accountId)
+              .query(`
+                SELECT TOP 1
+                  ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+                  brand,
+                  account_name as accountName,
+                  bank_name as bankName,
+                  account_number as accountNumber,
+                  ISNULL(CAST(ifsc_code AS NVARCHAR(50)), '') as ifscCode,
+                  account_type as accountType
+                FROM bank_accounts
+                WHERE id = @id OR account_id_code = @rawId OR CAST(id AS NVARCHAR(100)) = @rawId
+              `),
+          'bank_accounts'
+        );
+        if (checkRes?.recordset && checkRes.recordset.length > 0) {
+          existingAccount = checkRes.recordset[0];
+        }
+      } catch (err) {
+        console.warn('[handleSaveBankAccountRoute] Could not fetch existing account from Azure SQL:', err);
+      }
+    }
+    if (!existingAccount) {
+      existingAccount = mockStore.getBankAccountById(accountId) ||
+        mockStore.getBankAccounts().find((b) => b.id === accountId);
+    }
+  }
+
+  const isExistingRecord = Boolean(existingAccount);
+
+  // 1. Account Number Validation
+  // POST on new account: mandatory (non-empty string after trim)
+  // PUT or edit on existing account: only check if field provided in body
+  const hasAccountNumber = 'accountNumber' in req.body || 'account_number' in req.body;
+  const rawAccountNumber = req.body.accountNumber ?? req.body.account_number;
+  if (isPost && !isExistingRecord) {
+    if (!rawAccountNumber || typeof rawAccountNumber !== 'string' || !rawAccountNumber.trim()) {
+      return res.status(400).json({ success: false, error: 'Account number is required.' });
+    }
+  } else if (hasAccountNumber) {
+    if (!rawAccountNumber || typeof rawAccountNumber !== 'string' || !rawAccountNumber.trim()) {
+      return res.status(400).json({ success: false, error: 'Account number cannot be empty.' });
+    }
+  }
+
+  // 2. Bank Name Validation
+  // POST on new account: mandatory (non-empty string after trim)
+  // PUT or edit on existing account: only check if field provided in body
+  const hasBankName = 'bankName' in req.body || 'bank_name' in req.body;
+  const rawBankName = req.body.bankName ?? req.body.bank_name;
+  if (isPost && !isExistingRecord) {
+    if (!rawBankName || typeof rawBankName !== 'string' || !rawBankName.trim()) {
+      return res.status(400).json({ success: false, error: 'Bank name is required.' });
+    }
+  } else if (hasBankName) {
+    if (!rawBankName || typeof rawBankName !== 'string' || !rawBankName.trim()) {
+      return res.status(400).json({ success: false, error: 'Bank name cannot be empty.' });
+    }
+  }
+
+  // 3. IFSC Code Validation
+  // - Skip for 'Crypto Wallet'
+  // - Skip if omitted, null, or empty string
+  // - On PUT: if existing account cannot be loaded from SQL or mockStore, SKIP validation.
+  //   If loaded, validate ONLY if ifscCode is changed from the saved database value.
+  // - On POST (new account): validate if provided and non-empty. If existing account found, only if changed.
+  const currentAccountType = req.body.accountType ?? req.body.account_type ?? existingAccount?.accountType;
+  const hasIfsc = 'ifscCode' in req.body || 'ifsc_code' in req.body;
+  const rawIfsc = req.body.ifscCode ?? req.body.ifsc_code;
+
+  if (currentAccountType !== 'Crypto Wallet' && hasIfsc && rawIfsc !== undefined && rawIfsc !== null) {
+    const ifscStr = String(rawIfsc).trim();
+    if (ifscStr.length > 0) {
+      let shouldValidateIfsc = false;
+      if (!isPost) {
+        // PUT request:
+        // Agar existing account (SQL ya mockStore) load na ho sake, to IFSC validation SKIP karo
+        if (existingAccount) {
+          const oldIfsc = String(existingAccount.ifscCode || '').trim();
+          if (ifscStr.toUpperCase() !== oldIfsc.toUpperCase()) {
+            shouldValidateIfsc = true;
+          }
+        } else {
+          // existingAccount load nahi ho saka -> safe fallback: SKIP validation
+          shouldValidateIfsc = false;
+        }
+      } else {
+        // POST request:
+        // Naye account par hamesha validate karo (khali par upar hi skip ho chuka hai).
+        // Agar existing account mila ho, to sirf badli hone par validate karo.
+        if (existingAccount) {
+          const oldIfsc = String(existingAccount.ifscCode || '').trim();
+          if (ifscStr.toUpperCase() !== oldIfsc.toUpperCase()) {
+            shouldValidateIfsc = true;
+          }
+        } else {
+          shouldValidateIfsc = true;
+        }
+      }
+
+      if (shouldValidateIfsc) {
+        const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/i;
+        const swiftRegex = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/i;
+        if (!ifscRegex.test(ifscStr) && !swiftRegex.test(ifscStr)) {
+          return res.status(400).json({ success: false, error: 'Invalid IFSC code format.' });
+        }
+      }
+    }
+  }
+
   const account: BankAccount = req.body;
   const brandContext = getBrandContext(req);
   account.brand = sanitizeBrand(account.brand, brandContext) as any;
@@ -2588,7 +2754,6 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
 
   account.id = (account.id || '').trim() || generateSemanticEntityId('ACC', account.brand, mockStore.getBankAccounts(account.brand));
 
-  const pool = await getOrInitPool();
   if (!pool) {
     const saved = mockStore.saveBankAccount(account);
     return res.json({ success: true, bankAccount: saved });
@@ -2913,6 +3078,69 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
 });
 
 async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/gst-invoices) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Client Details Validation (Required on POST; on PUT skip if not provided or empty string)
+  const rawClientName = req.body.clientName ?? req.body.client_name;
+  const rawClientId = req.body.clientId ?? req.body.client_id;
+  const hasClientIdent = (rawClientName !== undefined && rawClientName !== null && String(rawClientName).trim().length > 0) ||
+                         (rawClientId !== undefined && rawClientId !== null && String(rawClientId).trim().length > 0);
+
+  // 2. Amount Validation (Required on POST; on PUT validate only if provided; 0 is valid; negative is rejected)
+  const rawAmount = req.body.amountReceived ?? req.body.amount ?? req.body.amount_received ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && (!hasClientIdent || !hasAmount)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Client details and invoice amount are required.',
+    });
+  }
+
+  // Reject negative tax / invoice amounts if provided and non-empty (0 is allowed)
+  const amountsToCheck = [
+    { name: 'amountReceived', val: req.body.amountReceived ?? req.body.amount_received },
+    { name: 'amountINR', val: req.body.amountINR ?? req.body.amount_inr },
+    { name: 'gstAmountINR', val: req.body.gstAmountINR ?? req.body.gst_amount_inr },
+  ];
+  for (const item of amountsToCheck) {
+    if (item.val !== undefined && item.val !== null && !(typeof item.val === 'string' && item.val.trim() === '')) {
+      const num = typeof item.val === 'number' ? item.val : Number(String(item.val).trim());
+      if (isNaN(num) || num < 0) {
+        return res.status(400).json({
+          success: false,
+          error: `${item.name} must be a non-negative number.`,
+        });
+      }
+    }
+  }
+
+  // 3. Payment Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
+  // 4. GST Portal Upload Date Validation (optional, but if provided and non-empty must be a valid date)
+  const rawUploadDate = req.body.gstPortalUploadDate ?? req.body.gst_portal_upload_date;
+  if (rawUploadDate !== undefined && rawUploadDate !== null) {
+    const dateStr = String(rawUploadDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid gstPortalUploadDate format.' });
+      }
+    }
+  }
   const inv: GstInvoice = req.body;
   const brandContext = getBrandContext(req);
   inv.brand = sanitizeBrand(inv.brand, brandContext) as any;
@@ -3263,7 +3491,53 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
 });
 
 async function handleSaveEmployeeRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/employees) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Employee Name Validation (required on POST; on PUT validate only if provided in body)
+  const rawName = req.body.name ?? req.body.employee_name ?? req.body.employeeName;
+  const hasNameProp = 'name' in req.body || 'employee_name' in req.body || 'employeeName' in req.body;
+
+  if (isPost) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Employee name is required.' });
+    }
+  } else if (hasNameProp) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({ success: false, error: 'Employee name cannot be empty.' });
+    }
+  }
+
+  // 2. Cost of Employee Validation (must be non-negative number if provided; skip empty string; 0 is valid)
+  const rawCost = req.body.costOfEmployee ?? req.body.cost_of_employee ?? req.body.salary ?? req.body.monthlyCost;
+  if (rawCost !== undefined && rawCost !== null) {
+    if (typeof rawCost === 'string' && rawCost.trim() === '') {
+      // Empty string: skip validation, do not reject
+    } else {
+      const numCost = typeof rawCost === 'number' ? rawCost : Number(String(rawCost).trim());
+      if (isNaN(numCost) || numCost < 0) {
+        return res.status(400).json({ success: false, error: 'Cost of employee must be a non-negative number.' });
+      }
+    }
+  }
+
+  // 3. Joining Date Validation (optional; if provided and not empty, must be a valid date)
+  const rawJoiningDate = req.body.joiningDate ?? req.body.joining_date ?? req.body.joinedDate;
+  if (rawJoiningDate !== undefined && rawJoiningDate !== null) {
+    const dateStr = String(rawJoiningDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid joiningDate format.' });
+      }
+    }
+  }
+
   const emp: Employee = req.body;
+  if (rawName && typeof rawName === 'string') {
+    emp.name = rawName.trim();
+  }
   const brandContext = getBrandContext(req);
   emp.brand = sanitizeBrand(emp.brand, brandContext) as any;
   emp.costOfEmployee = parseFloat(String(emp.costOfEmployee ?? 0)) || 0;
@@ -3659,6 +3933,49 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
 });
 
 async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/employee-payments) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amountPaid ?? req.body.amount ?? req.body.amount_paid ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Employee payment amount is required.' });
+  }
+
+  if (hasAmount) {
+    const cleanAmountStr = typeof rawAmount === 'string' ? rawAmount.replace(/,/g, '').trim() : rawAmount;
+    const numAmount = typeof cleanAmountStr === 'number' ? cleanAmountStr : Number(cleanAmountStr);
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Employee payment amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Employee Details Validation (required on POST: employeeId or employeeName; on PUT validate only if provided)
+  const rawEmployeeName = req.body.employeeName ?? req.body.employee_name;
+  const rawEmployeeId = req.body.employeeId ?? req.body.employee_id;
+  const hasEmployeeName = rawEmployeeName !== undefined && rawEmployeeName !== null && typeof rawEmployeeName === 'string' && rawEmployeeName.trim().length > 0;
+  const hasEmployeeId = rawEmployeeId !== undefined && rawEmployeeId !== null && typeof rawEmployeeId === 'string' && rawEmployeeId.trim().length > 0;
+  const hasEmployee = hasEmployeeName || hasEmployeeId;
+
+  if (isPost && !hasEmployee) {
+    return res.status(400).json({ success: false, error: 'Employee details (employeeName or employeeId) are required.' });
+  }
+
+  // 3. Payment Date Validation (optional; skip on empty string; validate if provided)
+  const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
+  if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
+    const dateStr = String(rawPaymentDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
+      }
+    }
+  }
+
   const epay: EmployeePayment = req.body;
   const brandContext = getBrandContext(req);
   epay.brand = sanitizeBrand(epay.brand, brandContext) as any;
@@ -4017,6 +4334,50 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
 });
 
 async function handleSaveExpenseRoute(req: Request, res: Response) {
+  // --- Input Validation (POST & PUT /api/expenses) ---
+  const isPost = req.method === 'POST';
+
+  // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
+  const rawAmount = req.body.amount ?? req.body.amountINR ?? req.body.amount_inr;
+  const hasAmount = rawAmount !== undefined && rawAmount !== null && !(typeof rawAmount === 'string' && rawAmount.trim() === '');
+
+  if (isPost && !hasAmount) {
+    return res.status(400).json({ success: false, error: 'Expense amount is required.' });
+  }
+
+  if (hasAmount) {
+    const numAmount = typeof rawAmount === 'number' ? rawAmount : Number(String(rawAmount).trim());
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Expense amount must be a non-negative number.' });
+    }
+  }
+
+  // 2. Expense Date Validation (optional, but if provided and not empty must be a valid date)
+  const rawExpenseDate = req.body.expenseDate ?? req.body.expense_date;
+  if (rawExpenseDate !== undefined && rawExpenseDate !== null) {
+    const dateStr = String(rawExpenseDate).trim();
+    if (dateStr.length > 0) {
+      const parsedTime = Date.parse(dateStr);
+      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
+      if (isNaN(parsedTime) || !hasValidFormat) {
+        return res.status(400).json({ success: false, error: 'Invalid expenseDate format.' });
+      }
+    }
+  }
+
+  // 3. Vendor Validation (required on POST; on PUT validate only if vendor key is present in body)
+  const rawVendor = req.body.vendor;
+  const hasVendorProp = 'vendor' in req.body;
+  const hasVendor = rawVendor !== undefined && rawVendor !== null && typeof rawVendor === 'string' && rawVendor.trim().length > 0;
+
+  if (isPost && !hasVendor) {
+    return res.status(400).json({ success: false, error: 'Vendor name is required.' });
+  } else if (!isPost && hasVendorProp) {
+    if (typeof rawVendor === 'string' && !rawVendor.trim()) {
+      return res.status(400).json({ success: false, error: 'Vendor name cannot be empty.' });
+    }
+  }
+
   const exp: Expense = req.body;
   const brandContext = getBrandContext(req);
   exp.brand = sanitizeBrand(exp.brand, brandContext) as any;
@@ -4209,28 +4570,98 @@ async function handleSaveUserRoute(req: Request, res: Response) {
 
   // Look for existing user in in-memory store or Azure SQL
   const pool = await getOrInitPool();
-  const mockExisting = mockStore.getUsers().find(
+  let mockExisting = mockStore.getUsers().find(
     (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
            (rawEmail && u.email.toLowerCase() === rawEmail)
   );
 
   let isExisting = Boolean(mockExisting) || req.method === 'PUT';
-  if (!isExisting && pool && (rawId || rawEmail)) {
+  let savedEmail: string | null = mockExisting?.email ? mockExisting.email.trim() : null;
+
+  if (pool && (rawId || rawEmail)) {
     try {
       const checkExisting = await pool.request()
         .input('chk_id', rawId ? toGuid(rawId) : null)
         .input('chk_rawId', rawId || null)
         .input('chk_email', rawEmail || null)
         .query(`
-          SELECT TOP 1 id, email FROM app_users 
+          SELECT TOP 1 CAST(id AS NVARCHAR(100)) as id, name, email, role, brand, status, avatar FROM app_users 
           WHERE (@chk_id IS NOT NULL AND (id = @chk_id OR CAST(id AS NVARCHAR(100)) = @chk_rawId))
              OR (@chk_email IS NOT NULL AND LOWER(email) = @chk_email)
         `);
       if (checkExisting.recordset && checkExisting.recordset.length > 0) {
         isExisting = true;
+        const row = checkExisting.recordset[0];
+        if (row.email) {
+          savedEmail = String(row.email).trim();
+        }
+        if (!mockExisting) {
+          mockExisting = {
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            role: row.role,
+            brand: row.brand,
+            status: row.status,
+            avatar: row.avatar,
+            password: '',
+            createdAt: '',
+            updatedAt: '',
+          };
+        }
       }
     } catch {
       // Ignore lookup failure, continue with isExisting status
+    }
+  }
+
+  // --- Input Validation (POST & PUT /api/users) ---
+  const isPost = req.method === 'POST';
+  const hasNameProp = 'name' in req.body;
+  const rawName = req.body.name;
+
+  if (isPost) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'User name is required.',
+      });
+    }
+  } else if (hasNameProp) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'User name cannot be empty.',
+      });
+    }
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (req.body.email !== undefined && req.body.email !== null) {
+    const emailStr = String(req.body.email).trim();
+    if (emailStr.length > 0) {
+      if (req.method === 'PUT') {
+        // PUT: Validate only if saved user was loaded and email has actually changed
+        if (savedEmail !== null && emailStr.toLowerCase() !== savedEmail.toLowerCase()) {
+          if (!emailRegex.test(emailStr)) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid email address format.',
+            });
+          }
+        }
+      } else {
+        // POST: Validate format if non-empty and changed/new
+        if (!savedEmail || emailStr.toLowerCase() !== savedEmail.toLowerCase()) {
+          if (!emailRegex.test(emailStr)) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid email address format.',
+            });
+          }
+        }
+      }
     }
   }
 
