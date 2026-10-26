@@ -4570,28 +4570,98 @@ async function handleSaveUserRoute(req: Request, res: Response) {
 
   // Look for existing user in in-memory store or Azure SQL
   const pool = await getOrInitPool();
-  const mockExisting = mockStore.getUsers().find(
+  let mockExisting = mockStore.getUsers().find(
     (u) => (rawId && u.id.toLowerCase() === rawId.toLowerCase()) ||
            (rawEmail && u.email.toLowerCase() === rawEmail)
   );
 
   let isExisting = Boolean(mockExisting) || req.method === 'PUT';
-  if (!isExisting && pool && (rawId || rawEmail)) {
+  let savedEmail: string | null = mockExisting?.email ? mockExisting.email.trim() : null;
+
+  if (pool && (rawId || rawEmail)) {
     try {
       const checkExisting = await pool.request()
         .input('chk_id', rawId ? toGuid(rawId) : null)
         .input('chk_rawId', rawId || null)
         .input('chk_email', rawEmail || null)
         .query(`
-          SELECT TOP 1 id, email FROM app_users 
+          SELECT TOP 1 CAST(id AS NVARCHAR(100)) as id, name, email, role, brand, status, avatar FROM app_users 
           WHERE (@chk_id IS NOT NULL AND (id = @chk_id OR CAST(id AS NVARCHAR(100)) = @chk_rawId))
              OR (@chk_email IS NOT NULL AND LOWER(email) = @chk_email)
         `);
       if (checkExisting.recordset && checkExisting.recordset.length > 0) {
         isExisting = true;
+        const row = checkExisting.recordset[0];
+        if (row.email) {
+          savedEmail = String(row.email).trim();
+        }
+        if (!mockExisting) {
+          mockExisting = {
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            role: row.role,
+            brand: row.brand,
+            status: row.status,
+            avatar: row.avatar,
+            password: '',
+            createdAt: '',
+            updatedAt: '',
+          };
+        }
       }
     } catch {
       // Ignore lookup failure, continue with isExisting status
+    }
+  }
+
+  // --- Input Validation (POST & PUT /api/users) ---
+  const isPost = req.method === 'POST';
+  const hasNameProp = 'name' in req.body;
+  const rawName = req.body.name;
+
+  if (isPost) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'User name is required.',
+      });
+    }
+  } else if (hasNameProp) {
+    if (!rawName || typeof rawName !== 'string' || !rawName.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'User name cannot be empty.',
+      });
+    }
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (req.body.email !== undefined && req.body.email !== null) {
+    const emailStr = String(req.body.email).trim();
+    if (emailStr.length > 0) {
+      if (req.method === 'PUT') {
+        // PUT: Validate only if saved user was loaded and email has actually changed
+        if (savedEmail !== null && emailStr.toLowerCase() !== savedEmail.toLowerCase()) {
+          if (!emailRegex.test(emailStr)) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid email address format.',
+            });
+          }
+        }
+      } else {
+        // POST: Validate format if non-empty and changed/new
+        if (!savedEmail || emailStr.toLowerCase() !== savedEmail.toLowerCase()) {
+          if (!emailRegex.test(emailStr)) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid email address format.',
+            });
+          }
+        }
+      }
     }
   }
 
