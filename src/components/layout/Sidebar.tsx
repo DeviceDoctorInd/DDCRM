@@ -70,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     activeBrand,
     brandPrefix,
     brandMeta,
+    databaseStatus,
   } = useCrm();
 
   const getBrandIcon = (name: string, className: string = 'w-4 h-4') => {
@@ -439,22 +440,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center justify-between text-slate-300 font-semibold mb-0.5">
               <div className="flex items-center gap-1.5 text-slate-300">
                 <Database className="w-3 h-3 text-slate-400" />
-                <span>Azure SQL Database</span>
+                <span>Azure SQL Cloud DB</span>
               </div>
               <span className="flex h-1.5 w-1.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-slate-300"></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${databaseStatus.connected ? 'bg-emerald-400' : 'bg-amber-400'} opacity-75`}></span>
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${databaseStatus.connected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
               </span>
             </div>
             <div className="text-[9px] text-slate-400 font-mono truncate">
-              ddrcm.database.windows.net
+              {databaseStatus.server || (databaseStatus.connected ? 'Live Connection' : 'Protected Cloud DB')}
             </div>
-            <div className="text-[9px] text-slate-300 font-mono truncate">
-              rathorehemant114@gmail.com
-            </div>
+            {databaseStatus.user && (
+              <div className="text-[9px] text-slate-300 font-mono truncate">
+                {databaseStatus.user}
+              </div>
+            )}
           </div>
         ) : (
-          <div className="flex justify-center my-1.5" title="Azure SQL: ddrcm.database.windows.net / DDCRM (rathorehemant114@gmail.com)">
+          <div className="flex justify-center my-1.5" title={`Azure SQL Cloud DB (${databaseStatus.connected ? 'Connected' : 'Offline'})`}>
             <Database className="w-3.5 h-3.5 text-slate-400 hover:text-white transition-colors" />
           </div>
         )}

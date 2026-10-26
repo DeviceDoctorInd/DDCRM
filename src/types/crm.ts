@@ -440,10 +440,11 @@ export interface AuthUser {
 
 export interface DatabaseStatus {
   connected: boolean;
-  server: string;
-  database: string;
-  authType: string;
-  user: string;
+  isMock?: boolean;
+  server?: string;
+  database?: string;
+  authType?: string;
+  user?: string;
   error?: string | null;
   timestamp: string;
   tables?: { [tableName: string]: number };

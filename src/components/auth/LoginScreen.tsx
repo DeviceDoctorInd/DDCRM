@@ -184,7 +184,11 @@ export const LoginScreen: React.FC = () => {
                 ? 'bg-slate-50 text-slate-900 border-slate-300 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700'
                 : 'bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700'
             }`}
-            title={`Azure SQL Database: ${databaseStatus.database} on ${databaseStatus.server} (${databaseStatus.authType})`}
+            title={
+              databaseStatus.server && databaseStatus.database
+                ? `Azure SQL Database: ${databaseStatus.database} on ${databaseStatus.server} (${databaseStatus.authType || 'Native'})`
+                : `Azure SQL Database (${databaseStatus.connected ? 'Live' : 'Pending'})`
+            }
           >
             <Database className="w-3.5 h-3.5" />
             <span>{databaseStatus.connected ? 'Azure SQL Live' : 'Azure SQL Pending'}</span>
@@ -448,7 +452,7 @@ export const LoginScreen: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleSelectRole('rathorehemant114@gmail.com', 'Admin@2026')}
+                  onClick={() => handleSelectRole('devicedoctorindia.in@gmail.com', 'Admin@2026')}
                   className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
@@ -456,7 +460,7 @@ export const LoginScreen: React.FC = () => {
                     <span>Super Admin</span>
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    rathorehemant114@gmail.com
+                    devicedoctorindia.in@gmail.com
                   </div>
                 </button>
 
