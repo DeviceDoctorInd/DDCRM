@@ -141,7 +141,7 @@ interface CrmContextType {
   saveRole: (role: EmployeeRole) => Promise<{ success: boolean; error?: string }>;
   deleteRole: (roleId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveEmployee: (employee: Employee) => Promise<{ success: boolean; error?: string }>;
+  saveEmployee: (employee: Employee, isUpdate?: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteEmployee: (employeeId: string) => Promise<{ success: boolean; error?: string }>;
 
   saveAssignment: (assignment: Assignment) => Promise<{ success: boolean; error?: string }>;
@@ -1318,12 +1318,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
-  const saveEmployeeAction = async (employee: Employee) => {
+  const saveEmployeeAction = async (employee: Employee, isUpdate?: boolean) => {
     if (!employee.brand) employee.brand = activeBrand;
     if (!employee.id) {
       employee.id = storageService.generateId('EMP', employee.brand, rawEmployees);
     }
-    const res = await storageService.saveEmployee(employee);
+    const updateMode = isUpdate !== undefined ? isUpdate : rawEmployees.some((e) => e.id === employee.id);
+    const res = await storageService.saveEmployee(employee, updateMode);
     if (res.success) {
       const savedEmployee = res.employee || employee;
       setRawEmployees((prev) => {

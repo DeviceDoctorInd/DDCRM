@@ -171,7 +171,7 @@ export const EmployeesModule: React.FC = () => {
     setIsEditing(false);
 
     // Auto-generate fresh Employee ID
-    const freshId = storageService.generateId('EMP', activeBrand);
+    const freshId = storageService.generateId('EMP', activeBrand, employees);
     const firstRoleId = roles.find((r) => r.status === 'Active')?.id || (roles[0]?.id ?? '');
 
     setFormData({
@@ -243,7 +243,11 @@ export const EmployeesModule: React.FC = () => {
     const costVal = Number(formData.costOfEmployee) || 0;
 
     const payload: Employee = {
-      id: formData.id,
+      id: isEditing
+        ? formData.id
+        : (!formData.id || employees.some((e) => e.id === formData.id)
+            ? storageService.generateId('EMP', activeBrand, employees)
+            : formData.id),
       brand: activeBrand,
       name: formData.name.trim(),
       roleId: formData.roleId,
@@ -261,7 +265,7 @@ export const EmployeesModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = await saveEmployee(payload);
+    const res = await saveEmployee(payload, isEditing);
     if (res.success) {
       setIsModalOpen(false);
       setFormError(null);
