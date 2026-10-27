@@ -56,7 +56,7 @@ export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
 
   poolConnectingPromise = (async () => {
     try {
-      const ok = await initAzureSql();
+      const ok = await connectPoolCore(false);
       if (ok && globalPool && isConnected) {
         return globalPool;
       }
@@ -64,18 +64,20 @@ export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
     } catch (err) {
       console.warn('[Azure SQL] Pool acquisition failed:', err);
       return null;
-    } finally {
-      poolConnectingPromise = null;
     }
   })();
 
-  return poolConnectingPromise;
+  try {
+    return await poolConnectingPromise;
+  } finally {
+    poolConnectingPromise = null;
+  }
 }
 
 /**
  * Initialize or reconnect the global Azure SQL ConnectionPool
  */
-export async function initAzureSql(forceReconnect: boolean = false): Promise<boolean> {
+async function connectPoolCore(forceReconnect: boolean = false): Promise<boolean> {
   if (globalPool && isConnected && !forceReconnect) {
     return true;
   }
@@ -170,8 +172,29 @@ export async function initAzureSql(forceReconnect: boolean = false): Promise<boo
 }
 
 /**
- * Run table DDL and migrations non-blockingly in the background
+ * Shared singleton pool initialization helper
  */
+/**
+ * Initialize or reconnect the global Azure SQL ConnectionPool
+ * Shares the single connection promise with getOrInitPool to prevent duplicate pool creation.
+ */
+export async function initAzureSql(forceReconnect: boolean = false): Promise<boolean> {
+  if (globalPool && isConnected && !forceReconnect) {
+    return true;
+  }
+
+  if (forceReconnect) {
+    try {
+      return await connectPoolCore(true);
+    } catch {
+      return false;
+    }
+  }
+
+  const pool = await getOrInitPool();
+  return Boolean(pool && isConnected);
+}
+
 async function initSchemaInBackground(activePool: sql.ConnectionPool) {
   try {
     const BATCH_SIZE = 5;
@@ -180,7 +203,7 @@ async function initSchemaInBackground(activePool: sql.ConnectionPool) {
       await Promise.allSettled(batch.map((ddl) => activePool.request().query(ddl)));
     }
     await migrateAzureSqlSchema(activePool);
-    await refreshTableCounts();
+    // Note: refreshTableCounts() is nonessential diagnostics and deferred from startup to preserve pool capacity.
   } catch (err) {
     console.warn('[Azure SQL Schema] Notice during initial background schema sync:', err);
   }

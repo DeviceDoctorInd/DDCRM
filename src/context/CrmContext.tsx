@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import {
   ActiveModule,
   BrandName,
@@ -280,6 +280,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [isWorkspaceMandatory, setIsWorkspaceMandatory] = useState(false);
   const [hasConfirmedWorkspace, setHasConfirmedWorkspaceState] = useState(() => storageService.getHasConfirmedWorkspace());
+  const inFlightLoadRef = useRef<Promise<void> | null>(null);
 
   const openWorkspaceModal = (mandatory = false) => {
     setIsWorkspaceMandatory(mandatory);
@@ -346,130 +347,200 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
+  const fetchDatabaseStatus = async (): Promise<DatabaseStatus> => {
+    try {
+      const status = await storageService.getDatabaseStatus();
+      setDatabaseStatus(status);
+      return status;
+    } catch {
+      const fallback: DatabaseStatus = {
+        connected: false,
+        isMock: true,
+        error: 'Connecting to Azure SQL Database...',
+        timestamp: new Date().toISOString(),
+        tables: {},
+      };
+      setDatabaseStatus(fallback);
+      return fallback;
+    }
+  };
+
+  const loadCrmData = async (): Promise<void> => {
+    const currentToken = storageService.getAuthToken();
+    const hasConfirmed = storageService.getHasConfirmedWorkspace();
+
+    if (!currentToken || !hasConfirmed) {
+      return;
+    }
+
+    if (inFlightLoadRef.current) {
+      return inFlightLoadRef.current;
+    }
+
+    inFlightLoadRef.current = (async () => {
+      try {
+        const [
+          clients,
+          categories,
+          services,
+          projects,
+          payments,
+          bankAccounts,
+          gstInvoices,
+          roles,
+          employees,
+          assignments,
+          employeePayments,
+          expenseCategories,
+          expenses,
+          users,
+        ] = await Promise.all([
+          storageService.fetchClients().catch((err) => {
+            console.warn('[Fetch Clients]', err);
+            return [] as Client[];
+          }),
+          storageService.fetchCategories().catch((err) => {
+            console.warn('[Fetch Categories]', err);
+            return [] as ServiceCategory[];
+          }),
+          storageService.fetchServices().catch((err) => {
+            console.warn('[Fetch Services]', err);
+            return [] as Service[];
+          }),
+          storageService.fetchProjects().catch((err) => {
+            console.warn('[Fetch Projects]', err);
+            return [] as Project[];
+          }),
+          storageService.fetchPayments().catch((err) => {
+            console.warn('[Fetch Payments]', err);
+            return [] as Payment[];
+          }),
+          storageService.fetchBankAccounts().catch((err) => {
+            console.warn('[Fetch Bank Accounts]', err);
+            return [] as BankAccount[];
+          }),
+          storageService.fetchGstInvoices().catch((err) => {
+            console.warn('[Fetch GST Invoices]', err);
+            return [] as GstInvoice[];
+          }),
+          storageService.fetchRoles().catch((err) => {
+            console.warn('[Fetch Roles]', err);
+            return [] as EmployeeRole[];
+          }),
+          storageService.fetchEmployees().catch((err) => {
+            console.warn('[Fetch Employees]', err);
+            return [] as Employee[];
+          }),
+          storageService.fetchAssignments().catch((err) => {
+            console.warn('[Fetch Assignments]', err);
+            return [] as Assignment[];
+          }),
+          storageService.fetchEmployeePayments().catch((err) => {
+            console.warn('[Fetch Employee Payments]', err);
+            return [] as EmployeePayment[];
+          }),
+          storageService.fetchExpenseCategories().catch((err) => {
+            console.warn('[Fetch Expense Categories]', err);
+            return [] as ExpenseCategory[];
+          }),
+          storageService.fetchExpenses().catch((err) => {
+            console.warn('[Fetch Expenses]', err);
+            return [] as Expense[];
+          }),
+          storageService.fetchAppUsers().catch((err) => {
+            console.warn('[Fetch Users]', err);
+            return [] as AppUser[];
+          }),
+        ]);
+
+        setRawClients(clients);
+        setRawCategories(categories);
+        setRawServices(services);
+        setRawProjects(projects);
+        setRawPayments(payments);
+        setRawBankAccounts(bankAccounts);
+        setRawGstInvoices(gstInvoices);
+        setRawRoles(roles);
+        setRawEmployees(employees);
+        setRawAssignments(assignments);
+        setRawEmployeePayments(employeePayments);
+        setRawExpenseCategories(expenseCategories);
+        setRawExpenses(expenses);
+        setRawUsers(users);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        showToast(`Azure SQL Connection Notice: ${msg}`, 'warning');
+      } finally {
+        inFlightLoadRef.current = null;
+      }
+    })();
+
+    return inFlightLoadRef.current;
+  };
+
   // --- Strict Live SQL Loader ---
   const loadAll = async () => {
-    try {
-      storageService.init();
-      setActiveBrandState(storageService.getActiveBrand());
-      const currentTheme = storageService.getTheme();
-      setThemeState(currentTheme);
-      if (currentTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+    // 1. Fetch database status independently and quickly
+    fetchDatabaseStatus().catch(() => {});
 
-      const currentAuthUser = storageService.getAuthUser();
-      const currentToken = storageService.getAuthToken();
-      if (currentAuthUser && currentToken) {
-        setAuthUserState(currentAuthUser);
-        storageService.verifySession().then((verifiedUser) => {
-          if (verifiedUser) {
-            setAuthUserState(verifiedUser);
-          } else {
-            setAuthUserState(null);
-            setHasConfirmedWorkspaceState(false);
-          }
-        }).catch(() => {});
-      } else if (!currentToken) {
+    // 2. Initialize UI preferences
+    storageService.init();
+    setActiveBrandState(storageService.getActiveBrand());
+    const currentTheme = storageService.getTheme();
+    setThemeState(currentTheme);
+    if (currentTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // 3. Inspect authenticated session
+    const currentAuthUser = storageService.getAuthUser();
+    const currentToken = storageService.getAuthToken();
+
+    if (!currentToken || !currentAuthUser) {
+      setAuthUserState(null);
+      storageService.setAuthUser(null);
+      storageService.setHasConfirmedWorkspace(false);
+      setHasConfirmedWorkspaceState(false);
+      setRawClients([]);
+      setRawCategories([]);
+      setRawServices([]);
+      setRawProjects([]);
+      setRawPayments([]);
+      setRawBankAccounts([]);
+      setRawGstInvoices([]);
+      setRawRoles([]);
+      setRawEmployees([]);
+      setRawAssignments([]);
+      setRawEmployeePayments([]);
+      setRawExpenseCategories([]);
+      setRawExpenses([]);
+      setRawUsers([]);
+      return;
+    }
+
+    // 4. Verify session with backend before fetching module data
+    try {
+      const verifiedUser = await storageService.verifySession();
+      if (verifiedUser) {
+        setAuthUserState(verifiedUser);
+        if (storageService.getHasConfirmedWorkspace()) {
+          await loadCrmData();
+        }
+      } else {
         setAuthUserState(null);
         storageService.setAuthUser(null);
+        storageService.setAuthToken(null);
+        storageService.setHasConfirmedWorkspace(false);
+        setHasConfirmedWorkspaceState(false);
       }
-
-      const [
-        clients,
-        categories,
-        services,
-        projects,
-        payments,
-        bankAccounts,
-        gstInvoices,
-        roles,
-        employees,
-        assignments,
-        employeePayments,
-        expenseCategories,
-        expenses,
-        users,
-        status,
-      ] = await Promise.all([
-        storageService.fetchClients().catch((err) => {
-          console.warn('[Fetch Clients]', err);
-          return [] as Client[];
-        }),
-        storageService.fetchCategories().catch((err) => {
-          console.warn('[Fetch Categories]', err);
-          return [] as ServiceCategory[];
-        }),
-        storageService.fetchServices().catch((err) => {
-          console.warn('[Fetch Services]', err);
-          return [] as Service[];
-        }),
-        storageService.fetchProjects().catch((err) => {
-          console.warn('[Fetch Projects]', err);
-          return [] as Project[];
-        }),
-        storageService.fetchPayments().catch((err) => {
-          console.warn('[Fetch Payments]', err);
-          return [] as Payment[];
-        }),
-        storageService.fetchBankAccounts().catch((err) => {
-          console.warn('[Fetch Bank Accounts]', err);
-          return [] as BankAccount[];
-        }),
-        storageService.fetchGstInvoices().catch((err) => {
-          console.warn('[Fetch GST Invoices]', err);
-          return [] as GstInvoice[];
-        }),
-        storageService.fetchRoles().catch((err) => {
-          console.warn('[Fetch Roles]', err);
-          return [] as EmployeeRole[];
-        }),
-        storageService.fetchEmployees().catch((err) => {
-          console.warn('[Fetch Employees]', err);
-          return [] as Employee[];
-        }),
-        storageService.fetchAssignments().catch((err) => {
-          console.warn('[Fetch Assignments]', err);
-          return [] as Assignment[];
-        }),
-        storageService.fetchEmployeePayments().catch((err) => {
-          console.warn('[Fetch Employee Payments]', err);
-          return [] as EmployeePayment[];
-        }),
-        storageService.fetchExpenseCategories().catch((err) => {
-          console.warn('[Fetch Expense Categories]', err);
-          return [] as ExpenseCategory[];
-        }),
-        storageService.fetchExpenses().catch((err) => {
-          console.warn('[Fetch Expenses]', err);
-          return [] as Expense[];
-        }),
-        storageService.fetchAppUsers().catch((err) => {
-          console.warn('[Fetch Users]', err);
-          return [] as AppUser[];
-        }),
-        storageService.getDatabaseStatus(),
-      ]);
-
-      setRawClients(clients);
-      setRawCategories(categories);
-      setRawServices(services);
-      setRawProjects(projects);
-      setRawPayments(payments);
-      setRawBankAccounts(bankAccounts);
-      setRawGstInvoices(gstInvoices);
-      setRawRoles(roles);
-      setRawEmployees(employees);
-      setRawAssignments(assignments);
-      setRawEmployeePayments(employeePayments);
-      setRawExpenseCategories(expenseCategories);
-      setRawExpenses(expenses);
-      setRawUsers(users);
-      setDatabaseStatus(status);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      showToast(`Azure SQL Connection Notice: ${msg}`, 'warning');
+    } catch {
+      setAuthUserState(null);
+      storageService.setAuthUser(null);
+      storageService.setAuthToken(null);
+      storageService.setHasConfirmedWorkspace(false);
+      setHasConfirmedWorkspaceState(false);
     }
   };
 
@@ -477,7 +548,9 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadAll();
 
     const handleUpdate = () => {
-      loadAll();
+      if (storageService.getAuthToken() && storageService.getHasConfirmedWorkspace()) {
+        loadCrmData().catch((err) => console.warn('[CRM Store Update Sync]', err));
+      }
     };
 
     window.addEventListener('ddi_crm_store_updated', handleUpdate);
