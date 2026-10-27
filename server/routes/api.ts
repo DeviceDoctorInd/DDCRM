@@ -1188,10 +1188,8 @@ router.get('/services', async (req: Request, res: Response) => {
           ISNULL(CAST(s.updated_at AS NVARCHAR(50)), ISNULL(CAST(s.created_at AS NVARCHAR(50)), '')) AS updatedAt 
         FROM services s
         LEFT JOIN service_categories c ON (
-          s.category_id = c.id
-          OR s.category_id = c.category_id_code
-          OR CAST(s.category_id AS NVARCHAR(100)) = CAST(c.id AS NVARCHAR(100))
-          OR CAST(s.category_id AS NVARCHAR(100)) = CAST(c.category_id_code AS NVARCHAR(100))
+          CAST(s.category_id AS NVARCHAR(150)) = CAST(c.id AS NVARCHAR(150))
+          OR CAST(s.category_id AS NVARCHAR(150)) = CAST(c.category_id_code AS NVARCHAR(150))
         )
         WHERE (@brandFilter IS NULL OR s.brand = @brandFilter)
         ORDER BY s.created_at DESC
