@@ -462,7 +462,16 @@ router.get('/db/status', optionalAuthenticateToken, async (req: Request, res: Re
   const authReq = req as AuthenticatedRequest;
   const isSuperAdmin = authReq.user?.role === 'Super Admin';
   const pool = await getOrInitPool();
-  const isConnected = Boolean(pool);
+  let isConnected = false;
+  if (pool) {
+    try {
+      const pingResult = await pool.request().query('SELECT 1 as healthy');
+      isConnected = pingResult?.recordset?.[0]?.healthy === 1;
+    } catch (pingErr) {
+      console.warn('[db/status] Azure SQL query ping failed:', pingErr);
+      isConnected = false;
+    }
+  }
 
   // Public (bina token / non-admin): strictly return { status, connected, isMock }
   if (!isSuperAdmin) {
@@ -474,7 +483,7 @@ router.get('/db/status', optionalAuthenticateToken, async (req: Request, res: Re
   }
 
   // Super Admin: full diagnostics & server metadata
-  if (pool) {
+  if (isConnected && pool) {
     try {
       const status = getAzureDbStatus();
       const { tableCounts: _tc, ...safeStatus } = status;

@@ -46,7 +46,7 @@ async function startAppServer() {
   const express = (await import('express')).default;
   const { createServer: createViteServer } = await import('vite');
   const apiRouter = (await import('./server/routes/api')).default;
-  const { initAzureSql } = await import('./server/db/azureSql');
+  const { getOrInitPool } = await import('./server/db/azureSql');
 
   const app = express();
   const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -59,7 +59,7 @@ async function startAppServer() {
   app.use('/api', apiRouter);
 
   // Establish live Azure SQL Database connection pool asynchronously so port 3000 binds immediately
-  initAzureSql().catch((err: any) => {
+  getOrInitPool().catch((err: any) => {
     console.warn('[Server] Notice: Azure SQL init attempt:', err?.message || err);
   });
 
