@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { BrandName, BRAND_CONFIG } from '../../types/crm';
+import { BrandName } from '../../types/crm';
 import {
   Wrench,
   Shield,
@@ -12,17 +12,10 @@ import {
   Database,
   CheckCircle2,
   AlertCircle,
-  UserCheck,
-  Briefcase,
-  Calculator,
-  Eye,
   Code2,
   TrendingUp,
-  Building2,
   Check,
   LogOut,
-  Layers,
-  Sparkles,
   Globe,
   KeyRound,
 } from 'lucide-react';
@@ -65,23 +58,6 @@ export const LoginScreen: React.FC = () => {
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Unable to connect to Azure SQL app_users.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectRole = async (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setErrorMessage(null);
-    setIsLoading(true);
-    try {
-      const res = await login(userEmail, userPass);
-      if (!res.success) {
-        setErrorMessage(res.error || 'Authentication failed for the selected role.');
-      }
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Authentication error.');
     } finally {
       setIsLoading(false);
     }
@@ -436,105 +412,6 @@ export const LoginScreen: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-
-            {/* Quick Reference Accounts Grid */}
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <div className="mb-2.5">
-                <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                  <span>Standard Initial Accounts:</span>
-                  <span className="text-[10px] text-slate-400">1-Click Live Test</span>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  If you updated your Admin ID or password in User Settings, type your updated credentials above.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('devicedoctorindia.in@gmail.com', 'Admin@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <Shield className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>Super Admin</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    devicedoctorindia.in@gmail.com
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('devicedoctorindia.in@gmail.com', 'Admin@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <Building2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>DDI Primary Admin</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    devicedoctorindia.in@gmail.com
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('admin@codestro.com', 'Codestro@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <UserCheck className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>Brand Admin (Codestro)</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    admin@codestro.com
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('admin@duns.com', 'Duns@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <Globe className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>Brand Admin (DUNS)</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    admin@duns.com
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('karthik.pm@devicedoctor.in', 'Project@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>Project Manager</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    karthik.pm@devicedoctor.in
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSelectRole('finance@devicedoctor.in', 'Finance@2026')}
-                  className="p-2.5 text-left rounded-lg bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
-                    <Calculator className="w-3.5 h-3.5 text-slate-700 dark:text-slate-300" />
-                    <span>Accountant</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    finance@devicedoctor.in
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
