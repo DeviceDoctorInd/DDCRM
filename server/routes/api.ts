@@ -281,7 +281,7 @@ export async function calculateNextClientIdSql(
 
 export async function calculateNextPaymentIdSql(
   pool: sql.ConnectionPool | null,
-  brand: string | null
+  brand: string | null | undefined
 ): Promise<string> {
   const prefix = getBrandSemanticPrefix(brand);
   const pattern = `${prefix}-PAY-%`;
@@ -331,6 +331,61 @@ export async function calculateNextPaymentIdSql(
       throw new Error(`Azure SQL payment ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
     }
     return generateSemanticEntityId('PAY', brand, mockStore.getPayments(brand));
+  }
+}
+
+export async function calculateNextEmployeeIdSql(
+  pool: sql.ConnectionPool | null,
+  brand: string | null | undefined
+): Promise<string> {
+  const prefix = getBrandSemanticPrefix(brand);
+  const pattern = `${prefix}-EMP-%`;
+
+  if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate employee ID.');
+    }
+    return generateSemanticEntityId('EMP', brand, mockStore.getEmployees(brand));
+  }
+
+  try {
+    const res = await pool.request()
+      .input('pattern', pattern)
+      .query(`
+        SELECT ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(100)), ''), CAST(id AS NVARCHAR(100))) as id
+        FROM employees
+        WHERE id LIKE @pattern OR employee_id_code LIKE @pattern
+      `);
+
+    const rows = res.recordset || [];
+    let maxSeq = 0;
+    const regex = new RegExp(`^${prefix}-EMP-(\\d+)$`, 'i');
+    for (const row of rows) {
+      const match = (row.id || '').match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    const mockSeq = isMockFallbackAllowed()
+      ? (() => {
+          const m = generateSemanticEntityId('EMP', brand, mockStore.getEmployees(brand));
+          const match = m.match(regex);
+          return match && match[1] ? parseInt(match[1], 10) : 1;
+        })()
+      : 1;
+
+    const nextSequence = Math.max(maxSeq + 1, mockSeq > 1 ? mockSeq : 1);
+    return `${prefix}-EMP-${String(nextSequence).padStart(3, '0')}`;
+  } catch (err) {
+    console.warn('[calculateNextEmployeeIdSql] Error querying DB sequence:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL employee ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return generateSemanticEntityId('EMP', brand, mockStore.getEmployees(brand));
   }
 }
 
@@ -3856,6 +3911,21 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
 });
 
 // --- EMPLOYEES ---
+router.get('/employees/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  try {
+    const nextId = await calculateNextEmployeeIdSql(pool, brand);
+    return res.json({ success: true, nextId });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next employee ID', errMsg);
+    }
+    const nextId = generateSemanticEntityId('EMP', brand, mockStore.getEmployees(brand));
+    return res.json({ success: true, nextId });
+  }
+});
 router.get('/employees', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
@@ -3961,51 +4031,151 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
   emp.updatedAt = now;
   emp.createdAt = emp.createdAt || now;
 
-  emp.id = (emp.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EMP', emp.brand, mockStore.getEmployees(emp.brand)) : generateSemanticEntityId('EMP', emp.brand));
+  emp.id = (emp.id || (req.params as any)?.id || '').trim();
 
   const pool = await getOrInitPool();
   if (!pool) {
     if (!isMockFallbackAllowed()) {
     return sendDatabaseUnavailable(res, 'save employee');
   }
-  const saved = mockStore.saveEmployee(emp);
+    if (isPost) {
+      if (!emp.id) {
+        emp.id = generateSemanticEntityId('EMP', emp.brand, mockStore.getEmployees(emp.brand));
+      } else {
+        const existing = mockStore.getEmployees().find(
+          (e) => e.id?.toLowerCase() === emp.id.toLowerCase() || (e as any).employee_id_code?.toLowerCase() === emp.id.toLowerCase()
+        );
+        if (existing) {
+          return res.status(409).json({
+            success: false,
+            error: `Employee with ID "${emp.id}" already exists. Cannot overwrite existing employee on POST.`,
+          });
+        }
+      }
+    } else {
+      if (!emp.id) {
+        return res.status(400).json({ success: false, error: 'Employee ID is required for update.' });
+      }
+      const existing = mockStore.getEmployees().find(
+        (e) => e.id?.toLowerCase() === emp.id.toLowerCase() || (e as any).employee_id_code?.toLowerCase() === emp.id.toLowerCase()
+      );
+      if (!existing) {
+        return res.status(404).json({ success: false, error: `Employee with ID "${emp.id}" not found.` });
+      }
+    }
+    const saved = mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: saved });
   }
 
   try {
+    if (isPost) {
+      if (!emp.id) {
+        emp.id = await calculateNextEmployeeIdSql(pool, emp.brand);
+      } else {
+        const checkGuid = toGuid(emp.id);
+        const existsRes = await pool.request()
+          .input('id', checkGuid)
+          .input('rawId', emp.id)
+          .query(`
+            SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id
+            FROM employees
+            WHERE id = @id OR employee_id_code = @rawId OR CAST(id AS NVARCHAR(100)) = @rawId
+          `);
+        if (existsRes.recordset && existsRes.recordset.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `Employee with ID "${emp.id}" already exists. Cannot overwrite existing employee on POST.`,
+          });
+        }
+      }
+    } else {
+      if (!emp.id) {
+        return res.status(400).json({ success: false, error: 'Employee ID is required for update.' });
+      }
+      const checkGuid = toGuid(emp.id);
+      const existsRes = await pool.request()
+        .input('id', checkGuid)
+        .input('rawId', emp.id)
+        .query(`
+          SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id
+          FROM employees
+          WHERE id = @id OR employee_id_code = @rawId OR CAST(id AS NVARCHAR(100)) = @rawId
+        `);
+      if (!existsRes.recordset || existsRes.recordset.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: `Employee with ID "${emp.id}" not found.`,
+        });
+      }
+    }
+
     const guidId = toGuid(emp.id);
     const roleGuid = toGuidOrNull(emp.roleId);
-    await executeSqlWithAutoMigration(
-      pool,
-      () =>
-        pool.request()
-          .input('id', guidId)
-          .input('rawId', emp.id || '')
-          .input('brand', emp.brand || 'Device Doctor India')
-          .input('name', emp.name)
-          .input('role_id', roleGuid)
-          .input('email', emp.email || '')
-          .input('status', emp.status || 'Active')
-          .input('joining_date', emp.joiningDate || '')
-          .input('cost_of_employee', emp.costOfEmployee || 0)
-          .input('employee_type', emp.employeeType || 'Salary Basis')
-          .input('comes_under_tds', emp.comesUnderTds || 'No')
-          .input('notes', emp.notes || '')
-          .input('created_at', emp.createdAt)
-          .input('updated_at', emp.updatedAt)
-          .query(`
-            IF EXISTS (SELECT 1 FROM employees WHERE id = @id OR (employee_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE employees SET brand=@brand, name=@name, employee_name=@name, role_id=@role_id, email=@email, status=@status,
-                                  joining_date=@joining_date, cost_of_employee=@cost_of_employee,
-                                  employee_type=@employee_type, comes_under_tds=@comes_under_tds, notes=@notes, updated_at=@updated_at,
-                                  employee_id_code=@rawId
-              WHERE id = @id OR (employee_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
-            ELSE
+
+    if (isPost) {
+      await executeSqlWithAutoMigration(
+        pool,
+        () =>
+          pool.request()
+            .input('id', guidId)
+            .input('rawId', emp.id || '')
+            .input('brand', emp.brand || 'Device Doctor India')
+            .input('name', emp.name)
+            .input('role_id', roleGuid)
+            .input('email', emp.email || '')
+            .input('status', emp.status || 'Active')
+            .input('joining_date', emp.joiningDate || '')
+            .input('cost_of_employee', emp.costOfEmployee || 0)
+            .input('employee_type', emp.employeeType || 'Salary Basis')
+            .input('comes_under_tds', emp.comesUnderTds || 'No')
+            .input('notes', emp.notes || '')
+            .input('created_at', emp.createdAt)
+            .input('updated_at', emp.updatedAt)
+            .query(`
               INSERT INTO employees (id, employee_id_code, brand, name, employee_name, role_id, email, status, joining_date, cost_of_employee, employee_type, comes_under_tds, notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @name, @name, @role_id, @email, @status, @joining_date, @cost_of_employee, @employee_type, @comes_under_tds, @notes, @created_at, @updated_at)
-          `),
-      'employees'
-    );
+            `),
+        'employees'
+      );
+    } else {
+      await executeSqlWithAutoMigration(
+        pool,
+        () =>
+          pool.request()
+            .input('id', guidId)
+            .input('rawId', emp.id || '')
+            .input('brand', emp.brand || 'Device Doctor India')
+            .input('name', emp.name)
+            .input('role_id', roleGuid)
+            .input('email', emp.email || '')
+            .input('status', emp.status || 'Active')
+            .input('joining_date', emp.joiningDate || '')
+            .input('cost_of_employee', emp.costOfEmployee || 0)
+            .input('employee_type', emp.employeeType || 'Salary Basis')
+            .input('comes_under_tds', emp.comesUnderTds || 'No')
+            .input('notes', emp.notes || '')
+            .input('updated_at', emp.updatedAt)
+            .query(`
+              UPDATE employees SET
+                brand = ISNULL(@brand, brand),
+                name = ISNULL(NULLIF(@name, ''), name),
+                employee_name = ISNULL(NULLIF(@name, ''), employee_name),
+                role_id = COALESCE(@role_id, role_id),
+                email = COALESCE(@email, email),
+                status = ISNULL(NULLIF(@status, ''), status),
+                joining_date = ISNULL(NULLIF(@joining_date, ''), joining_date),
+                cost_of_employee = COALESCE(@cost_of_employee, cost_of_employee),
+                employee_type = ISNULL(NULLIF(@employee_type, ''), employee_type),
+                comes_under_tds = ISNULL(NULLIF(@comes_under_tds, ''), comes_under_tds),
+                notes = COALESCE(@notes, notes),
+                updated_at = @updated_at,
+                employee_id_code = @rawId
+              WHERE id = @id OR (employee_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+            `),
+        'employees'
+      );
+    }
+
     mockStore.saveEmployee(emp);
     return res.json({ success: true, employee: emp });
   } catch (err) {

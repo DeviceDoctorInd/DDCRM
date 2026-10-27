@@ -617,9 +617,11 @@ class StorageService {
     return this.apiCall<Employee[]>('/api/employees');
   }
 
-  public async saveEmployee(emp: Employee): Promise<{ success: boolean; employee?: Employee; error?: string }> {
+  public async saveEmployee(emp: Employee, isUpdate: boolean = false): Promise<{ success: boolean; employee?: Employee; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; employee: Employee }>('/api/employees', 'POST', emp);
+      const endpoint = isUpdate && emp.id ? `/api/employees/${encodeURIComponent(emp.id)}` : '/api/employees';
+      const method = isUpdate && emp.id ? 'PUT' : 'POST';
+      const res = await this.apiCall<{ success: boolean; employee: Employee }>(endpoint, method, emp);
       this.notifyListeners();
       return { success: true, employee: res.employee };
     } catch (err: unknown) {
