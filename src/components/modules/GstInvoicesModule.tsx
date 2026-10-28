@@ -36,6 +36,8 @@ export const GstInvoicesModule: React.FC = () => {
     brandPrefix,
     refreshGstInvoices,
     syncGstInvoicesFromPayments,
+    gstInvoiceError,
+    isGstInvoicesLoading,
   } = useCrm();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -366,15 +368,41 @@ export const GstInvoicesModule: React.FC = () => {
           <button
             type="button"
             onClick={handleManualSync}
-            disabled={isSyncing}
+            disabled={isSyncing || isGstInvoicesLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-800 active:bg-black disabled:opacity-50 text-xs font-semibold tracking-tight transition-colors shadow-xs"
             title="Re-synchronize all GST payments from the Payments module into the GST Ledger"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing || isGstInvoicesLoading ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Syncing...' : 'Sync Payments Now'}</span>
           </button>
         </div>
       </div>
+
+      {/* Database Error Banner (Distinguishing failure from empty result) */}
+      {gstInvoiceError && (
+        <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-200 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+            <div>
+              <div className="font-semibold text-rose-900 dark:text-rose-100">
+                Azure SQL Database Notice: GST Invoice Fetch Failed
+              </div>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                {gstInvoiceError}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refreshGstInvoices()}
+            disabled={isGstInvoicesLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold tracking-tight transition-colors shadow-xs cursor-pointer shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isGstInvoicesLoading ? 'animate-spin' : ''}`} />
+            <span>Retry Connection</span>
+          </button>
+        </div>
+      )}
 
       {/* GST Invoices Table with ALL 12 COLUMNS */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
@@ -399,7 +427,35 @@ export const GstInvoicesModule: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
-              {filteredInvoices.length === 0 ? (
+              {isGstInvoicesLoading && filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
+                    <RefreshCw className="w-8 h-8 mx-auto mb-2 text-slate-400 animate-spin" />
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Loading GST Invoices...</p>
+                    <p className="text-xs mt-1 text-slate-500">Querying Azure SQL Database ledger...</p>
+                  </td>
+                </tr>
+              ) : gstInvoiceError && filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="py-12 text-center text-rose-500 dark:text-rose-400">
+                    <AlertCircle className="w-8 h-8 mx-auto mb-2 text-rose-500" />
+                    <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">
+                      Azure SQL Database Unavailable or Query Failed
+                    </p>
+                    <p className="text-xs mt-1 text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                      {gstInvoiceError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => refreshGstInvoices()}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black text-white hover:bg-neutral-800 text-xs font-semibold tracking-tight transition-colors shadow-xs"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Retry Fetch</span>
+                    </button>
+                  </td>
+                </tr>
+              ) : filteredInvoices.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-12 text-center text-slate-400">
                     <FileCheck className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
