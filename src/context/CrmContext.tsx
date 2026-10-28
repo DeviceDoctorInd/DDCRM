@@ -161,6 +161,8 @@ interface CrmContextType {
   deleteGstInvoice: (invoiceId: string) => Promise<{ success: boolean; error?: string }>;
   refreshGstInvoices: () => Promise<GstInvoice[]>;
   syncGstInvoicesFromPayments: () => Promise<{ success: boolean; count: number; error?: string }>;
+  gstInvoiceError: string | null;
+  isGstInvoicesLoading: boolean;
 
   // Users & RBAC
   users: AppUser[];
@@ -235,6 +237,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [rawExpenseCategories, setRawExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [rawExpenses, setRawExpenses] = useState<Expense[]>([]);
   const [rawGstInvoices, setRawGstInvoices] = useState<GstInvoice[]>([]);
+  const [gstInvoiceError, setGstInvoiceError] = useState<string | null>(null);
+  const [isGstInvoicesLoading, setIsGstInvoicesLoading] = useState<boolean>(false);
   const [rawUsers, setRawUsers] = useState<AppUser[]>([]);
 
   // Authentication State
@@ -419,8 +423,13 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             console.warn('[Fetch Bank Accounts]', err);
             return [] as BankAccount[];
           }),
-          storageService.fetchGstInvoices().catch((err) => {
-            console.warn('[Fetch GST Invoices]', err);
+          storageService.fetchGstInvoices().then((res) => {
+            setGstInvoiceError(null);
+            return res;
+          }).catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn('[Fetch GST Invoices]', msg);
+            setGstInvoiceError(msg);
             return [] as GstInvoice[];
           }),
           storageService.fetchRoles().catch((err) => {
@@ -1679,15 +1688,21 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const refreshGstInvoicesAction = async (): Promise<GstInvoice[]> => {
+    setIsGstInvoicesLoading(true);
     try {
       const invoices = await storageService.fetchGstInvoices();
       if (Array.isArray(invoices)) {
         setRawGstInvoices(invoices);
+        setGstInvoiceError(null);
       }
       return invoices;
-    } catch (err) {
-      console.warn('[refreshGstInvoicesAction] Error fetching GST invoices:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[refreshGstInvoicesAction] Error fetching GST invoices:', msg);
+      setGstInvoiceError(msg);
       return rawGstInvoices;
+    } finally {
+      setIsGstInvoicesLoading(false);
     }
   };
 
@@ -1696,25 +1711,32 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     count: number;
     error?: string;
   }> => {
+    setIsGstInvoicesLoading(true);
     try {
       const res = await storageService.syncGstInvoicesFromPayments();
       if (res.success) {
         if (Array.isArray(res.invoices)) {
           setRawGstInvoices(res.invoices);
         }
+        setGstInvoiceError(null);
         showToast(
           `Successfully synchronized ${res.count} GST Invoice record(s) from Payments module.`,
           'success'
         );
         return { success: true, count: res.count };
       } else {
-        showToast(res.error || 'Failed to sync GST invoices.', 'error');
-        return { success: false, count: 0, error: res.error };
+        const errorMsg = res.error || 'Failed to sync GST invoices.';
+        setGstInvoiceError(errorMsg);
+        showToast(errorMsg, 'error');
+        return { success: false, count: 0, error: errorMsg };
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      setGstInvoiceError(msg);
       showToast(`Sync error: ${msg}`, 'error');
       return { success: false, count: 0, error: msg };
+    } finally {
+      setIsGstInvoicesLoading(false);
     }
   };
 
@@ -1917,6 +1939,8 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteGstInvoice: deleteGstInvoiceAction,
         refreshGstInvoices: refreshGstInvoicesAction,
         syncGstInvoicesFromPayments: syncGstInvoicesFromPaymentsAction,
+        gstInvoiceError,
+        isGstInvoicesLoading,
         users,
         saveUser: saveUserAction,
         deleteUser: deleteUserAction,

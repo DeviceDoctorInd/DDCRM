@@ -422,7 +422,7 @@ async function executeSqlWithAutoMigration<T>(
           console.warn(`[Azure SQL Auto-Heal] Auto-adding missing column [${colName}] to table [${tableName}]...`);
           const activePool = getPool() || pool;
           await activePool.request().query(`
-            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
+            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}')
             AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
             ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
           `);
@@ -615,7 +615,7 @@ router.post('/db/clear-demo', authenticateToken, async (req: Request, res: Respo
 
     await pool.request().query(`
       IF EXISTS (SELECT * FROM sys.tables WHERE name = 'app_users')
-      DELETE FROM app_users 
+      DELETE FROM app_users
       WHERE LOWER(email) NOT IN ('rathorehemant114@gmail.com', 'devicedoctorindia.in@gmail.com');
     `);
 
@@ -732,26 +732,26 @@ router.get('/clients', authenticateToken, async (req: Request, res: Response) =>
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+        SELECT ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
                ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as client_id,
                ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as client_id_code,
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id,
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as client_name, 
-               ISNULL(CAST(contact_person AS NVARCHAR(255)), '') as contactPerson, 
-               ISNULL(CAST(phone AS NVARCHAR(50)), '') as phone, 
-               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
-               ISNULL(CAST(city AS NVARCHAR(100)), '') as city, 
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as name,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as client_name,
+               ISNULL(CAST(contact_person AS NVARCHAR(255)), '') as contactPerson,
+               ISNULL(CAST(phone AS NVARCHAR(50)), '') as phone,
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email,
+               ISNULL(CAST(city AS NVARCHAR(100)), '') as city,
                ISNULL(CAST(country AS NVARCHAR(100)), '') as country,
-               ISNULL(CAST(gst_number AS NVARCHAR(50)), '') as gstNumber, 
-               ISNULL(CAST(preferred_currency AS NVARCHAR(20)), 'INR') as preferredCurrency, 
+               ISNULL(CAST(gst_number AS NVARCHAR(50)), '') as gstNumber,
+               ISNULL(CAST(preferred_currency AS NVARCHAR(20)), 'INR') as preferredCurrency,
                ISNULL(CAST(client_since AS NVARCHAR(50)), '') as clientSince,
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM clients 
+        FROM clients
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -968,11 +968,11 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
       .input('id', guidId)
       .input('rawId', id)
       .query(`
-        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id, 
+        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(client_name AS NVARCHAR(255)), '')) as client_name
-        FROM clients 
+        FROM clients
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId
       `);
 
@@ -990,7 +990,7 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
         .input('rawId', id)
         .input('clientName', existing.client_name || '')
         .query(`
-          SELECT 
+          SELECT
             (SELECT COUNT(1) FROM projects WHERE client_id = @id OR client_id = @rawId OR client_name = @clientName) as projectCount,
             (SELECT COUNT(1) FROM payments WHERE client_id = @id OR client_id = @rawId OR client_name = @clientName) as paymentCount
         `);
@@ -1012,7 +1012,7 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM clients 
+          DELETE FROM clients
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR client_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -1049,14 +1049,14 @@ router.get('/categories', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
-               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
-        FROM service_categories 
+        SELECT ISNULL(NULLIF(CAST(category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name,
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM service_categories
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -1107,7 +1107,7 @@ async function handleSaveCategoryRoute(req: Request, res: Response) {
           .input('updated_at', cat.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM service_categories WHERE id = @id OR (category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR CAST(id AS NVARCHAR(100)) = @rawId)
-              UPDATE service_categories SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, category_id_code=@rawId 
+              UPDATE service_categories SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, category_id_code=@rawId
               WHERE id = @id OR (category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR CAST(id AS NVARCHAR(100)) = @rawId
             ELSE
               INSERT INTO service_categories (id, category_id_code, brand, name, category_name, description, status, created_at, updated_at)
@@ -1164,7 +1164,7 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
                      ISNULL(CAST(category_id_code AS NVARCHAR(150)), '') as category_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name
-        FROM service_categories 
+        FROM service_categories
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR category_id_code = @rawId
       `);
 
@@ -1182,8 +1182,8 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('catName', existing.name || '')
         .query(`
-          SELECT COUNT(1) as srvCount 
-          FROM services 
+          SELECT COUNT(1) as srvCount
+          FROM services
           WHERE category_id = @id OR category_id = @rawId OR category_name = @catName
         `);
       const srvCount = Number(depRes.recordset?.[0]?.srvCount || 0);
@@ -1202,7 +1202,7 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM service_categories 
+          DELETE FROM service_categories
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR category_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -1239,17 +1239,17 @@ router.get('/services', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT 
-          ISNULL(NULLIF(CAST(s.service_id_code AS NVARCHAR(150)), ''), CAST(s.id AS NVARCHAR(150))) AS id, 
-          ISNULL(CAST(s.brand AS NVARCHAR(100)), 'Device Doctor India') AS brand, 
-          ISNULL(CAST(s.name AS NVARCHAR(255)), ISNULL(CAST(s.service_name AS NVARCHAR(255)), '')) AS name, 
-          ISNULL(NULLIF(CAST(c.category_id_code AS NVARCHAR(150)), ''), ISNULL(NULLIF(CAST(s.category_id AS NVARCHAR(100)), ''), '')) AS categoryId, 
-          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS categoryName, 
-          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS category_name, 
-          ISNULL(CAST(s.description AS NVARCHAR(MAX)), '') AS description, 
-          ISNULL(CAST(s.status AS NVARCHAR(50)), 'Active') AS status, 
-          ISNULL(CAST(s.created_at AS NVARCHAR(50)), '') AS createdAt, 
-          ISNULL(CAST(s.updated_at AS NVARCHAR(50)), ISNULL(CAST(s.created_at AS NVARCHAR(50)), '')) AS updatedAt 
+        SELECT
+          ISNULL(NULLIF(CAST(s.service_id_code AS NVARCHAR(150)), ''), CAST(s.id AS NVARCHAR(150))) AS id,
+          ISNULL(CAST(s.brand AS NVARCHAR(100)), 'Device Doctor India') AS brand,
+          ISNULL(CAST(s.name AS NVARCHAR(255)), ISNULL(CAST(s.service_name AS NVARCHAR(255)), '')) AS name,
+          ISNULL(NULLIF(CAST(c.category_id_code AS NVARCHAR(150)), ''), ISNULL(NULLIF(CAST(s.category_id AS NVARCHAR(100)), ''), '')) AS categoryId,
+          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS categoryName,
+          ISNULL(NULLIF(CAST(c.name AS NVARCHAR(255)), ''), ISNULL(NULLIF(CAST(c.category_name AS NVARCHAR(255)), ''), '')) AS category_name,
+          ISNULL(CAST(s.description AS NVARCHAR(MAX)), '') AS description,
+          ISNULL(CAST(s.status AS NVARCHAR(50)), 'Active') AS status,
+          ISNULL(CAST(s.created_at AS NVARCHAR(50)), '') AS createdAt,
+          ISNULL(CAST(s.updated_at AS NVARCHAR(50)), ISNULL(CAST(s.created_at AS NVARCHAR(50)), '')) AS updatedAt
         FROM services s
         LEFT JOIN service_categories c ON (
           CAST(s.category_id AS NVARCHAR(150)) = CAST(c.id AS NVARCHAR(150))
@@ -1324,7 +1324,7 @@ async function handleSaveServiceRoute(req: Request, res: Response) {
           .input('updated_at', srv.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM services WHERE id = @id OR (service_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE services SET brand=@brand, name=@name, service_name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at, service_id_code=@rawId 
+              UPDATE services SET brand=@brand, name=@name, service_name=@name, category_id=@category_id, description=@description, status=@status, updated_at=@updated_at, service_id_code=@rawId
               WHERE id = @id OR (service_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO services (id, service_id_code, brand, name, service_name, category_id, description, status, created_at, updated_at)
@@ -1381,7 +1381,7 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
                      ISNULL(CAST(service_id_code AS NVARCHAR(150)), '') as service_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(service_name AS NVARCHAR(255)), '')) as name
-        FROM services 
+        FROM services
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR service_id_code = @rawId
       `);
 
@@ -1399,8 +1399,8 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('srvName', existing.name || '')
         .query(`
-          SELECT COUNT(1) as projCount 
-          FROM projects 
+          SELECT COUNT(1) as projCount
+          FROM projects
           WHERE service_id = @id OR service_id = @rawId OR service_name = @srvName
         `);
       const projCount = Number(depRes.recordset?.[0]?.projCount || 0);
@@ -1419,7 +1419,7 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM services 
+          DELETE FROM services
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR service_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -1520,35 +1520,35 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+        SELECT ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
                ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id,
                ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id_code,
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(client_id AS NVARCHAR(150)), '') as clientId, 
-               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(client_id AS NVARCHAR(150)), '') as clientId,
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
                ISNULL(CAST(service_id AS NVARCHAR(150)), '') as serviceId,
-               ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposalDate, 
-               ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contractDate, 
+               ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposalDate,
+               ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contractDate,
                ISNULL(CAST(start_date AS NVARCHAR(50)), '') as startDate,
-               ISNULL(committed_days, 30) as committedDays, 
+               ISNULL(committed_days, 30) as committedDays,
                ISNULL(CAST(committed_end_date AS NVARCHAR(50)), '') as committedEndDate,
-               ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actualEndDate, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status, 
-               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actualEndDate,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status,
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode,
                ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
-               ISNULL(contract, 0) as contract, 
-               ISNULL(exchange_rate, 1) as exchangeRate, 
+               ISNULL(contract, 0) as contract,
+               ISNULL(exchange_rate, 1) as exchangeRate,
                ISNULL(contract_value, 0) as contractValue,
-               ISNULL(total_received, 0) as totalReceived, 
-               ISNULL(balance, 0) as balance, 
+               ISNULL(total_received, 0) as totalReceived,
+               ISNULL(balance, 0) as balance,
                ISNULL(CAST(project_manager AS NVARCHAR(255)), '') as projectManager,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument,
                ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contractDocument,
-               ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as paymentPhases, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as paymentPhases,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM projects 
+        FROM projects
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -1874,7 +1874,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
                      ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(title AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as title
-        FROM projects 
+        FROM projects
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId
       `);
 
@@ -1891,7 +1891,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
         .input('id', guidId)
         .input('rawId', id)
         .query(`
-          SELECT 
+          SELECT
             (SELECT COUNT(1) FROM payments WHERE project_id = @id OR project_id = @rawId) as payCount,
             (SELECT COUNT(1) FROM assignments WHERE project_id = @id OR project_id = @rawId) as asnCount
         `);
@@ -1913,7 +1913,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM projects 
+          DELETE FROM projects
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -1954,12 +1954,12 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
             .input('id', guidId)
             .input('rawId', id)
             .query(`
-              SELECT CAST(id AS NVARCHAR(150)) as id, 
-                     ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument, 
+              SELECT CAST(id AS NVARCHAR(150)) as id,
+                     ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposalDocument,
                      ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contractDocument,
                      client_name as clientName,
                      brand
-              FROM projects 
+              FROM projects
               WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
             `),
         'projects'
@@ -2195,29 +2195,29 @@ router.get('/payments', authenticateToken, async (req: Request, res: Response) =
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+        SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
                ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode,
                ISNULL(CAST(bank_account_id AS NVARCHAR(50)), '') as bankAccountId,
                ISNULL(CAST(bank_account_name AS NVARCHAR(255)), '') as bankAccountName,
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
                ISNULL(CAST(due_date AS NVARCHAR(50)), '') as dueDate,
-               ISNULL(amount_received, 0) as amountReceived, 
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
+               ISNULL(amount_received, 0) as amountReceived,
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
                ISNULL(exchange_rate, 1) as exchangeRate,
-               ISNULL(amount_inr, 0) as amountINR, 
-               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr, 
+               ISNULL(amount_inr, 0) as amountINR,
+               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr,
                ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Received') as paymentStatus,
-               ISNULL(days_overdue, 0) as daysOverdue, 
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
+               ISNULL(days_overdue, 0) as daysOverdue,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
                ISNULL(CAST(payment_proof AS NVARCHAR(MAX)), '') as paymentProof,
-               ISNULL(CAST(payment_proof_notes AS NVARCHAR(MAX)), '') as paymentProofNotes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(payment_proof_notes AS NVARCHAR(MAX)), '') as paymentProofNotes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM payments 
+        FROM payments
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -2324,7 +2324,8 @@ export async function syncPaymentToGstInvoiceSql(
   pool: sql.ConnectionPool | null,
   payment: Payment
 ): Promise<GstInvoice | null> {
-  if (payment.paymentMode !== 'GST Invoice') {
+  const rawMode = (payment.paymentMode || (payment as any).payment_mode || '').trim();
+  if (rawMode.toLowerCase() !== 'gst invoice') {
     return null;
   }
 
@@ -2352,14 +2353,18 @@ export async function syncPaymentToGstInvoiceSql(
     // If client details are missing, lookup from projects table
     if ((!clientName || !clientId) && projectId) {
       try {
+        const projGuid = toGuidOrNull(projectId);
         const projRes = await pool.request()
           .input('projectId', projectId)
+          .input('projGuid', projGuid)
           .query(`
-            SELECT TOP 1 
+            SELECT TOP 1
               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId
             FROM projects
-            WHERE CAST(id AS NVARCHAR(150)) = @projectId OR CAST(project_id_code AS NVARCHAR(150)) = @projectId
+            WHERE CAST(id AS NVARCHAR(150)) = @projectId
+               OR CAST(project_id_code AS NVARCHAR(150)) = @projectId
+               OR (@projGuid IS NOT NULL AND CAST(id AS NVARCHAR(150)) = @projGuid)
           `);
         if (projRes.recordset && projRes.recordset.length > 0) {
           if (!clientName) clientName = projRes.recordset[0].clientName;
@@ -2370,21 +2375,48 @@ export async function syncPaymentToGstInvoiceSql(
       }
     }
 
-    const payId = payment.id || '';
+    const payId = (payment.id || '').trim();
+    const payGuid = toGuidOrNull(payId);
 
     // Check if GST invoice already exists for this payment_id
-    const checkRes = await pool.request()
-      .input('paymentId', payId)
-      .query(`
-        SELECT TOP 1 
-          CAST(id AS NVARCHAR(100)) as id,
-          ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
-          ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
-          ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
-          ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
-        FROM gst_invoices
-        WHERE payment_id = @paymentId
-      `);
+    let checkRes;
+    try {
+      checkRes = await pool.request()
+        .input('paymentId', payId)
+        .input('paymentGuid', payGuid)
+        .query(`
+          SELECT TOP 1
+            CAST(id AS NVARCHAR(100)) as id,
+            ISNULL(CAST(invoice_id_code AS NVARCHAR(100)), '') as invoiceIdCode,
+            ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+            ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+            ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+            ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
+          FROM gst_invoices
+          WHERE CAST(payment_id AS NVARCHAR(150)) = @paymentId
+             OR (@paymentGuid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @paymentGuid)
+        `);
+    } catch (checkErr: any) {
+      const msg = String(checkErr?.message || checkErr);
+      if (msg.includes('uniqueidentifier') || msg.includes('Conversion failed')) {
+        console.warn('[syncPaymentToGstInvoiceSql] Retrying check with GUID bindings...');
+        checkRes = await pool.request()
+          .input('paymentId', payGuid || toGuid(payId))
+          .query(`
+            SELECT TOP 1
+              CAST(id AS NVARCHAR(100)) as id,
+              ISNULL(CAST(invoice_id_code AS NVARCHAR(100)), '') as invoiceIdCode,
+              ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+              ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+              ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+              ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
+            FROM gst_invoices
+            WHERE CAST(payment_id AS NVARCHAR(150)) = CAST(@paymentId AS NVARCHAR(150))
+          `);
+      } else {
+        throw checkErr;
+      }
+    }
 
     const existingRow = checkRes.recordset?.[0];
     const now = new Date().toISOString();
@@ -2393,32 +2425,54 @@ export async function syncPaymentToGstInvoiceSql(
       const finalInvoiceNumber = (existingRow.invoiceNumber && existingRow.invoiceNumber.trim() !== '')
         ? existingRow.invoiceNumber
         : defaultInvoiceNum;
+      const rawGstId = existingRow.invoiceIdCode || (existingRow as any).invoice_id_code || existingRow.id;
+      const guidGstId = toGuid(existingRow.id);
 
-      await pool.request()
-        .input('id', existingRow.id)
-        .input('brand', brand)
-        .input('payment_id', payId)
-        .input('project_id', projectId)
-        .input('client_id', clientId)
-        .input('client_name', clientName || 'Direct Client')
-        .input('payment_date', paymentDate)
-        .input('amount_received', amountReceived)
-        .input('currency', currency)
-        .input('amount_inr', amountINR)
-        .input('gst_amount_inr', gstAmountINR)
-        .input('invoice_number', finalInvoiceNumber)
-        .input('updated_at', now)
-        .query(`
-          UPDATE gst_invoices
-          SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-              payment_date=@payment_date, amount_received=@amount_received, currency=@currency,
-              amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr, invoice_number=@invoice_number,
-              updated_at=@updated_at
-          WHERE id = @id OR payment_id = @payment_id
-        `);
+      await executeSqlWithAutoMigration(
+        pool,
+        () =>
+          pool.request()
+            .input('id', guidGstId)
+            .input('rawId', rawGstId)
+            .input('brand', brand)
+            .input('payment_id', payId)
+            .input('payment_guid', payGuid)
+            .input('project_id', projectId)
+            .input('client_id', clientId)
+            .input('client_name', clientName || 'Direct Client')
+            .input('payment_date', paymentDate)
+            .input('amount_received', amountReceived)
+            .input('currency', currency)
+            .input('amount_inr', amountINR)
+            .input('gst_amount_inr', gstAmountINR)
+            .input('invoice_number', finalInvoiceNumber)
+            .input('updated_at', now)
+            .query(`
+              UPDATE gst_invoices
+              SET brand=@brand,
+                  payment_id=@payment_id,
+                  project_id=@project_id,
+                  client_id=@client_id,
+                  client_name=@client_name,
+                  payment_date=@payment_date,
+                  amount_received=@amount_received,
+                  currency=@currency,
+                  amount_inr=@amount_inr,
+                  gst_amount_inr=@gst_amount_inr,
+                  invoice_number=@invoice_number,
+                  invoice_id_code = ISNULL(NULLIF(invoice_id_code, ''), @rawId),
+                  updated_at=@updated_at
+              WHERE CAST(id AS NVARCHAR(150)) = @id
+                 OR CAST(id AS NVARCHAR(150)) = @rawId
+                 OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+                 OR CAST(payment_id AS NVARCHAR(150)) = @payment_id
+                 OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
+            `),
+        'gst_invoices'
+      );
 
       const synced: GstInvoice = {
-        id: existingRow.id,
+        id: rawGstId,
         brand: brand as any,
         paymentId: payId,
         projectId,
@@ -2446,10 +2500,17 @@ export async function syncPaymentToGstInvoiceSql(
       try {
         const seqRes = await pool.request()
           .input('pattern', pattern)
-          .query(`SELECT CAST(id AS NVARCHAR(100)) as id FROM gst_invoices WHERE id LIKE @pattern`);
+          .query(`
+            SELECT CAST(id AS NVARCHAR(100)) as id,
+                   ISNULL(CAST(invoice_id_code AS NVARCHAR(100)), '') as invoice_id_code
+            FROM gst_invoices
+            WHERE CAST(id AS NVARCHAR(100)) LIKE @pattern
+               OR (invoice_id_code IS NOT NULL AND invoice_id_code LIKE @pattern)
+          `);
         const rows = seqRes.recordset || [];
         for (const row of rows) {
-          const match = (row.id || '').match(new RegExp(`^${prefix}-GST-(\\d+)`, 'i'));
+          const candidateId = row.invoice_id_code || row.id || '';
+          const match = candidateId.match(new RegExp(`^${prefix}-GST-(\\d+)`, 'i'));
           if (match) {
             const num = parseInt(match[1], 10);
             if (num >= nextSeq) nextSeq = num + 1;
@@ -2465,53 +2526,118 @@ export async function syncPaymentToGstInvoiceSql(
       }
 
       const gstId = `${prefix}-GST-${String(nextSeq).padStart(3, '0')}`;
+      const guidGstId = toGuid(gstId);
       const autoNotes = payment.notes
         ? `Auto-synced from Payment ${payId} (GST Invoice Mode). ${payment.notes}`
         : `Auto-synced from Payment ${payId} (GST Invoice Mode)`;
 
-      await pool.request()
-        .input('id', gstId)
-        .input('brand', brand)
-        .input('payment_id', payId)
-        .input('project_id', projectId)
-        .input('client_id', clientId)
-        .input('client_name', clientName || 'Direct Client')
-        .input('payment_date', paymentDate)
-        .input('amount_received', amountReceived)
-        .input('currency', currency)
-        .input('amount_inr', amountINR)
-        .input('gst_amount_inr', gstAmountINR)
-        .input('invoice_number', defaultInvoiceNum)
-        .input('uploaded_to_gst_portal', 'No')
-        .input('gst_portal_upload_date', '')
-        .input('notes', autoNotes)
-        .input('created_at', now)
-        .input('updated_at', now)
-        .query(`
-          IF EXISTS (SELECT 1 FROM gst_invoices WITH (UPDLOCK, HOLDLOCK) WHERE payment_id = @payment_id)
-          BEGIN
-            UPDATE gst_invoices
-            SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                payment_date=@payment_date, amount_received=@amount_received, currency=@currency,
-                amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr, invoice_number=@invoice_number,
-                updated_at=@updated_at
-            WHERE payment_id = @payment_id;
-          END
-          ELSE
-          BEGIN
-            INSERT INTO gst_invoices (
-              id, brand, payment_id, project_id, client_id, client_name,
-              payment_date, amount_received, currency, amount_inr, gst_amount_inr,
-              invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
-              created_at, updated_at
-            ) VALUES (
-              @id, @brand, @payment_id, @project_id, @client_id, @client_name,
-              @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
-              @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
-              @created_at, @updated_at
-            );
-          END
-        `);
+      const upsertSql = `
+        IF EXISTS (
+          SELECT 1 FROM gst_invoices WITH (UPDLOCK, HOLDLOCK)
+          WHERE CAST(payment_id AS NVARCHAR(150)) = @payment_id
+             OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
+             OR CAST(id AS NVARCHAR(150)) = @id
+             OR CAST(id AS NVARCHAR(150)) = @rawId
+             OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+        )
+        BEGIN
+          UPDATE gst_invoices
+          SET brand=@brand,
+              payment_id=@payment_id,
+              project_id=@project_id,
+              client_id=@client_id,
+              client_name=@client_name,
+              payment_date=@payment_date,
+              amount_received=@amount_received,
+              currency=@currency,
+              amount_inr=@amount_inr,
+              gst_amount_inr=@gst_amount_inr,
+              invoice_number=@invoice_number,
+              invoice_id_code = ISNULL(NULLIF(invoice_id_code, ''), @rawId),
+              updated_at=@updated_at
+          WHERE CAST(payment_id AS NVARCHAR(150)) = @payment_id
+             OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
+             OR CAST(id AS NVARCHAR(150)) = @id
+             OR CAST(id AS NVARCHAR(150)) = @rawId
+             OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL);
+        END
+        ELSE
+        BEGIN
+          INSERT INTO gst_invoices (
+            id, invoice_id_code, brand, payment_id, project_id, client_id, client_name,
+            payment_date, amount_received, currency, amount_inr, gst_amount_inr,
+            invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
+            created_at, updated_at
+          ) VALUES (
+            @id, @rawId, @brand, @payment_id, @project_id, @client_id, @client_name,
+            @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
+            @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
+            @created_at, @updated_at
+          );
+        END
+      `;
+
+      try {
+        await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidGstId)
+              .input('rawId', gstId)
+              .input('brand', brand)
+              .input('payment_id', payId)
+              .input('payment_guid', payGuid)
+              .input('project_id', projectId)
+              .input('client_id', clientId)
+              .input('client_name', clientName || 'Direct Client')
+              .input('payment_date', paymentDate)
+              .input('amount_received', amountReceived)
+              .input('currency', currency)
+              .input('amount_inr', amountINR)
+              .input('gst_amount_inr', gstAmountINR)
+              .input('invoice_number', defaultInvoiceNum)
+              .input('uploaded_to_gst_portal', 'No')
+              .input('gst_portal_upload_date', '')
+              .input('notes', autoNotes)
+              .input('created_at', now)
+              .input('updated_at', now)
+              .query(upsertSql),
+          'gst_invoices'
+        );
+      } catch (upsertErr: any) {
+        const msg = String(upsertErr?.message || upsertErr);
+        if (msg.includes('uniqueidentifier') || msg.includes('Conversion failed')) {
+          console.warn('[syncPaymentToGstInvoiceSql] Retrying with GUID parameter bindings due to schema constraint...');
+          await executeSqlWithAutoMigration(
+            pool,
+            () =>
+              pool.request()
+                .input('id', guidGstId)
+                .input('rawId', gstId)
+                .input('brand', brand)
+                .input('payment_id', payGuid || toGuid(payId))
+                .input('payment_guid', payGuid)
+                .input('project_id', toGuidOrNull(projectId))
+                .input('client_id', toGuidOrNull(clientId))
+                .input('client_name', clientName || 'Direct Client')
+                .input('payment_date', paymentDate)
+                .input('amount_received', amountReceived)
+                .input('currency', currency)
+                .input('amount_inr', amountINR)
+                .input('gst_amount_inr', gstAmountINR)
+                .input('invoice_number', defaultInvoiceNum)
+                .input('uploaded_to_gst_portal', 'No')
+                .input('gst_portal_upload_date', '')
+                .input('notes', autoNotes)
+                .input('created_at', now)
+                .input('updated_at', now)
+                .query(upsertSql),
+            'gst_invoices'
+          );
+        } else {
+          throw upsertErr;
+        }
+      }
 
       // Re-fetch persisted row to return the authoritative record from SQL
       let finalInvoice: GstInvoice = {
@@ -2537,11 +2663,24 @@ export async function syncPaymentToGstInvoiceSql(
       try {
         const fetchRes = await pool.request()
           .input('paymentId', payId)
-          .query(`SELECT TOP 1 * FROM gst_invoices WHERE payment_id = @paymentId`);
+          .input('paymentGuid', payGuid)
+          .input('guidId', guidGstId)
+          .input('gstId', gstId)
+          .query(`
+            SELECT TOP 1 * FROM gst_invoices
+            WHERE CAST(payment_id AS NVARCHAR(150)) = @paymentId
+               OR (@paymentGuid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @paymentGuid)
+               OR CAST(id AS NVARCHAR(150)) = @guidId
+               OR (invoice_id_code = @gstId AND @gstId <> '')
+          `);
         const row = fetchRes.recordset?.[0];
         if (row) {
           finalInvoice = {
-            id: row.invoice_id_code || row.id,
+            id: (row.invoice_id_code && row.invoice_id_code.trim() !== '')
+              ? row.invoice_id_code
+              : ((row.invoiceIdCode && row.invoiceIdCode.trim() !== '')
+                  ? row.invoiceIdCode
+                  : (toGuidOrNull(row.id) ? gstId : (row.id || gstId))),
             brand: (row.brand || brand) as any,
             paymentId: payId,
             projectId: row.project_id || projectId,
@@ -2676,8 +2815,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .query(`
             SELECT TOP 1 *
             FROM payments
-            WHERE CAST(id AS NVARCHAR(150)) = @id 
-               OR CAST(id AS NVARCHAR(150)) = @rawId 
+            WHERE CAST(id AS NVARCHAR(150)) = @id
+               OR CAST(id AS NVARCHAR(150)) = @rawId
                OR payment_id_code = @rawId
           `);
         existingPayment = checkRes.recordset?.[0] || null;
@@ -2696,7 +2835,9 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
     const finalBrand = payment.brand || existingPayment?.brand || 'Device Doctor India';
     const finalClientId = payment.clientId || existingPayment?.client_id || clientGuid || '';
     const finalClientName = payment.clientName ?? (existingPayment?.client_name || '');
-    const finalPaymentMode = payment.paymentMode ?? (existingPayment?.payment_mode || 'GST Invoice');
+    const rawMode = (payment.paymentMode ?? (payment as any).payment_mode ?? (existingPayment?.payment_mode || 'GST Invoice')).trim();
+    const isGstInvoiceMode = rawMode.toLowerCase() === 'gst invoice';
+    const finalPaymentMode = isGstInvoiceMode ? 'GST Invoice' : rawMode;
     const finalBankAccountId = payment.bankAccountId ?? (existingPayment?.bank_account_id || '');
     const finalBankAccountName = payment.bankAccountName ?? (existingPayment?.bank_account_name || '');
     const finalPaymentDate = payment.paymentDate ?? (existingPayment?.payment_date || '');
@@ -2704,10 +2845,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
     const finalAmountReceived = payment.amountReceived !== undefined ? payment.amountReceived : (existingPayment?.amount_received ?? 0);
     const finalCurrency = payment.currency ?? (existingPayment?.currency || 'INR');
     const finalExchangeRate = payment.exchangeRate !== undefined ? payment.exchangeRate : (existingPayment?.exchange_rate ?? 1);
-    const finalAmountINR = payment.amountINR !== undefined 
-      ? payment.amountINR 
-      : (payment.amountReceived !== undefined 
-          ? Math.round(finalAmountReceived * finalExchangeRate) 
+    const finalAmountINR = payment.amountINR !== undefined
+      ? payment.amountINR
+      : (payment.amountReceived !== undefined
+          ? Math.round(finalAmountReceived * finalExchangeRate)
           : (existingPayment?.amount_inr ?? 0));
     const finalReferenceUtr = (payment.referenceUtr ?? (existingPayment?.reference_utr || '')).trim();
     const finalPaymentStatus = payment.paymentStatus ?? (existingPayment?.payment_status || 'Received');
@@ -2725,14 +2866,14 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .input('id', guidId)
           .input('rawId', cleanId)
           .query(`
-            SELECT TOP 1 
+            SELECT TOP 1
               CAST(id AS NVARCHAR(150)) as id,
               ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code
             FROM payments
             WHERE LOWER(LTRIM(RTRIM(reference_utr))) = LOWER(LTRIM(RTRIM(@reference_utr)))
               AND NOT (
-                CAST(id AS NVARCHAR(150)) = @id 
-                OR CAST(id AS NVARCHAR(150)) = @rawId 
+                CAST(id AS NVARCHAR(150)) = @id
+                OR CAST(id AS NVARCHAR(150)) = @rawId
                 OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
               )
           `);
@@ -2791,10 +2932,22 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       try {
         syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
           ...payment,
+          id: cleanId || payment.id,
+          brand: finalBrand as any,
           projectId: targetProjectId || '',
+          clientId: finalClientId,
+          clientName: finalClientName,
           paymentMode: finalPaymentMode,
+          paymentDate: finalPaymentDate,
+          dueDate: finalDueDate,
           amountReceived: finalAmountReceived,
+          currency: finalCurrency as any,
+          exchangeRate: finalExchangeRate,
           amountINR: finalAmountINR,
+          referenceUtr: finalReferenceUtr,
+          paymentStatus: finalPaymentStatus as any,
+          daysOverdue: finalDaysOverdue,
+          notes: finalNotes,
         });
         mockStore.savePayment(
           {
@@ -2813,7 +2966,6 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         syncedGstInvoice = null;
         if (!isMockFallbackAllowed()) {
           mockStore.deleteGstInvoiceByPaymentId(cleanId || payment.id);
-          mockStore.deletePayment(cleanId || payment.id);
         }
       }
     } else {
@@ -2873,10 +3025,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         const finalAmountReceived = payment.amountReceived !== undefined ? payment.amountReceived : (existingPayment?.amount_received ?? 0);
         const finalCurrency = payment.currency ?? (existingPayment?.currency || 'INR');
         const finalExchangeRate = payment.exchangeRate !== undefined ? payment.exchangeRate : (existingPayment?.exchange_rate ?? 1);
-        const finalAmountINR = payment.amountINR !== undefined 
-          ? payment.amountINR 
-          : (payment.amountReceived !== undefined 
-              ? Math.round(finalAmountReceived * finalExchangeRate) 
+        const finalAmountINR = payment.amountINR !== undefined
+          ? payment.amountINR
+          : (payment.amountReceived !== undefined
+              ? Math.round(finalAmountReceived * finalExchangeRate)
               : (existingPayment?.amount_inr ?? 0));
         const finalReferenceUtr = (payment.referenceUtr ?? (existingPayment?.reference_utr || '')).trim();
         const finalPaymentStatus = payment.paymentStatus ?? (existingPayment?.payment_status || 'Received');
@@ -2927,10 +3079,22 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           try {
             syncedGstInvoice = await syncPaymentToGstInvoiceSql(pool, {
               ...payment,
+              id: cleanId || payment.id,
+              brand: finalBrand as any,
               projectId: targetProjectId || '',
+              clientId: finalClientId,
+              clientName: finalClientName,
               paymentMode: finalPaymentMode,
+              paymentDate: finalPaymentDate,
+              dueDate: finalDueDate,
               amountReceived: finalAmountReceived,
+              currency: finalCurrency as any,
+              exchangeRate: finalExchangeRate,
               amountINR: finalAmountINR,
+              referenceUtr: finalReferenceUtr,
+              paymentStatus: finalPaymentStatus as any,
+              daysOverdue: finalDaysOverdue,
+              notes: finalNotes,
             });
             mockStore.savePayment(
               {
@@ -2949,7 +3113,6 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
             syncedGstInvoice = null;
             if (!isMockFallbackAllowed()) {
               mockStore.deleteGstInvoiceByPaymentId(cleanId || payment.id);
-              mockStore.deletePayment(cleanId || payment.id);
             }
           }
         } else {
@@ -3002,7 +3165,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 /**
  * Constructs the atomic SQL transaction query for persisting payment vouchers
  * and safely recalculating linked project financials in Azure SQL.
- * 
+ *
  * Uses explicit string CAST on all uniqueidentifier/nvarchar comparisons to prevent
  * SQL Server "Conversion failed when converting from a character string to uniqueidentifier" errors.
  */
@@ -3013,48 +3176,48 @@ export function buildPaymentSaveQuery(): string {
       BEGIN TRANSACTION;
         -- 1. Insert or Update Payment Voucher
         IF EXISTS (
-          SELECT 1 FROM payments 
-          WHERE CAST(id AS NVARCHAR(150)) = @id 
-             OR CAST(id AS NVARCHAR(150)) = @rawId 
+          SELECT 1 FROM payments
+          WHERE CAST(id AS NVARCHAR(150)) = @id
+             OR CAST(id AS NVARCHAR(150)) = @rawId
              OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
         )
-          UPDATE payments SET 
-            brand = @brand, 
-            project_id = @project_id, 
-            client_id = @client_id, 
+          UPDATE payments SET
+            brand = @brand,
+            project_id = @project_id,
+            client_id = @client_id,
             client_name = @client_name,
-            payment_mode = @payment_mode, 
-            bank_account_id = @bank_account_id, 
+            payment_mode = @payment_mode,
+            bank_account_id = @bank_account_id,
             bank_account_name = @bank_account_name,
-            payment_date = @payment_date, 
+            payment_date = @payment_date,
             due_date = @due_date,
-            amount_received = @amount_received, 
-            currency = @currency, 
+            amount_received = @amount_received,
+            currency = @currency,
             exchange_rate = @exchange_rate,
-            amount_inr = @amount_inr, 
-            reference_utr = @reference_utr, 
+            amount_inr = @amount_inr,
+            reference_utr = @reference_utr,
             payment_status = @payment_status,
-            days_overdue = @days_overdue, 
-            notes = @notes, 
+            days_overdue = @days_overdue,
+            notes = @notes,
             payment_proof = @payment_proof,
-            payment_proof_notes = @payment_proof_notes, 
+            payment_proof_notes = @payment_proof_notes,
             updated_at = @updated_at,
             payment_id_code = @rawId
-          WHERE CAST(id AS NVARCHAR(150)) = @id 
-             OR CAST(id AS NVARCHAR(150)) = @rawId 
+          WHERE CAST(id AS NVARCHAR(150)) = @id
+             OR CAST(id AS NVARCHAR(150)) = @rawId
              OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL);
         ELSE
           INSERT INTO payments (
-            id, payment_id_code, brand, project_id, client_id, client_name, 
-            payment_mode, bank_account_id, bank_account_name, payment_date, due_date, 
-            amount_received, currency, exchange_rate, amount_inr, reference_utr, 
-            payment_status, days_overdue, notes, payment_proof, payment_proof_notes, 
+            id, payment_id_code, brand, project_id, client_id, client_name,
+            payment_mode, bank_account_id, bank_account_name, payment_date, due_date,
+            amount_received, currency, exchange_rate, amount_inr, reference_utr,
+            payment_status, days_overdue, notes, payment_proof, payment_proof_notes,
             created_at, updated_at
           ) VALUES (
-            @id, @rawId, @brand, @project_id, @client_id, @client_name, 
-            @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date, 
-            @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr, 
-            @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes, 
+            @id, @rawId, @brand, @project_id, @client_id, @client_name,
+            @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date,
+            @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr,
+            @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes,
             @created_at, @updated_at
           );
 
@@ -3062,10 +3225,10 @@ export function buildPaymentSaveQuery(): string {
         IF @target_project_id IS NOT NULL AND @target_project_id <> ''
         BEGIN
           UPDATE p
-          SET 
+          SET
             total_received = ISNULL((
               SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-              FROM payments 
+              FROM payments
               WHERE (
                 CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3076,7 +3239,7 @@ export function buildPaymentSaveQuery(): string {
             ), 0),
             balance = ISNULL(p.contract_value, 0) - ISNULL((
               SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-              FROM payments 
+              FROM payments
               WHERE (
                 CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3087,8 +3250,8 @@ export function buildPaymentSaveQuery(): string {
             ), 0),
             updated_at = @updated_at
           FROM projects p
-          WHERE CAST(p.id AS NVARCHAR(150)) = @target_project_id 
-             OR CAST(p.project_id_code AS NVARCHAR(150)) = @target_project_id 
+          WHERE CAST(p.id AS NVARCHAR(150)) = @target_project_id
+             OR CAST(p.project_id_code AS NVARCHAR(150)) = @target_project_id
              OR (@target_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @target_project_guid);
         END;
 
@@ -3096,10 +3259,10 @@ export function buildPaymentSaveQuery(): string {
         IF @old_project_id IS NOT NULL AND @old_project_id <> '' AND @old_project_id <> @target_project_id
         BEGIN
           UPDATE p
-          SET 
+          SET
             total_received = ISNULL((
               SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-              FROM payments 
+              FROM payments
               WHERE (
                 CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3110,7 +3273,7 @@ export function buildPaymentSaveQuery(): string {
             ), 0),
             balance = ISNULL(p.contract_value, 0) - ISNULL((
               SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-              FROM payments 
+              FROM payments
               WHERE (
                 CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3121,8 +3284,8 @@ export function buildPaymentSaveQuery(): string {
             ), 0),
             updated_at = @updated_at
           FROM projects p
-          WHERE CAST(p.id AS NVARCHAR(150)) = @old_project_id 
-             OR CAST(p.project_id_code AS NVARCHAR(150)) = @old_project_id 
+          WHERE CAST(p.id AS NVARCHAR(150)) = @old_project_id
+             OR CAST(p.project_id_code AS NVARCHAR(150)) = @old_project_id
              OR (@old_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @old_project_guid);
         END;
       COMMIT TRANSACTION;
@@ -3172,7 +3335,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
                      ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(project_id AS NVARCHAR(150)), '') as project_id
-        FROM payments 
+        FROM payments
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId
       `);
 
@@ -3202,23 +3365,23 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
           BEGIN TRY
             BEGIN TRANSACTION;
               -- 1. Delete payment voucher
-              DELETE FROM payments 
+              DELETE FROM payments
               WHERE (CAST(id AS NVARCHAR(150)) = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
                 AND (@brandFilter IS NULL OR brand = @brandFilter);
-              
+
               -- 2. Delete unfiled linked GST invoices
-              DELETE FROM gst_invoices 
-              WHERE (CAST(payment_id AS NVARCHAR(150)) = @id OR CAST(payment_id AS NVARCHAR(150)) = @rawId) 
+              DELETE FROM gst_invoices
+              WHERE (CAST(payment_id AS NVARCHAR(150)) = @id OR CAST(payment_id AS NVARCHAR(150)) = @rawId)
                 AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
 
               -- 3. Recalculate linked project financials if project_id exists
               IF @linkedProjectId IS NOT NULL AND @linkedProjectId <> ''
               BEGIN
                 UPDATE p
-                SET 
+                SET
                   total_received = ISNULL((
                     SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-                    FROM payments 
+                    FROM payments
                     WHERE (
                       CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                       OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3229,7 +3392,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
                   ), 0),
                   balance = ISNULL(p.contract_value, 0) - ISNULL((
                     SELECT SUM(ISNULL(amount_inr, ISNULL(amount_received, 0)))
-                    FROM payments 
+                    FROM payments
                     WHERE (
                       CAST(project_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
                       OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
@@ -3240,8 +3403,8 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
                   ), 0),
                   updated_at = @now
                 FROM projects p
-                WHERE CAST(p.id AS NVARCHAR(150)) = @linkedProjectId 
-                   OR CAST(p.project_id_code AS NVARCHAR(150)) = @linkedProjectId 
+                WHERE CAST(p.id AS NVARCHAR(150)) = @linkedProjectId
+                   OR CAST(p.project_id_code AS NVARCHAR(150)) = @linkedProjectId
                    OR (@linkedProjectGuid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @linkedProjectGuid);
               END;
             COMMIT TRANSACTION;
@@ -3288,20 +3451,20 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(account_name AS NVARCHAR(255)), '') as accountName, 
-               ISNULL(CAST(bank_name AS NVARCHAR(255)), '') as bankName, 
+        SELECT ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(account_name AS NVARCHAR(255)), '') as accountName,
+               ISNULL(CAST(bank_name AS NVARCHAR(255)), '') as bankName,
                ISNULL(CAST(account_number AS NVARCHAR(150)), '') as accountNumber,
-               ISNULL(CAST(ifsc_code AS NVARCHAR(50)), '') as ifscCode, 
-               ISNULL(CAST(branch_name AS NVARCHAR(100)), '') as branchName, 
+               ISNULL(CAST(ifsc_code AS NVARCHAR(50)), '') as ifscCode,
+               ISNULL(CAST(branch_name AS NVARCHAR(100)), '') as branchName,
                ISNULL(CAST(upi_id AS NVARCHAR(100)), '') as upiId,
                ISNULL(CAST(account_type AS NVARCHAR(50)), 'Current') as accountType,
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM bank_accounts 
+        FROM bank_accounts
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -3482,7 +3645,7 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
           .input('updated_at', account.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM bank_accounts WHERE id = @id OR (account_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE bank_accounts 
+              UPDATE bank_accounts
               SET brand=@brand, account_name=@account_name, bank_name=@bank_name, account_number=@account_number,
                   ifsc_code=@ifsc_code, branch_name=@branch_name, upi_id=@upi_id, account_type=@account_type,
                   status=@status, notes=@notes, updated_at=@updated_at, account_id_code=@rawId
@@ -3542,7 +3705,7 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
                      ISNULL(CAST(account_id_code AS NVARCHAR(150)), '') as account_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(account_name AS NVARCHAR(255)), '') as account_name
-        FROM bank_accounts 
+        FROM bank_accounts
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR account_id_code = @rawId
       `);
 
@@ -3560,8 +3723,8 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
         .input('rawId', id)
         .input('accName', existing.account_name || '')
         .query(`
-          SELECT COUNT(1) as payCount 
-          FROM payments 
+          SELECT COUNT(1) as payCount
+          FROM payments
           WHERE bank_account = @rawId OR bank_account = @accName OR bank_account = CAST(@id AS NVARCHAR(150)) OR bank_account_id = @id OR bank_account_id = @rawId
         `);
       const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
@@ -3580,7 +3743,7 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM bank_accounts 
+          DELETE FROM bank_accounts
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR account_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -3615,7 +3778,7 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
     try {
       const unsyncedRes = await pool.request()
         .query(`
-          SELECT 
+          SELECT
             CAST(p.id AS NVARCHAR(100)) as id,
             ISNULL(CAST(p.payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
             ISNULL(CAST(p.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
@@ -3628,11 +3791,11 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
             ISNULL(p.amount_inr, 0) as amountINR,
             ISNULL(CAST(p.notes AS NVARCHAR(MAX)), '') as notes
           FROM payments p
-          WHERE (p.payment_mode = 'GST Invoice' OR p.payment_mode = N'GST Invoice')
+          WHERE (LTRIM(RTRIM(LOWER(p.payment_mode))) = 'gst invoice')
             AND NOT EXISTS (
-              SELECT 1 FROM gst_invoices g 
-              WHERE CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150)) 
-                 OR CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.payment_id_code AS NVARCHAR(150)) 
+              SELECT 1 FROM gst_invoices g
+              WHERE CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
+                 OR CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.payment_id_code AS NVARCHAR(150))
                  OR (p.payment_id_code IS NOT NULL AND p.payment_id_code <> '' AND CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.payment_id_code AS NVARCHAR(150)))
             )
         `);
@@ -3640,22 +3803,22 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
       const unsyncedList = unsyncedRes.recordset || [];
       for (const un of unsyncedList) {
         const dummyPay: Payment = {
-          id: un.paymentIdCode || un.id,
+          id: un.paymentIdCode || (un as any).payment_id_code || un.id,
           brand: un.brand as any,
-          projectId: un.projectId,
-          clientId: un.clientId,
-          clientName: un.clientName,
+          projectId: un.projectId || (un as any).project_id || '',
+          clientId: un.clientId || (un as any).client_id || '',
+          clientName: un.clientName || (un as any).client_name || '',
           paymentMode: 'GST Invoice',
-          paymentDate: un.paymentDate,
-          dueDate: un.paymentDate,
-          amountReceived: un.amountReceived,
-          currency: un.currency as any,
+          paymentDate: un.paymentDate || (un as any).payment_date || '',
+          dueDate: un.paymentDate || (un as any).payment_date || '',
+          amountReceived: un.amountReceived ?? (un as any).amount_received ?? 0,
+          currency: (un.currency || (un as any).currency || 'INR') as any,
           exchangeRate: 1,
-          amountINR: un.amountINR,
+          amountINR: un.amountINR ?? (un as any).amount_inr ?? 0,
           referenceUtr: '',
           paymentStatus: 'Received',
           daysOverdue: 0,
-          notes: un.notes,
+          notes: un.notes || '',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -3671,24 +3834,24 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
                ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
-               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
-               ISNULL(amount_received, 0) as amountReceived, 
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
-               ISNULL(amount_inr, 0) as amountINR, 
-               ISNULL(gst_amount_inr, 0) as gstAmountINR, 
+               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
+               ISNULL(amount_received, 0) as amountReceived,
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+               ISNULL(amount_inr, 0) as amountINR,
+               ISNULL(gst_amount_inr, 0) as gstAmountINR,
                ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
-               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal, 
+               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
                ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM gst_invoices 
+        FROM gst_invoices
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -3711,52 +3874,57 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
 
   if (!pool) {
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'sync GST invoices');
-  }
-  const resSync = mockStore.syncAllGstInvoicesFromPayments();
+      return sendDatabaseUnavailable(res, 'sync GST invoices');
+    }
+    const resSync = mockStore.syncAllGstInvoicesFromPayments();
     return res.json({ success: true, count: resSync.count, invoices: mockStore.getGstInvoices(brand) });
   }
 
   try {
-    const paymentsRes = await pool.request()
-      .input('brandFilter', brand || null)
-      .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id,
-               ISNULL(CAST(payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
-               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
-               ISNULL(amount_received, 0) as amountReceived,
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
-               ISNULL(amount_inr, 0) as amountINR,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
-        FROM payments
-        WHERE (payment_mode = 'GST Invoice' OR payment_mode = N'GST Invoice')
-          AND (@brandFilter IS NULL OR brand = @brandFilter)
-      `);
+    const paymentsRes = await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(100)) as id,
+                   ISNULL(CAST(payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
+                   ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                   ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+                   ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
+                   ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+                   ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
+                   ISNULL(amount_received, 0) as amountReceived,
+                   ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+                   ISNULL(amount_inr, 0) as amountINR,
+                   ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes
+            FROM payments
+            WHERE (LTRIM(RTRIM(LOWER(payment_mode))) = 'gst invoice')
+              AND (@brandFilter IS NULL OR brand = @brandFilter)
+          `),
+      'payments'
+    );
 
     const paymentsList = paymentsRes.recordset || [];
     let syncedCount = 0;
     for (const p of paymentsList) {
       const payObj: Payment = {
-        id: p.paymentIdCode || p.id,
+        id: p.paymentIdCode || (p as any).payment_id_code || p.id,
         brand: p.brand as any,
-        projectId: p.projectId,
-        clientId: p.clientId,
-        clientName: p.clientName,
+        projectId: p.projectId || (p as any).project_id || '',
+        clientId: p.clientId || (p as any).client_id || '',
+        clientName: p.clientName || (p as any).client_name || '',
         paymentMode: 'GST Invoice',
-        paymentDate: p.paymentDate,
-        dueDate: p.paymentDate,
-        amountReceived: p.amountReceived,
-        currency: p.currency as any,
+        paymentDate: p.paymentDate || (p as any).payment_date || '',
+        dueDate: p.paymentDate || (p as any).payment_date || '',
+        amountReceived: p.amountReceived ?? (p as any).amount_received ?? 0,
+        currency: (p.currency || (p as any).currency || 'INR') as any,
         exchangeRate: 1,
-        amountINR: p.amountINR,
+        amountINR: p.amountINR ?? (p as any).amount_inr ?? 0,
         referenceUtr: '',
         paymentStatus: 'Received',
         daysOverdue: 0,
-        notes: p.notes,
+        notes: p.notes || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -3764,30 +3932,35 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
       syncedCount++;
     }
 
-    const allInvoices = await pool.request()
-      .input('brandFilter', brand || null)
-      .query(`
-        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
-               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName, 
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
-               ISNULL(amount_received, 0) as amountReceived, 
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
-               ISNULL(amount_inr, 0) as amountINR, 
-               ISNULL(gst_amount_inr, 0) as gstAmountINR, 
-               ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
-               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal, 
-               ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM gst_invoices 
-        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
-        ORDER BY created_at DESC
-      `);
+    const allInvoices = await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
+            SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+                   ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                   ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId,
+                   ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+                   ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
+                   ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
+                   ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
+                   ISNULL(amount_received, 0) as amountReceived,
+                   ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+                   ISNULL(amount_inr, 0) as amountINR,
+                   ISNULL(gst_amount_inr, 0) as gstAmountINR,
+                   ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+                   ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+                   ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+                   ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+                   ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
+                   ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+            FROM gst_invoices
+            WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+            ORDER BY created_at DESC
+          `),
+      'gst_invoices'
+    );
 
     return res.json({ success: true, count: syncedCount, invoices: allInvoices.recordset || [] });
   } catch (err: any) {
@@ -3843,56 +4016,53 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
   // 3. Payment Date Validation (optional, but if provided and non-empty must be a valid date)
   const rawPaymentDate = req.body.paymentDate ?? req.body.payment_date;
   if (rawPaymentDate !== undefined && rawPaymentDate !== null) {
-    const dateStr = String(rawPaymentDate).trim();
-    if (dateStr.length > 0) {
-      const parsedTime = Date.parse(dateStr);
-      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
-      if (isNaN(parsedTime) || !hasValidFormat) {
-        return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
-      }
+    const s = String(rawPaymentDate).trim();
+    if (s.length > 0 && isNaN(Date.parse(s))) {
+      return res.status(400).json({ success: false, error: 'Invalid paymentDate format.' });
     }
   }
 
   // 4. GST Portal Upload Date Validation (optional, but if provided and non-empty must be a valid date)
   const rawUploadDate = req.body.gstPortalUploadDate ?? req.body.gst_portal_upload_date;
   if (rawUploadDate !== undefined && rawUploadDate !== null) {
-    const dateStr = String(rawUploadDate).trim();
-    if (dateStr.length > 0) {
-      const parsedTime = Date.parse(dateStr);
-      const hasValidFormat = /^\d{1,4}[-/.]|[a-zA-Z]{3,9}\s+\d|\d{1,2}\s+[a-zA-Z]{3,9}/.test(dateStr);
-      if (isNaN(parsedTime) || !hasValidFormat) {
-        return res.status(400).json({ success: false, error: 'Invalid gstPortalUploadDate format.' });
-      }
+    const s = String(rawUploadDate).trim();
+    if (s.length > 0 && isNaN(Date.parse(s))) {
+      return res.status(400).json({ success: false, error: 'Invalid gstPortalUploadDate format.' });
     }
   }
+
   const inv: GstInvoice = req.body;
   const brandContext = getBrandContext(req);
   inv.brand = sanitizeBrand(inv.brand, brandContext) as any;
   const now = new Date().toISOString();
   inv.updatedAt = now;
   inv.createdAt = inv.createdAt || now;
-
   inv.id = (inv.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('GST', inv.brand, mockStore.getGstInvoices(inv.brand)) : generateSemanticEntityId('GST', inv.brand));
 
   const pool = await getOrInitPool();
   if (!pool) {
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'save GST invoice');
-  }
-  const saved = mockStore.saveGstInvoice(inv);
+      return sendDatabaseUnavailable(res, 'save GST invoice');
+    }
+    const saved = mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: saved });
   }
 
   try {
     const guidId = toGuid(inv.id);
+    const cleanId = (inv.id || '').trim();
+    const payId = (inv.paymentId || '').trim();
+    const payGuid = toGuidOrNull(payId);
+
     await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('id', guidId)
-          .input('rawId', inv.id || '')
+          .input('rawId', cleanId)
           .input('brand', inv.brand || 'Device Doctor India')
-          .input('payment_id', inv.paymentId || '')
+          .input('payment_id', payId)
+          .input('payment_guid', payGuid)
           .input('project_id', inv.projectId || '')
           .input('client_id', inv.clientId || '')
           .input('client_name', inv.clientName || '')
@@ -3908,17 +4078,38 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
           .input('created_at', inv.createdAt)
           .input('updated_at', inv.updatedAt)
           .query(`
-            IF EXISTS (SELECT 1 FROM gst_invoices WHERE id = @id OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (payment_id = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL))
-              UPDATE gst_invoices SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
-                                     client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
-                                     currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
-                                     invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
-                                     gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at,
-                                     invoice_id_code=@rawId
-              WHERE id = @id OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (payment_id = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL)
+            IF EXISTS (
+              SELECT 1 FROM gst_invoices
+              WHERE CAST(id AS NVARCHAR(150)) = @id
+                 OR CAST(id AS NVARCHAR(150)) = @rawId
+                 OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+                 OR (CAST(payment_id AS NVARCHAR(150)) = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL)
+                 OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
+            )
+              UPDATE gst_invoices
+              SET brand=@brand, payment_id=@payment_id, project_id=@project_id, client_id=@client_id,
+                  client_name=@client_name, payment_date=@payment_date, amount_received=@amount_received,
+                  currency=@currency, amount_inr=@amount_inr, gst_amount_inr=@gst_amount_inr,
+                  invoice_number=@invoice_number, uploaded_to_gst_portal=@uploaded_to_gst_portal,
+                  gst_portal_upload_date=@gst_portal_upload_date, notes=@notes, updated_at=@updated_at,
+                  invoice_id_code=@rawId
+              WHERE CAST(id AS NVARCHAR(150)) = @id
+                 OR CAST(id AS NVARCHAR(150)) = @rawId
+                 OR (invoice_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+                 OR (CAST(payment_id AS NVARCHAR(150)) = @payment_id AND @payment_id <> '' AND @payment_id IS NOT NULL)
+                 OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
             ELSE
-              INSERT INTO gst_invoices (id, invoice_id_code, brand, payment_id, project_id, client_id, client_name, payment_date, amount_received, currency, amount_inr, gst_amount_inr, invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes, created_at, updated_at)
-              VALUES (@id, @rawId, @brand, @payment_id, @project_id, @client_id, @client_name, @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr, @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes, @created_at, @updated_at)
+              INSERT INTO gst_invoices (
+                id, invoice_id_code, brand, payment_id, project_id, client_id, client_name,
+                payment_date, amount_received, currency, amount_inr, gst_amount_inr,
+                invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
+                created_at, updated_at
+              ) VALUES (
+                @id, @rawId, @brand, @payment_id, @project_id, @client_id, @client_name,
+                @payment_date, @amount_received, @currency, @amount_inr, @gst_amount_inr,
+                @invoice_number, @uploaded_to_gst_portal, @gst_portal_upload_date, @notes,
+                @created_at, @updated_at
+              )
           `),
       'gst_invoices'
     );
@@ -3972,7 +4163,7 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(invoice_number AS NVARCHAR(150)), '') as invoice_number,
                      ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(20)), 'No') as uploaded_to_gst_portal
-        FROM gst_invoices 
+        FROM gst_invoices
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR invoice_id_code = @rawId
       `);
 
@@ -3991,7 +4182,7 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM gst_invoices 
+          DELETE FROM gst_invoices
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR invoice_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -4028,15 +4219,15 @@ router.get('/roles', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(role_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(role_name AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as roleName, 
-               ISNULL(CAST(department AS NVARCHAR(255)), '') as department, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
-        FROM employee_roles 
+        SELECT ISNULL(NULLIF(CAST(role_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(role_name AS NVARCHAR(255)), ISNULL(CAST(name AS NVARCHAR(255)), '')) as roleName,
+               ISNULL(CAST(department AS NVARCHAR(255)), '') as department,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM employee_roles
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -4088,7 +4279,7 @@ async function handleSaveRoleRoute(req: Request, res: Response) {
           .input('updated_at', role.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM employee_roles WHERE id = @id OR (role_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE employee_roles SET brand=@brand, role_name=@role_name, name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at, role_id_code=@rawId 
+              UPDATE employee_roles SET brand=@brand, role_name=@role_name, name=@role_name, department=@department, status=@status, description=@description, updated_at=@updated_at, role_id_code=@rawId
               WHERE id = @id OR (role_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO employee_roles (id, role_id_code, brand, role_name, name, department, status, description, created_at, updated_at)
@@ -4145,7 +4336,7 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
                      ISNULL(CAST(role_id_code AS NVARCHAR(150)), '') as role_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(role_name AS NVARCHAR(255)), '') as role_name
-        FROM employee_roles 
+        FROM employee_roles
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR role_id_code = @rawId
       `);
 
@@ -4162,8 +4353,8 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
         .input('id', guidId)
         .input('rawId', id)
         .query(`
-          SELECT COUNT(1) as empCount 
-          FROM employees 
+          SELECT COUNT(1) as empCount
+          FROM employees
           WHERE role_id = @id OR role_id = @rawId
         `);
       const empCount = Number(depRes.recordset?.[0]?.empCount || 0);
@@ -4182,7 +4373,7 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM employee_roles 
+          DELETE FROM employee_roles
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR role_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -4234,24 +4425,24 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
+        SELECT ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
                ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as employee_id,
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as employee_name, 
-               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as roleId, 
-               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as role_id, 
-               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand_id,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as employee_name,
+               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as roleId,
+               ISNULL(CAST(role_id AS NVARCHAR(100)), '') as role_id,
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
                ISNULL(CAST(joining_date AS NVARCHAR(50)), '') as joiningDate,
-               ISNULL(cost_of_employee, 0) as costOfEmployee, 
-               ISNULL(CAST(employee_type AS NVARCHAR(50)), 'Salary Basis') as employeeType, 
+               ISNULL(cost_of_employee, 0) as costOfEmployee,
+               ISNULL(CAST(employee_type AS NVARCHAR(50)), 'Salary Basis') as employeeType,
                ISNULL(CAST(comes_under_tds AS NVARCHAR(10)), 'No') as comesUnderTds,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM employees 
+        FROM employees
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -4516,7 +4707,7 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
                      ISNULL(CAST(employee_id_code AS NVARCHAR(150)), '') as employee_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(employee_name AS NVARCHAR(255)), '')) as name
-        FROM employees 
+        FROM employees
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR employee_id_code = @rawId
       `);
 
@@ -4533,7 +4724,7 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
         .input('id', guidId)
         .input('rawId', id)
         .query(`
-          SELECT 
+          SELECT
             (SELECT COUNT(1) FROM assignments WHERE employee_id = @id OR employee_id = @rawId) as asnCount,
             (SELECT COUNT(1) FROM employee_payments WHERE employee_id = @id OR employee_id = @rawId) as payCount
         `);
@@ -4555,7 +4746,7 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM employees 
+          DELETE FROM employees
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR employee_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -4592,24 +4783,24 @@ router.get('/assignments', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(assignment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+        SELECT ISNULL(NULLIF(CAST(assignment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
                ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-               ISNULL(CAST(employee_id AS NVARCHAR(100)), '') as employeeId, 
-               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName, 
+               ISNULL(CAST(employee_id AS NVARCHAR(100)), '') as employeeId,
+               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName,
                ISNULL(CAST(role_name AS NVARCHAR(255)), '') as roleName,
-               ISNULL(CAST(assigned_date AS NVARCHAR(50)), '') as assignedDate, 
-               ISNULL(CAST(work_assigned AS NVARCHAR(MAX)), '') as workAssigned, 
+               ISNULL(CAST(assigned_date AS NVARCHAR(50)), '') as assignedDate,
+               ISNULL(CAST(work_assigned AS NVARCHAR(MAX)), '') as workAssigned,
                ISNULL(amount, 0) as amount,
-               ISNULL(amount_paid, 0) as amountPaid, 
-               ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Pending') as paymentStatus, 
+               ISNULL(amount_paid, 0) as amountPaid,
+               ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Pending') as paymentStatus,
                ISNULL(CAST(employee_notes AS NVARCHAR(MAX)), '') as employeeNotes,
-               ISNULL(CAST(last_note_update AS NVARCHAR(50)), '') as lastNoteUpdate, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(last_note_update AS NVARCHAR(50)), '') as lastNoteUpdate,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM assignments 
+        FROM assignments
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -4736,7 +4927,7 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
         SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(assignment_id_code AS NVARCHAR(150)), '') as assignment_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
-        FROM assignments 
+        FROM assignments
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId
       `);
 
@@ -4753,8 +4944,8 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
         .input('id', guidId)
         .input('rawId', id)
         .query(`
-          SELECT COUNT(1) as payCount 
-          FROM employee_payments 
+          SELECT COUNT(1) as payCount
+          FROM employee_payments
           WHERE assignment_id = @id OR assignment_id = @rawId
         `);
       const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
@@ -4773,7 +4964,7 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM assignments 
+          DELETE FROM assignments
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -4811,22 +5002,22 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(emp_payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(assignment_id AS NVARCHAR(100)), '') as assignmentId, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
+        SELECT ISNULL(NULLIF(CAST(emp_payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(assignment_id AS NVARCHAR(100)), '') as assignmentId,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
                ISNULL(CAST(employee_id AS NVARCHAR(100)), '') as employeeId,
-               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName, 
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate, 
+               ISNULL(CAST(employee_name AS NVARCHAR(255)), '') as employeeName,
+               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
                ISNULL(amount_paid, 0) as amountPaid,
-               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode, 
-               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr, 
+               ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as paymentMode,
+               ISNULL(CAST(reference_utr AS NVARCHAR(100)), '') as referenceUtr,
                ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
-               ISNULL(CAST(payment_proof AS NVARCHAR(MAX)), '') as paymentProof, 
+               ISNULL(CAST(payment_proof AS NVARCHAR(MAX)), '') as paymentProof,
                ISNULL(CAST(payment_proof_notes AS NVARCHAR(MAX)), '') as paymentProofNotes,
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM employee_payments 
+        FROM employee_payments
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -5006,7 +5197,7 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
         SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(emp_payment_id_code AS NVARCHAR(150)), '') as emp_payment_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
-        FROM employee_payments 
+        FROM employee_payments
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR emp_payment_id_code = @rawId
       `);
 
@@ -5025,7 +5216,7 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM employee_payments 
+          DELETE FROM employee_payments
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR emp_payment_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -5062,14 +5253,14 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(exp_category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name, 
-               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
-        FROM expense_categories 
+        SELECT ISNULL(NULLIF(CAST(exp_category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name,
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM expense_categories
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -5121,8 +5312,8 @@ async function handleSaveExpenseCategoryRoute(req: Request, res: Response) {
           .input('updated_at', cat.updatedAt)
           .query(`
             IF EXISTS (SELECT 1 FROM expense_categories WHERE id = @id OR (exp_category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE expense_categories 
-              SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, exp_category_id_code=@rawId 
+              UPDATE expense_categories
+              SET brand=@brand, name=@name, category_name=@name, description=@description, status=@status, updated_at=@updated_at, exp_category_id_code=@rawId
               WHERE id = @id OR (exp_category_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
             ELSE
               INSERT INTO expense_categories (id, exp_category_id_code, brand, name, category_name, description, status, created_at, updated_at)
@@ -5179,7 +5370,7 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
                      ISNULL(CAST(exp_category_id_code AS NVARCHAR(150)), '') as exp_category_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
                      ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(category_name AS NVARCHAR(255)), '')) as name
-        FROM expense_categories 
+        FROM expense_categories
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR exp_category_id_code = @rawId
       `);
 
@@ -5197,8 +5388,8 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
         .input('rawId', id)
         .input('catName', existing.name || '')
         .query(`
-          SELECT COUNT(1) as expCount 
-          FROM other_expenses 
+          SELECT COUNT(1) as expCount
+          FROM other_expenses
           WHERE expense_category_id = @id OR expense_category_id = @rawId OR expense_category_name = @catName
         `);
       const expCount = Number(depRes.recordset?.[0]?.expCount || 0);
@@ -5217,7 +5408,7 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM expense_categories 
+          DELETE FROM expense_categories
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR exp_category_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -5254,25 +5445,25 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(expense_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand, 
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId, 
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId, 
+        SELECT ISNULL(NULLIF(CAST(expense_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
+               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
                ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-               ISNULL(CAST(expense_category_id AS NVARCHAR(100)), '') as expenseCategoryId, 
+               ISNULL(CAST(expense_category_id AS NVARCHAR(100)), '') as expenseCategoryId,
                ISNULL(CAST(expense_category_name AS NVARCHAR(255)), '') as expenseCategoryName,
-               ISNULL(CAST(vendor AS NVARCHAR(255)), '') as vendor, 
-               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description, 
-               ISNULL(amount, 0) as amount, 
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency, 
+               ISNULL(CAST(vendor AS NVARCHAR(255)), '') as vendor,
+               ISNULL(CAST(description AS NVARCHAR(MAX)), '') as description,
+               ISNULL(amount, 0) as amount,
+               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
                ISNULL(exchange_rate, 1) as exchangeRate,
-               ISNULL(TRY_CAST(amount_inr AS FLOAT), 0) as amountINR, 
-               ISNULL(CAST(expense_date AS NVARCHAR(50)), '') as expenseDate, 
+               ISNULL(TRY_CAST(amount_inr AS FLOAT), 0) as amountINR,
+               ISNULL(CAST(expense_date AS NVARCHAR(50)), '') as expenseDate,
                ISNULL(CAST(payment_status AS NVARCHAR(50)), 'Paid') as paymentStatus,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
+               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
                ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM other_expenses 
+        FROM other_expenses
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
@@ -5395,7 +5586,7 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
             END;
 
             IF EXISTS (SELECT 1 FROM other_expenses WHERE id = @id OR (expense_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE other_expenses 
+              UPDATE other_expenses
               SET brand=@brand, project_id=@project_id, is_na_project=@is_na_project, client_id=@client_id, client_name=@client_name,
                   expense_category_id=@cat_id, expense_category_name=@cat_name, vendor=@vendor, description=@description,
                   amount=@amount, currency=@currency, exchange_rate=@exchange_rate, amount_inr=@amount_inr,
@@ -5456,7 +5647,7 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
         SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                      ISNULL(CAST(expense_id_code AS NVARCHAR(150)), '') as expense_id_code,
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
-        FROM other_expenses 
+        FROM other_expenses
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR expense_id_code = @rawId
       `);
 
@@ -5475,7 +5666,7 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM other_expenses 
+          DELETE FROM other_expenses
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR expense_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
@@ -5512,16 +5703,16 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT CAST(id AS NVARCHAR(100)) as id, 
-               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(full_name AS NVARCHAR(255)), 'User')) as name, 
-               ISNULL(CAST(email AS NVARCHAR(255)), '') as email, 
-               ISNULL(CAST(role AS NVARCHAR(50)), 'Super Admin') as role, 
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'All') as brand, 
-               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status, 
-               ISNULL(CAST(avatar AS NVARCHAR(MAX)), '') as avatar, 
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt, 
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt 
-        FROM app_users 
+        SELECT CAST(id AS NVARCHAR(100)) as id,
+               ISNULL(CAST(name AS NVARCHAR(255)), ISNULL(CAST(full_name AS NVARCHAR(255)), 'User')) as name,
+               ISNULL(CAST(email AS NVARCHAR(255)), '') as email,
+               ISNULL(CAST(role AS NVARCHAR(50)), 'Super Admin') as role,
+               ISNULL(CAST(brand AS NVARCHAR(100)), 'All') as brand,
+               ISNULL(CAST(status AS NVARCHAR(50)), 'Active') as status,
+               ISNULL(CAST(avatar AS NVARCHAR(MAX)), '') as avatar,
+               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
+               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM app_users
         WHERE (@brandFilter IS NULL OR brand = 'All' OR brand = @brandFilter)
         ORDER BY created_at ASC
       `),
@@ -5561,7 +5752,7 @@ async function handleSaveUserRoute(req: Request, res: Response) {
         .input('chk_rawId', rawId || null)
         .input('chk_email', rawEmail || null)
         .query(`
-          SELECT TOP 1 CAST(id AS NVARCHAR(100)) as id, name, email, role, brand, status, avatar FROM app_users 
+          SELECT TOP 1 CAST(id AS NVARCHAR(100)) as id, name, email, role, brand, status, avatar FROM app_users
           WHERE (@chk_id IS NOT NULL AND (id = @chk_id OR CAST(id AS NVARCHAR(100)) = @chk_rawId))
              OR (@chk_email IS NOT NULL AND LOWER(email) = @chk_email)
         `);
@@ -5714,15 +5905,15 @@ async function handleSaveUserRoute(req: Request, res: Response) {
           .query(`
             IF EXISTS (SELECT 1 FROM app_users WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email)
             BEGIN
-              UPDATE app_users 
+              UPDATE app_users
               SET name = @name,
-                  email = @email, 
+                  email = @email,
                   password_hash = CASE WHEN @password_hash IS NOT NULL AND @password_hash <> '' THEN @password_hash ELSE password_hash END,
                   role = @role,
                   brand = @brand,
                   status = @status,
                   avatar = @avatar,
-                  updated_at = @updated_at 
+                  updated_at = @updated_at
               WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId OR LOWER(email) = @email;
             END
             ELSE
@@ -5792,7 +5983,7 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
                      ISNULL(CAST(brand AS NVARCHAR(100)), 'All') as brand,
                      ISNULL(CAST(role AS NVARCHAR(50)), 'Viewer') as role,
                      ISNULL(CAST(name AS NVARCHAR(255)), '') as name
-        FROM app_users 
+        FROM app_users
         WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
       `);
 
@@ -5823,7 +6014,7 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
         .input('rawId', id)
         .input('brandFilter', brandFilter)
         .query(`
-          DELETE FROM app_users 
+          DELETE FROM app_users
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId)
             AND (@brandFilter IS NULL OR brand = 'All' OR brand = @brandFilter)
         `),
