@@ -2326,6 +2326,32 @@ export async function syncPaymentToGstInvoiceSql(
 ): Promise<GstInvoice | null> {
   const rawMode = (payment.paymentMode || (payment as any).payment_mode || '').trim();
   if (rawMode.toLowerCase() !== 'gst invoice') {
+    if (pool) {
+      try {
+        const payId = (payment.id || '').trim();
+        const payGuid = toGuidOrNull(payId);
+        await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('paymentId', payId)
+              .input('paymentGuid', payGuid)
+              .query(`
+                DELETE FROM gst_invoices
+                WHERE (CAST(payment_id AS NVARCHAR(150)) = @paymentId
+                   OR (@paymentGuid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @paymentGuid))
+                  AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
+              `),
+          'gst_invoices'
+        );
+      } catch (cleanErr) {
+        console.warn('[syncPaymentToGstInvoiceSql] Clean unfiled invoice notice:', cleanErr);
+      }
+    }
+    mockStore.deleteGstInvoiceByPaymentId(payment.id);
+    if ((payment as any).payment_id_code) {
+      mockStore.deleteGstInvoiceByPaymentId((payment as any).payment_id_code);
+    }
     return null;
   }
 
@@ -2790,8 +2816,31 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         });
       }
     }
+    const rawMode = (payment.paymentMode || (payment as any).payment_mode || '').trim();
+    const isGstInvoiceMode = rawMode.toLowerCase() === 'gst invoice';
+
+    if (!isGstInvoiceMode) {
+      const allInvs = mockStore.getGstInvoices(null);
+      const filedInv = allInvs.find(
+        (inv) =>
+          (inv.paymentId === payment.id ||
+            inv.paymentId === (payment as any).payment_id_code) &&
+          inv.uploadedToGstPortal === 'Yes'
+      );
+      if (filedInv) {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot change Payment Mode away from 'GST Invoice': A linked GST Invoice (${filedInv.invoiceNumber || filedInv.id}) has already been filed to the GST portal. Filed invoices cannot be deleted.`
+        });
+      }
+      mockStore.deleteGstInvoiceByPaymentId(payment.id);
+      if ((payment as any).payment_id_code) {
+        mockStore.deleteGstInvoiceByPaymentId((payment as any).payment_id_code);
+      }
+    }
+
     const saved = mockStore.savePayment(payment);
-    const syncedGst = saved.paymentMode === 'GST Invoice' ? mockStore.syncPaymentToGstInvoice(saved) : null;
+    const syncedGst = isGstInvoiceMode ? mockStore.syncPaymentToGstInvoice(saved) : null;
     return res.json({
       success: true,
       payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) },
@@ -2838,6 +2887,41 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
     const rawMode = (payment.paymentMode ?? (payment as any).payment_mode ?? (existingPayment?.payment_mode || 'GST Invoice')).trim();
     const isGstInvoiceMode = rawMode.toLowerCase() === 'gst invoice';
     const finalPaymentMode = isGstInvoiceMode ? 'GST Invoice' : rawMode;
+
+    // Filed GST Invoice Protection Check: verify if changing mode away from 'GST Invoice' while invoice is filed
+    if (!isGstInvoiceMode) {
+      try {
+        const filedCheck = await pool.request()
+          .input('id', guidId)
+          .input('rawId', cleanId)
+          .input('dbId', existingPayment?.id ? String(existingPayment.id) : null)
+          .input('dbCode', existingPayment?.payment_id_code ? String(existingPayment.payment_id_code) : null)
+          .query(`
+            SELECT TOP 1
+              CAST(id AS NVARCHAR(150)) as id,
+              ISNULL(CAST(invoice_id_code AS NVARCHAR(150)), '') as invoice_id_code,
+              ISNULL(CAST(invoice_number AS NVARCHAR(150)), '') as invoice_number,
+              ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(20)), 'No') as uploaded_to_gst_portal
+            FROM gst_invoices
+            WHERE (
+              CAST(payment_id AS NVARCHAR(150)) = @id
+              OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+              OR (@dbId IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbId)
+              OR (@dbCode IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbCode)
+            )
+              AND uploaded_to_gst_portal = 'Yes'
+          `);
+        const filedRow = filedCheck.recordset?.[0];
+        if (filedRow) {
+          return res.status(400).json({
+            success: false,
+            error: `Cannot change Payment Mode away from 'GST Invoice': A linked GST Invoice (${filedRow.invoice_number || filedRow.invoice_id_code || filedRow.id}) has already been filed to the GST portal. Filed invoices cannot be deleted.`
+          });
+        }
+      } catch (filedErr) {
+        console.warn('[handleSavePaymentRoute] Notice checking filed GST invoice:', filedErr);
+      }
+    }
     const finalBankAccountId = payment.bankAccountId ?? (existingPayment?.bank_account_id || '');
     const finalBankAccountName = payment.bankAccountName ?? (existingPayment?.bank_account_name || '');
     const finalPaymentDate = payment.paymentDate ?? (existingPayment?.payment_date || '');
@@ -2969,6 +3053,34 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         }
       }
     } else {
+      try {
+        await executeSqlWithAutoMigration(
+          pool,
+          () =>
+            pool.request()
+              .input('id', guidId)
+              .input('rawId', cleanId)
+              .input('dbId', existingPayment?.id ? String(existingPayment.id) : null)
+              .input('dbCode', existingPayment?.payment_id_code ? String(existingPayment.payment_id_code) : null)
+              .query(`
+                DELETE FROM gst_invoices
+                WHERE (
+                  CAST(payment_id AS NVARCHAR(150)) = @id
+                  OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+                  OR (@dbId IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbId)
+                  OR (@dbCode IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbCode)
+                )
+                  AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
+              `),
+          'gst_invoices'
+        );
+      } catch (delErr) {
+        console.warn('[handleSavePaymentRoute] Notice cleaning unfiled GST invoice on payment mode change:', delErr);
+      }
+      mockStore.deleteGstInvoiceByPaymentId(cleanId);
+      if (payment.id) mockStore.deleteGstInvoiceByPaymentId(payment.id);
+      if (existingPayment?.id) mockStore.deleteGstInvoiceByPaymentId(String(existingPayment.id));
+      if (existingPayment?.payment_id_code) mockStore.deleteGstInvoiceByPaymentId(String(existingPayment.payment_id_code));
       mockStore.savePayment(
         {
           ...payment,
@@ -3116,6 +3228,34 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
             }
           }
         } else {
+          try {
+            await executeSqlWithAutoMigration(
+              pool,
+              () =>
+                pool.request()
+                  .input('id', guidId)
+                  .input('rawId', cleanId)
+                  .input('dbId', existingPayment?.id ? String(existingPayment.id) : null)
+                  .input('dbCode', existingPayment?.payment_id_code ? String(existingPayment.payment_id_code) : null)
+                  .query(`
+                    DELETE FROM gst_invoices
+                    WHERE (
+                      CAST(payment_id AS NVARCHAR(150)) = @id
+                      OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+                      OR (@dbId IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbId)
+                      OR (@dbCode IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @dbCode)
+                    )
+                      AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
+                  `),
+              'gst_invoices'
+            );
+          } catch (delErr) {
+            console.warn('[handleSavePaymentRoute] Notice cleaning unfiled GST invoice on retry:', delErr);
+          }
+          mockStore.deleteGstInvoiceByPaymentId(cleanId);
+          if (payment.id) mockStore.deleteGstInvoiceByPaymentId(payment.id);
+          if (existingPayment?.id) mockStore.deleteGstInvoiceByPaymentId(String(existingPayment.id));
+          if (existingPayment?.payment_id_code) mockStore.deleteGstInvoiceByPaymentId(String(existingPayment.payment_id_code));
           mockStore.savePayment(
             {
               ...payment,
@@ -3828,32 +3968,59 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
       console.warn('[GET /gst-invoices] Notice during self-healing payment sync:', syncErr);
     }
 
+    // Direction 2: Self-healing stale unfiled GST invoice reconciliation
+    try {
+      await pool.request()
+        .input('brandFilter', brand || null)
+        .query(`
+          DELETE FROM gst_invoices
+          WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '')
+            AND NOT EXISTS (
+              SELECT 1 FROM payments p
+              WHERE (
+                CAST(p.id AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
+                OR CAST(p.payment_id_code AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
+              )
+              AND (LTRIM(RTRIM(LOWER(p.payment_mode))) = 'gst invoice')
+              AND (@brandFilter IS NULL OR p.brand = @brandFilter)
+            );
+        `);
+    } catch (staleErr) {
+      console.warn('[GET /gst-invoices] Notice during self-healing stale invoice cleanup:', staleErr);
+    }
+
     const q = await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-        SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
-               ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
-               ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId,
-               ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
-               ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
-               ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-               ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
-               ISNULL(amount_received, 0) as amountReceived,
-               ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
-               ISNULL(amount_inr, 0) as amountINR,
-               ISNULL(gst_amount_inr, 0) as gstAmountINR,
-               ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
-               ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
-               ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
-               ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
-               ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
-               ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-        FROM gst_invoices
-        WHERE (@brandFilter IS NULL OR brand = @brandFilter)
-        ORDER BY created_at DESC
+        SELECT ISNULL(NULLIF(CAST(g.invoice_id_code AS NVARCHAR(150)), ''), CAST(g.id AS NVARCHAR(150))) as id,
+               ISNULL(CAST(g.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+               ISNULL(NULLIF(CAST(p.payment_id_code AS NVARCHAR(100)), ''), ISNULL(CAST(g.payment_id AS NVARCHAR(100)), '')) as paymentId,
+               ISNULL(CAST(g.project_id AS NVARCHAR(150)), '') as projectId,
+               ISNULL(CAST(g.client_id AS NVARCHAR(100)), '') as clientId,
+               ISNULL(CAST(g.client_name AS NVARCHAR(255)), '') as clientName,
+               ISNULL(CAST(g.payment_date AS NVARCHAR(50)), '') as paymentDate,
+               ISNULL(g.amount_received, 0) as amountReceived,
+               ISNULL(CAST(g.currency AS NVARCHAR(20)), 'INR') as currency,
+               ISNULL(g.amount_inr, 0) as amountINR,
+               ISNULL(g.gst_amount_inr, 0) as gstAmountINR,
+               ISNULL(CAST(g.invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+               ISNULL(CAST(g.uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+               ISNULL(CAST(g.gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+               ISNULL(CAST(g.notes AS NVARCHAR(MAX)), '') as notes,
+               ISNULL(CAST(g.created_at AS NVARCHAR(50)), '') as createdAt,
+               ISNULL(CAST(g.updated_at AS NVARCHAR(50)), ISNULL(CAST(g.created_at AS NVARCHAR(50)), '')) as updatedAt
+        FROM gst_invoices g
+        LEFT JOIN payments p ON (
+          CAST(p.id AS NVARCHAR(150)) = CAST(g.payment_id AS NVARCHAR(150))
+          OR CAST(p.payment_id_code AS NVARCHAR(150)) = CAST(g.payment_id AS NVARCHAR(150))
+        )
+        WHERE (@brandFilter IS NULL OR g.brand = @brandFilter)
+        /* ORDER BY created_at */
+        ORDER BY g.created_at DESC
       `),
       'gst_invoices'
     );
@@ -3932,32 +4099,62 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
       syncedCount++;
     }
 
+    // 2. Direction 2: Remove stale unfiled GST ledger entries whose associated payment no longer qualifies or was deleted
+    await executeSqlWithAutoMigration(
+      pool,
+      () =>
+        pool.request()
+          .input('brandFilter', brand || null)
+          .query(`
+            DELETE FROM gst_invoices
+            WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+              AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '')
+              AND NOT EXISTS (
+                SELECT 1 FROM payments p
+                WHERE (
+                  CAST(p.id AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
+                  OR CAST(p.payment_id_code AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
+                )
+                AND (LTRIM(RTRIM(LOWER(p.payment_mode))) = 'gst invoice')
+                AND (@brandFilter IS NULL OR p.brand = @brandFilter)
+              );
+          `),
+      'gst_invoices'
+    );
+
+    mockStore.syncAllGstInvoicesFromPayments(brand);
+
     const allInvoices = await executeSqlWithAutoMigration(
       pool,
       () =>
         pool.request()
           .input('brandFilter', brand || null)
           .query(`
-            SELECT ISNULL(NULLIF(CAST(invoice_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
-                   ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
-                   ISNULL(CAST(payment_id AS NVARCHAR(100)), '') as paymentId,
-                   ISNULL(CAST(project_id AS NVARCHAR(150)), '') as projectId,
-                   ISNULL(CAST(client_id AS NVARCHAR(100)), '') as clientId,
-                   ISNULL(CAST(client_name AS NVARCHAR(255)), '') as clientName,
-                   ISNULL(CAST(payment_date AS NVARCHAR(50)), '') as paymentDate,
-                   ISNULL(amount_received, 0) as amountReceived,
-                   ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
-                   ISNULL(amount_inr, 0) as amountINR,
-                   ISNULL(gst_amount_inr, 0) as gstAmountINR,
-                   ISNULL(CAST(invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
-                   ISNULL(CAST(uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
-                   ISNULL(CAST(gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
-                   ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
-                   ISNULL(CAST(created_at AS NVARCHAR(50)), '') as createdAt,
-                   ISNULL(CAST(updated_at AS NVARCHAR(50)), ISNULL(CAST(created_at AS NVARCHAR(50)), '')) as updatedAt
-            FROM gst_invoices
-            WHERE (@brandFilter IS NULL OR brand = @brandFilter)
-            ORDER BY created_at DESC
+            SELECT ISNULL(NULLIF(CAST(g.invoice_id_code AS NVARCHAR(150)), ''), CAST(g.id AS NVARCHAR(150))) as id,
+                   ISNULL(CAST(g.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                   ISNULL(NULLIF(CAST(p.payment_id_code AS NVARCHAR(100)), ''), ISNULL(CAST(g.payment_id AS NVARCHAR(100)), '')) as paymentId,
+                   ISNULL(CAST(g.project_id AS NVARCHAR(150)), '') as projectId,
+                   ISNULL(CAST(g.client_id AS NVARCHAR(100)), '') as clientId,
+                   ISNULL(CAST(g.client_name AS NVARCHAR(255)), '') as clientName,
+                   ISNULL(CAST(g.payment_date AS NVARCHAR(50)), '') as paymentDate,
+                   ISNULL(g.amount_received, 0) as amountReceived,
+                   ISNULL(CAST(g.currency AS NVARCHAR(20)), 'INR') as currency,
+                   ISNULL(g.amount_inr, 0) as amountINR,
+                   ISNULL(g.gst_amount_inr, 0) as gstAmountINR,
+                   ISNULL(CAST(g.invoice_number AS NVARCHAR(100)), '') as invoiceNumber,
+                   ISNULL(CAST(g.uploaded_to_gst_portal AS NVARCHAR(10)), 'No') as uploadedToGstPortal,
+                   ISNULL(CAST(g.gst_portal_upload_date AS NVARCHAR(50)), '') as gstPortalUploadDate,
+                   ISNULL(CAST(g.notes AS NVARCHAR(MAX)), '') as notes,
+                   ISNULL(CAST(g.created_at AS NVARCHAR(50)), '') as createdAt,
+                   ISNULL(CAST(g.updated_at AS NVARCHAR(50)), ISNULL(CAST(g.created_at AS NVARCHAR(50)), '')) as updatedAt
+            FROM gst_invoices g
+            LEFT JOIN payments p ON (
+              CAST(p.id AS NVARCHAR(150)) = CAST(g.payment_id AS NVARCHAR(150))
+              OR CAST(p.payment_id_code AS NVARCHAR(150)) = CAST(g.payment_id AS NVARCHAR(150))
+            )
+            WHERE (@brandFilter IS NULL OR g.brand = @brandFilter)
+            /* ORDER BY created_at */
+            ORDER BY g.created_at DESC
           `),
       'gst_invoices'
     );
@@ -4140,9 +4337,9 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
 
   if (!pool) {
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete GST invoice');
-  }
-  const deleted = mockStore.deleteGstInvoice(id, brandFilter);
+      return sendDatabaseUnavailable(res, 'delete GST invoice');
+    }
+    const deleted = mockStore.deleteGstInvoice(id, brandFilter);
     if (!deleted) {
       return res.status(403).json({
         success: false,

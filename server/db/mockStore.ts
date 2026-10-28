@@ -2061,6 +2061,10 @@ class MockStore {
     // Auto-sync into GST Invoices module if payment mode is 'GST Invoice' and autoSyncGst is enabled
     if (autoSyncGst && resultPayment.paymentMode === 'GST Invoice') {
       this.syncPaymentToGstInvoice(resultPayment);
+    } else if (autoSyncGst && resultPayment.paymentMode !== 'GST Invoice') {
+      this.deleteGstInvoiceByPaymentId(finalId);
+      if (cleanId) this.deleteGstInvoiceByPaymentId(cleanId);
+      if ((resultPayment as any).payment_id_code) this.deleteGstInvoiceByPaymentId((resultPayment as any).payment_id_code);
     }
 
     return resultPayment;
@@ -2124,6 +2128,10 @@ class MockStore {
 
   public syncPaymentToGstInvoice(payment: Payment): GstInvoice | null {
     if (payment.paymentMode !== 'GST Invoice') {
+      this.deleteGstInvoiceByPaymentId(payment.id);
+      if ((payment as any).payment_id_code) {
+        this.deleteGstInvoiceByPaymentId((payment as any).payment_id_code);
+      }
       return null;
     }
 
@@ -2206,7 +2214,7 @@ class MockStore {
     }
   }
 
-  public syncAllGstInvoicesFromPayments(): { count: number; invoices: GstInvoice[] } {
+  public syncAllGstInvoicesFromPayments(brand?: string | null): { count: number; invoices: GstInvoice[] } {
     let count = 0;
     for (const p of this.payments) {
       if (p.paymentMode === 'GST Invoice') {
@@ -2214,18 +2222,40 @@ class MockStore {
         if (synced) count++;
       }
     }
-    return { count, invoices: [...this.gstInvoices] };
+    // Reconcile stale unfiled GST invoices
+    this.gstInvoices = this.gstInvoices.filter((inv) => {
+      if (inv.uploadedToGstPortal === 'Yes') return true;
+      const linkedPayment = this.payments.find(
+        (p) =>
+          (p.id || '').toLowerCase() === (inv.paymentId || '').toLowerCase() ||
+          ((p as any).payment_id_code || '').toLowerCase() === (inv.paymentId || '').toLowerCase()
+      );
+      if (!linkedPayment) return false;
+      return linkedPayment.paymentMode === 'GST Invoice';
+    });
+    return { count, invoices: this.getGstInvoices(brand) };
   }
 
   public getGstInvoices(brand?: string | null): GstInvoice[] {
     // Run self-healing sync so any GST invoice payments are reflected
     for (const p of this.payments) {
       if (p.paymentMode === 'GST Invoice') {
-        if (!this.gstInvoices.some((inv) => inv.paymentId === p.id)) {
+        if (!this.gstInvoices.some((inv) => (inv.paymentId || '').toLowerCase() === (p.id || '').toLowerCase() || (inv.paymentId || '').toLowerCase() === ((p as any).payment_id_code || '').toLowerCase())) {
           this.syncPaymentToGstInvoice(p);
         }
       }
     }
+    // Reconcile stale unfiled GST invoices
+    this.gstInvoices = this.gstInvoices.filter((inv) => {
+      if (inv.uploadedToGstPortal === 'Yes') return true;
+      const linkedPayment = this.payments.find(
+        (p) =>
+          (p.id || '').toLowerCase() === (inv.paymentId || '').toLowerCase() ||
+          ((p as any).payment_id_code || '').toLowerCase() === (inv.paymentId || '').toLowerCase()
+      );
+      if (!linkedPayment) return false;
+      return linkedPayment.paymentMode === 'GST Invoice';
+    });
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
       return this.gstInvoices.filter((i) => i.brand === brand);
     }
@@ -2266,6 +2296,7 @@ class MockStore {
     const initial = this.gstInvoices.length;
     const cleanId = (paymentId || '').trim().toLowerCase();
     this.gstInvoices = this.gstInvoices.filter((i) => {
+      if (i.uploadedToGstPortal === 'Yes') return true;
       const pId = (i.paymentId || '').trim().toLowerCase();
       return pId !== cleanId;
     });
