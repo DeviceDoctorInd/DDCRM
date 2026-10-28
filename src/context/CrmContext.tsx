@@ -1254,6 +1254,15 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
           })
           .catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+      } else {
+        // Immediate optimistic removal of stale unfiled GST invoice from local React state
+        setRawGstInvoices((prev) =>
+          prev.filter(
+            (g) =>
+              g.paymentId !== savedPayment.id &&
+              g.paymentId !== (savedPayment as any).payment_id_code
+          )
+        );
       }
 
       if (savedPayment.paymentMode === 'GST Invoice' && res.gstInvoiceSynced === false) {
