@@ -2789,8 +2789,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
   const now = new Date().toISOString();
   payment.updatedAt = now;
   payment.createdAt = payment.createdAt || now;
-
-  payment.id = (payment.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand)) : generateSemanticEntityId('PAY', payment.brand));
+  const isNew = Boolean(req.body.isNew || (isPost && !req.body.isUpdate && !payment.id));
+  payment.id = (payment.id || '').trim();
 
   // Normalize payment proof into a clean object or undefined
   payment.paymentProof = parsePaymentProof(payment.paymentProof);
@@ -2800,6 +2800,25 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
   if (!pool) {
     if (!isMockFallbackAllowed()) {
       return sendDatabaseUnavailable(res, 'save payment');
+    }
+    if (!payment.id) {
+      payment.id = generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand));
+    } else if (isNew) {
+      const existing = mockStore.getPayments(null).find((p) => {
+        const pId = (p.id || '').trim();
+        const pCode = ((p as any).payment_id_code || '').trim();
+        return pId.toLowerCase() === payment.id.toLowerCase() || pCode.toLowerCase() === payment.id.toLowerCase();
+      });
+      if (existing) {
+        const sameUtr = Boolean(
+          existing.referenceUtr &&
+          payment.referenceUtr &&
+          existing.referenceUtr.trim().toLowerCase() === payment.referenceUtr.trim().toLowerCase()
+        );
+        if (!sameUtr) {
+          payment.id = generateSemanticEntityId('PAY', payment.brand, mockStore.getPayments(payment.brand));
+        }
+      }
     }
     const finalUtr = (payment.referenceUtr || '').trim();
     if (finalUtr) {
@@ -2849,8 +2868,12 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
     });
   }
 
-  const guidId = toGuid(payment.id);
-  const cleanId = (payment.id || '').trim();
+  if (!payment.id) {
+    payment.id = await calculateNextPaymentIdSql(pool, payment.brand);
+  }
+
+  let guidId = toGuid(payment.id);
+  let cleanId = (payment.id || '').trim();
   let targetProjectId: string | null = payment.projectId || null;
   let existingPayment: any = null;
 
@@ -2871,6 +2894,21 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         existingPayment = checkRes.recordset?.[0] || null;
       } catch (checkErr) {
         console.warn('[handleSavePaymentRoute] Could not check existing payment:', checkErr);
+      }
+    }
+
+    // Protection: If client signaled this is a genuinely new payment voucher (isNew=true),
+    // ensure it NEVER overwrites an existing payment record in Azure SQL database.
+    if (isNew && existingPayment) {
+      const existingUtr = (existingPayment.reference_utr || '').trim().toLowerCase();
+      const incomingUtr = (payment.referenceUtr || '').trim().toLowerCase();
+      const isIdempotentRetry = incomingUtr && existingUtr === incomingUtr;
+
+      if (!isIdempotentRetry) {
+        payment.id = await calculateNextPaymentIdSql(pool, payment.brand);
+        guidId = toGuid(payment.id);
+        cleanId = payment.id;
+        existingPayment = null;
       }
     }
 

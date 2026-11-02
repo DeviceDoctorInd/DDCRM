@@ -458,7 +458,7 @@ class StorageService {
     }));
   }
 
-  public async savePayment(payment: Payment): Promise<{
+  public async savePayment(payment: Payment, isUpdate: boolean = false): Promise<{
     success: boolean;
     payment?: Payment;
     gstInvoice?: GstInvoice;
@@ -477,6 +477,8 @@ class StorageService {
       if (payload.id) {
         customHeaders['Idempotency-Key'] = payload.id;
       }
+      const endpoint = isUpdate && payload.id ? `/api/payments/${encodeURIComponent(payload.id)}` : '/api/payments';
+      const method = isUpdate && payload.id ? 'PUT' : 'POST';
       const res = await this.apiCall<{
         success: boolean;
         payment: Payment;
@@ -484,7 +486,7 @@ class StorageService {
         gstInvoice?: GstInvoice;
         warning?: string;
         gstSyncError?: string;
-      }>('/api/payments', 'POST', payload, customHeaders);
+      }>(endpoint, method, payload, customHeaders);
       this.notifyListeners();
       const saved = res.payment
         ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) }
@@ -946,6 +948,18 @@ class StorageService {
     }
     const pid = this.generateSemanticProjectId(brand, clientName, serviceName);
     return { projectId: pid, sequence: 1 };
+  }
+
+  public async fetchNextSemanticPaymentId(brand: BrandName, existingPayments: Payment[] = []): Promise<string> {
+    try {
+      const res = await this.apiCall<{ success: boolean; nextId: string }>(
+        `/api/payments/next-semantic-id?brand=${encodeURIComponent(brand)}`
+      );
+      if (res?.nextId) return res.nextId;
+    } catch (err) {
+      console.warn('[fetchNextSemanticPaymentId] API error, using client fallback:', err);
+    }
+    return this.generateId('PAY', brand, existingPayments);
   }
 
   // --- Referential Integrity Checking Helpers ---
