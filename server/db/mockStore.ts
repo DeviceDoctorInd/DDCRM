@@ -1999,16 +1999,32 @@ class MockStore {
 
   public savePayment(payment: Payment, autoSyncGst: boolean = true): Payment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const isNew = Boolean((payment as any).isNew);
     const cleanId = (payment.id || '').trim();
-    const finalId = cleanId || generateSemanticEntityId('PAY', payment.brand, this.payments);
+    let finalId = cleanId;
 
-    const idx = cleanId
+    let idx = cleanId
       ? this.payments.findIndex(
           (p) =>
             (p.id || '').trim().toLowerCase() === cleanId.toLowerCase() ||
             ((p as any).payment_id_code || '').trim().toLowerCase() === cleanId.toLowerCase()
         )
       : -1;
+
+    if (isNew && idx >= 0) {
+      const existing = this.payments[idx];
+      const sameUtr = Boolean(
+        existing.referenceUtr &&
+        payment.referenceUtr &&
+        existing.referenceUtr.trim().toLowerCase() === payment.referenceUtr.trim().toLowerCase()
+      );
+      if (!sameUtr) {
+        finalId = generateSemanticEntityId('PAY', payment.brand, this.payments);
+        idx = -1;
+      }
+    } else if (!finalId) {
+      finalId = generateSemanticEntityId('PAY', payment.brand, this.payments);
+    }
 
     let oldProjectId: string | undefined = undefined;
     let existingPayment: Payment | undefined = undefined;

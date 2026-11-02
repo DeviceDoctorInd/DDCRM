@@ -123,7 +123,7 @@ interface CrmContextType {
   deleteProject: (projectId: string) => Promise<{ success: boolean; error?: string }>;
   setProjectStatus: (projectId: string, status: Project['status']) => Promise<void>;
 
-  savePayment: (payment: Payment) => Promise<{
+  savePayment: (payment: Payment, isUpdate?: boolean) => Promise<{
     success: boolean;
     payment?: Payment;
     gstInvoice?: GstInvoice;
@@ -1214,16 +1214,29 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await saveProjectAction({ ...proj, status });
   };
 
-  const savePaymentAction = async (payment: Payment) => {
+  const savePaymentAction = async (payment: Payment, isUpdate?: boolean) => {
     if (!payment.brand) payment.brand = activeBrand;
-    if (!payment.id) {
-      payment.id = storageService.generateId('PAY', payment.brand, rawPayments);
+    const pool = rawPayments;
+    const updateMode = isUpdate !== undefined
+      ? isUpdate
+      : ((payment as any).isUpdate === true || (!(payment as any).isNew && pool.some((p) => p.id === payment.id || (p as any).payment_id_code === payment.id)));
+
+    if (!updateMode) {
+      (payment as any).isNew = true;
+      if (!payment.id || pool.some((p) => p.id === payment.id || (p as any).payment_id_code === payment.id)) {
+        payment.id = storageService.generateId('PAY', payment.brand, pool);
+      }
     }
-    const res = await storageService.savePayment(payment);
+
+    const res = await storageService.savePayment(payment, updateMode);
     if (res.success) {
       const savedPayment = res.payment || payment;
       setRawPayments((prev) => {
-        const idx = prev.findIndex((p) => p.id === savedPayment.id);
+        const idx = prev.findIndex(
+          (p) =>
+            p.id === savedPayment.id ||
+            ((savedPayment as any).payment_id_code && p.id === (savedPayment as any).payment_id_code)
+        );
         if (idx >= 0) {
           const updated = [...prev];
           updated[idx] = savedPayment;

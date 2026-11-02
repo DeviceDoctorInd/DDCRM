@@ -65,6 +65,7 @@ const DEFAULT_EXCHANGE_RATES: Record<CurrencyCode, number> = {
 export const PaymentsModule: React.FC = () => {
   const {
     payments,
+    allPayments,
     projects,
     allProjects,
     clients,
@@ -96,6 +97,7 @@ export const PaymentsModule: React.FC = () => {
   const [uploadInputKey, setUploadInputKey] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const formSessionRef = useRef<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch / refresh latest projects whenever modal opens to guarantee data availability
   useEffect(() => {
@@ -296,7 +298,8 @@ export const PaymentsModule: React.FC = () => {
       ? clientPool.find((c) => c.id === defaultProject.clientId)
       : (clientPool.length > 0 ? clientPool[0] : undefined);
 
-    const autoId = storageService.generateId('PAY', activeBrand);
+    const paymentPool = allPayments && allPayments.length > 0 ? allPayments : payments;
+    const autoId = storageService.generateId('PAY', activeBrand, paymentPool);
     const today = new Date().toISOString().slice(0, 10);
     const dueDate = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
 
@@ -331,9 +334,16 @@ export const PaymentsModule: React.FC = () => {
       paymentProof: undefined,
       paymentProofNotes: '',
     });
-    formSessionRef.current = `add-${autoId}-${Date.now()}`;
+    const sessionId = `add-${autoId}-${Date.now()}`;
+    formSessionRef.current = sessionId;
     setUploadInputKey((k) => k + 1);
     setIsModalOpen(true);
+
+    storageService.fetchNextSemanticPaymentId(activeBrand, paymentPool).then((nextId) => {
+      if (nextId && formSessionRef.current === sessionId) {
+        setFormData((prev) => (!isEditing ? { ...prev, id: nextId } : prev));
+      }
+    }).catch(() => {});
   };
 
   // Open Edit Payment Modal with isolated session & deep cloned proof
@@ -538,6 +548,8 @@ export const PaymentsModule: React.FC = () => {
   // Form submit
   const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setFormError(null);
     if (!formData.projectId) {
       setFormError('Please select a Project ID from the dropdown.');
       return;
@@ -574,8 +586,15 @@ export const PaymentsModule: React.FC = () => {
 
     const overdueDays = calculateDaysOverdue(formData.dueDate || '', formData.paymentStatus || 'Pending');
 
+    const poolPayments = allPayments && allPayments.length > 0 ? allPayments : payments;
+    const finalId = isEditing
+      ? (formData.id || '')
+      : (!formData.id || poolPayments.some((p: Payment) => p.id === formData.id || (p as any).payment_id_code === formData.id)
+          ? storageService.generateId('PAY', formData.brand || activeBrand, poolPayments)
+          : formData.id);
+
     const payload: Payment = {
-      id: formData.id || '',
+      id: finalId,
       brand: formData.brand || activeBrand,
       projectId: formData.projectId,
       clientId: formData.clientId || selectedProject?.clientId || '',
@@ -600,18 +619,24 @@ export const PaymentsModule: React.FC = () => {
       amount: amountINR,
       receivedAmount: formData.paymentStatus === 'Received' ? amountINR : 0,
       outstandingAmount: formData.paymentStatus === 'Received' ? 0 : amountINR,
+      ...(!isEditing ? { isNew: true } : { isUpdate: true }),
     };
 
-    const res = await savePayment(payload);
-    if (res.success) {
-      if (payload.paymentMode === 'GST Invoice') {
-        refreshGstInvoices().catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+    setIsSubmitting(true);
+    try {
+      const res = await savePayment(payload, isEditing);
+      if (res.success) {
+        if (payload.paymentMode === 'GST Invoice') {
+          refreshGstInvoices().catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+        }
+        setIsModalOpen(false);
+        setFormData({});
+        setFormError(null);
+      } else {
+        setFormError(res.error || 'Failed to save payment record.');
       }
-      setIsModalOpen(false);
-      setFormData({});
-      setFormError(null);
-    } else {
-      setFormError(res.error || 'Failed to save payment record.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1465,10 +1490,17 @@ export const PaymentsModule: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded shadow-sm transition-colors flex items-center gap-1.5"
+                  disabled={isSubmitting || isUploadingProof}
+                  className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed rounded shadow-sm transition-colors flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
-                  <span>{isEditing ? 'Save Payment Changes' : 'Record Payment'}</span>
+                  <span>
+                    {isSubmitting
+                      ? 'Saving...'
+                      : isEditing
+                      ? 'Save Payment Changes'
+                      : 'Record Payment'}
+                  </span>
                 </button>
               </div>
             </form>
