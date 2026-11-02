@@ -1867,10 +1867,22 @@ class MockStore {
 
   // --- Projects ---
   public getProjects(brand?: string | null): Project[] {
+    let list = this.projects;
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.projects.filter((p) => p.brand === brand);
+      list = this.projects.filter((p) => p.brand === brand);
     }
-    return [...this.projects];
+    return list.map((p) => {
+      const code = (p as any).projectCode || (p as any).project_id_code || p.id;
+      return {
+        ...p,
+        guid: (p as any).guid || p.id,
+        projectCode: code,
+        project_id_code: code,
+        proposalDocument: p.proposalDocument ? JSON.parse(JSON.stringify(p.proposalDocument)) : undefined,
+        contractDocument: p.contractDocument ? JSON.parse(JSON.stringify(p.contractDocument)) : undefined,
+        paymentPhases: p.paymentPhases ? JSON.parse(JSON.stringify(p.paymentPhases)) : [],
+      };
+    });
   }
 
   public getNextProjectSequence(
@@ -1914,16 +1926,25 @@ class MockStore {
   public saveProject(proj: Project & { isNew?: boolean; isUpdate?: boolean }): Project {
     if (!proj.brand) proj.brand = 'Device Doctor India';
     const isNew = Boolean((proj as any).isNew);
+    const isUpdate = Boolean((proj as any).isUpdate);
     const cleanId = (proj.id || '').trim();
+    const projGuid = ((proj as any).guid || '').trim();
+    const projectCode = (((proj as any).projectCode || (proj as any).project_id_code) || '').trim();
     let finalId = cleanId;
 
-    let idx = cleanId
-      ? this.projects.findIndex(
-          (p) =>
-            (p.id || '').trim().toLowerCase() === cleanId.toLowerCase() ||
-            (((p as any).project_id_code || '') as string).trim().toLowerCase() === cleanId.toLowerCase()
-        )
-      : -1;
+    let idx = -1;
+    if (cleanId || projGuid || projectCode) {
+      idx = this.projects.findIndex((p) => {
+        const pId = (p.id || '').trim().toLowerCase();
+        const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
+        const pGuid = (((p as any).guid || '') as string).trim().toLowerCase();
+        return (
+          (cleanId && (pId === cleanId.toLowerCase() || pCode === cleanId.toLowerCase() || pGuid === cleanId.toLowerCase())) ||
+          (projGuid && (pId === projGuid.toLowerCase() || pGuid === projGuid.toLowerCase())) ||
+          (projectCode && (pId === projectCode.toLowerCase() || pCode === projectCode.toLowerCase()))
+        );
+      });
+    }
 
     if (isNew && idx >= 0) {
       const clientName = proj.clientName || this.getClientById(proj.clientId)?.name || 'CLIENT';
@@ -1937,9 +1958,26 @@ class MockStore {
       );
       idx = -1;
     }
+
     if (idx >= 0) {
-      this.projects[idx] = { ...this.projects[idx], ...proj, updatedAt: new Date().toISOString() };
+      const existing = this.projects[idx];
+      const preservedId = existing.id;
+      const preservedCode = (existing as any).projectCode || (existing as any).project_id_code || existing.id;
+      const preservedGuid = (existing as any).guid || existing.id;
+      this.projects[idx] = {
+        ...existing,
+        ...proj,
+        id: preservedId,
+        guid: preservedGuid,
+        projectCode: preservedCode,
+        project_id_code: preservedCode,
+        updatedAt: new Date().toISOString(),
+      };
       return this.projects[idx];
+    }
+
+    if (isUpdate) {
+      throw new Error(`Project '${cleanId}' not found for update.`);
     }
 
     // Auto-generate semantic project ID with sequence counter if missing
@@ -1956,13 +1994,28 @@ class MockStore {
     }
 
     proj.id = finalId;
-    const created = { ...proj, id: finalId, createdAt: proj.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const finalCode = projectCode || finalId;
+    const created = {
+      ...proj,
+      id: finalId,
+      guid: projGuid || finalId,
+      projectCode: finalCode,
+      project_id_code: finalCode,
+      createdAt: proj.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
     this.projects.unshift(created);
     return created;
   }
 
   public getProjectById(id: string): Project | undefined {
-    return this.projects.find((p) => p.id === id);
+    const clean = (id || '').trim().toLowerCase();
+    return this.projects.find((p) => {
+      const pId = (p.id || '').trim().toLowerCase();
+      const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
+      const pGuid = (((p as any).guid || '') as string).trim().toLowerCase();
+      return pId === clean || pCode === clean || pGuid === clean || p.id === id;
+    });
   }
 
   public deleteProject(id: string, brand?: string | null): boolean {
@@ -1970,8 +2023,9 @@ class MockStore {
     const cleanId = (id || '').trim().toLowerCase();
     this.projects = this.projects.filter((p) => {
       const pId = (p.id || '').trim().toLowerCase();
-      const codeId = ((p as any).project_id_code || '').trim().toLowerCase();
-      const matches = pId === cleanId || codeId === cleanId || p.id === id;
+      const codeId = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
+      const guidId = (((p as any).guid || '') as string).trim().toLowerCase();
+      const matches = pId === cleanId || codeId === cleanId || guidId === cleanId || p.id === id;
       if (!matches) return true;
       if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
         if (p.brand && p.brand !== brand) return true;
@@ -1998,8 +2052,9 @@ class MockStore {
     const cleanProjId = projectId.trim().toLowerCase();
     const proj = this.projects.find((p) => {
       const pId = (p.id || '').trim().toLowerCase();
-      const codeId = ((p as any).project_id_code || '').trim().toLowerCase();
-      return pId === cleanProjId || codeId === cleanProjId || p.id === projectId;
+      const codeId = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
+      const guidId = (((p as any).guid || '') as string).trim().toLowerCase();
+      return pId === cleanProjId || codeId === cleanProjId || guidId === cleanProjId || p.id === projectId;
     });
     if (!proj) return;
 

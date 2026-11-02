@@ -1142,7 +1142,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const pool = rawProjects;
     const updateMode = isUpdate !== undefined
       ? isUpdate
-      : ((project as any).isUpdate === true || (!(project as any).isNew && pool.some((p) => p.id === project.id || (((p as any).project_id_code || '') as string) === project.id)));
+      : ((project as any).isUpdate === true || (!(project as any).isNew && pool.some((p) => p.id === project.id || (p.guid && p.guid === project.id) || (project.guid && p.guid === project.guid) || (((p as any).project_id_code || '') as string) === project.id || (((p as any).projectCode || '') as string) === project.id)));
 
     if (!updateMode) {
       (project as any).isNew = true;
@@ -1151,7 +1151,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const cName = client?.name || project.clientName || 'CLIENT';
       const sName = service?.name || 'SERVICE';
 
-      const isColliding = pool.some((p) => p.id === project.id || (((p as any).project_id_code || '') as string) === project.id);
+      const isColliding = pool.some((p) => p.id === project.id || (((p as any).project_id_code || '') as string) === project.id || (((p as any).projectCode || '') as string) === project.id);
       if (!project.id || isColliding || /^([A-Z]+-)?PRJ-\d+/i.test(project.id) || /^[0-9a-f-]{36}$/i.test(project.id) || project.id.includes(' - ')) {
         project.id = storageService.generateSemanticProjectId(
           project.brand,
@@ -1172,16 +1172,18 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const idx = prev.findIndex(
           (p) =>
             p.id === savedProject.id ||
-            (((savedProject as any).project_id_code || '') as string && p.id === ((savedProject as any).project_id_code as string))
+            (savedProject.guid && p.guid === savedProject.guid) ||
+            (((savedProject as any).project_id_code || '') as string && p.id === ((savedProject as any).project_id_code as string)) ||
+            (((savedProject as any).projectCode || '') as string && p.id === ((savedProject as any).projectCode as string))
         );
         if (idx >= 0 && updateMode) {
           const updated = [...prev];
           updated[idx] = savedProject;
           return updated;
         }
-        return [savedProject, ...prev.filter((p) => p.id !== savedProject.id)];
+        return [savedProject, ...prev.filter((p) => p.id !== savedProject.id && (!savedProject.guid || p.guid !== savedProject.guid))];
       });
-      showToast(`Project "${project.id}" saved under ${project.brand} workspace.`, 'success');
+      showToast(`Project "${savedProject.projectCode || savedProject.id}" saved under ${savedProject.brand} workspace.`, 'success');
       loadAll().catch((err) => console.warn('[Background refresh after saveProject]', err));
     } else {
       showToast(res.error || 'Failed to save project.', 'error');

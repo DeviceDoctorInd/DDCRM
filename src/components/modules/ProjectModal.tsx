@@ -244,21 +244,23 @@ export const ProjectModal: React.FC = () => {
         ];
       }
 
-      // Auto-generate semantic project ID if not already assigned or legacy formatted
+      // Auto-generate semantic project ID if not already assigned or legacy formatted (new projects only)
       const projectPool = allProjects && allProjects.length > 0 ? allProjects : projects;
       let initialId = projectModalData.id;
-      if (!isProjectModalEditing || !initialId || initialId.includes(' - ') || /^([A-Z]+-)?PRJ-\d+/i.test(initialId)) {
-        if (resolvedClientName) {
-          const matchedService = services.find((s) => s.id === projectModalData.serviceId);
-          initialId = storageService.generateSemanticProjectId(
-            projectModalData.brand || activeBrand,
-            resolvedClientName,
-            matchedService?.name || 'SERVICE',
-            projectPool,
-            isProjectModalEditing ? projectModalData.id : undefined,
-            resolvedClientId,
-            projectModalData.serviceId
-          );
+      if (!isProjectModalEditing) {
+        if (!initialId || initialId.includes(' - ') || /^([A-Z]+-)?PRJ-\d+/i.test(initialId)) {
+          if (resolvedClientName) {
+            const matchedService = services.find((s) => s.id === projectModalData.serviceId);
+            initialId = storageService.generateSemanticProjectId(
+              projectModalData.brand || activeBrand,
+              resolvedClientName,
+              matchedService?.name || 'SERVICE',
+              projectPool,
+              undefined,
+              resolvedClientId,
+              projectModalData.serviceId
+            );
+          }
         }
       }
 
@@ -268,6 +270,9 @@ export const ProjectModal: React.FC = () => {
       setFormData({
         ...projectModalData,
         id: initialId || projectModalData.id,
+        guid: projectModalData.guid,
+        projectCode: projectModalData.projectCode || projectModalData.project_id_code || initialId || projectModalData.id,
+        project_id_code: projectModalData.project_id_code || projectModalData.projectCode || initialId || projectModalData.id,
         clientId: resolvedClientId,
         clientName: resolvedClientName,
         currency: resolvedCurrency,
@@ -697,6 +702,9 @@ export const ProjectModal: React.FC = () => {
 
     const payload: Project = {
       id: finalId || '',
+      guid: formData.guid,
+      projectCode: formData.projectCode || formData.project_id_code || finalId || '',
+      project_id_code: formData.project_id_code || formData.projectCode || finalId || '',
       brand: formData.brand || activeBrand,
       clientId: formData.clientId,
       clientName: formData.clientName || 'Client',

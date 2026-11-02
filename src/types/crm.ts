@@ -184,6 +184,10 @@ export interface PaymentPhase {
 
 export interface Project {
   id: string; // Smart format: [PREFIX] - [CLIENT NAME] - [SERVICE NAME] - [SEQUENCE] (auto-generated, read-only)
+  guid?: string; // Database primary key GUID
+  projectId?: string; // Database column alias
+  projectCode?: string; // Business semantic project identifier
+  project_id_code?: string; // Database column alias
   brand?: BrandName;
   clientId: string; // Foreign key to Client.id
   clientName: string; // Auto-filled from Client
