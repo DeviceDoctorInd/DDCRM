@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema, isTransientError, isMockFallbackAllowed } from '../db/azureSql';
+import { getAzureDbStatus, getPool, getOrInitPool, refreshTableCounts, initAzureSql, migrateAzureSqlSchema, isTransientError, isMockFallbackAllowed, classifyDbError, sanitizeErrorMessage, ClassifiedDbError, DbErrorCategory, TransactionCommitAmbiguousError } from '../db/azureSql';
 import sql from 'mssql';
 import crypto from 'crypto';
 import {
@@ -389,71 +389,192 @@ export async function calculateNextEmployeeIdSql(
   }
 }
 
-// Auto-healing and transient-retry query executor
-async function executeSqlWithAutoMigration<T>(
+// Auto-healing, bounded-retry, and default-deny safe query executor
+export interface QueryExecutionOptions {
+  tableName?: string;
+  isReadOnly?: boolean;
+  isFinancialMutation?: boolean;
+  isIdempotentWrite?: boolean;
+  maxRetries?: number;
+}
+
+export async function executeSqlWithAutoMigration<T>(
   pool: sql.ConnectionPool,
-  queryFn: (activePool?: sql.ConnectionPool) => Promise<T>,
-  tableName?: string
+  queryFn: (activePool: sql.ConnectionPool) => Promise<T>,
+  optionsOrTableName?: string | QueryExecutionOptions
 ): Promise<T> {
-  try {
-    return await (queryFn.length > 0 ? queryFn(pool) : (queryFn as any)());
-  } catch (err: any) {
-    const msg = String(err?.message || err);
+  const options: QueryExecutionOptions =
+    typeof optionsOrTableName === 'string'
+      ? { tableName: optionsOrTableName }
+      : optionsOrTableName || {};
 
-    // 1. Transient connection retry using global pool reconnection
-    if (isTransientError(err)) {
-      console.warn(`[Azure SQL Transient Retry] Network glitch detected: ${msg}. Re-acquiring connection pool...`);
-      const reconnectedPool = await getOrInitPool();
-      if (reconnectedPool) {
-        try {
-          return await (queryFn.length > 0 ? queryFn(reconnectedPool) : (queryFn as any)());
-        } catch (retryErr) {
-          console.warn('[Azure SQL Transient Retry] Retry attempt failed:', retryErr);
+  const isFinancial = Boolean(options.isFinancialMutation);
+  const isReadOnly = Boolean(options.isReadOnly);
+  const isIdempotentWrite = Boolean(options.isIdempotentWrite);
+
+  // STRICT DEFAULT-DENY RETRY POLICY:
+  // 1. Financial mutations override all other options and ALWAYS receive 0 retries.
+  // 2. Only explicitly declared read-only queries (isReadOnly: true) or authorized idempotent writes (isIdempotentWrite: true) can retry.
+  // 3. Default is false (0 retries). Missing metadata, ordinary INSERT, UPDATE, or DELETE receive 0 retries.
+  let maxRetries = 0;
+  if (isFinancial) {
+    maxRetries = 0;
+  } else if (isReadOnly) {
+    maxRetries = Math.min(options.maxRetries ?? 2, 2);
+  } else if (isIdempotentWrite) {
+    maxRetries = Math.min(options.maxRetries ?? 1, 2);
+  } else {
+    maxRetries = 0;
+  }
+
+  const tableName = options.tableName;
+
+  let currentPool = pool;
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await queryFn(currentPool);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+
+      // 1. Targeted column auto-heal
+      if (msg.includes('Invalid column name') && tableName) {
+        const colMatch = msg.match(/Invalid column name '([^']+)'/i);
+        if (colMatch && colMatch[1]) {
+          const colName = colMatch[1];
+          try {
+            console.warn(`[Azure SQL Auto-Heal] Auto-adding missing column [${colName}] to table [${tableName}]...`);
+            const healingPool = getPool() || currentPool;
+            await healingPool.request().query(`
+              IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}')
+              AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
+              ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
+            `);
+            return await queryFn(healingPool);
+          } catch {
+            // Auto-heal failed, fall through to retry or error
+          }
         }
       }
-    }
 
-    // 2. Targeted column auto-heal
-    if (msg.includes('Invalid column name') && tableName) {
-      const colMatch = msg.match(/Invalid column name '([^']+)'/i);
-      if (colMatch && colMatch[1]) {
-        const colName = colMatch[1];
+      // CRITICAL FINANCIAL SAFETY RULE:
+      // NEVER automatically retry non-idempotent financial mutations
+      if (isFinancial) {
+        console.warn(`[Azure SQL Financial Safety] Non-idempotent financial write failed: ${msg.slice(0, 100)}. Automatic retry BLOCKED.`);
+        throw err;
+      }
+
+      const classification = classifyDbError(err);
+
+      // 2. Bounded retry with exponential backoff & jitter for eligible transient failures
+      if (classification.isRetryable && attempt < maxRetries) {
+        attempt++;
+        const baseDelay = 150 * Math.pow(2, attempt);
+        const jitter = Math.floor(Math.random() * 100);
+        const delay = baseDelay + jitter;
+
+        console.warn(`[Azure SQL Retry] ${classification.category} on attempt ${attempt}/${maxRetries}. Waiting ${delay}ms before re-acquiring pool...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
         try {
-          console.warn(`[Azure SQL Auto-Heal] Auto-adding missing column [${colName}] to table [${tableName}]...`);
-          const activePool = getPool() || pool;
-          await activePool.request().query(`
-            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}')
-            AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
-            ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
-          `);
-          return await (queryFn.length > 0 ? queryFn(activePool) : (queryFn as any)());
-        } catch {
-          // If auto-heal fails, rethrow original error
+          const freshPool = await getOrInitPool(true);
+          if (freshPool && freshPool.connected) {
+            currentPool = freshPool;
+            continue;
+          }
+        } catch (reconnectErr) {
+          console.warn('[Azure SQL Retry] Reconnection during retry failed:', reconnectErr);
         }
       }
-    }
 
-    throw err;
+      throw err;
+    }
   }
 }
 
 function handleDbError(res: Response, err: unknown, context: string) {
-  const msg = err instanceof Error ? err.message : String(err);
+  const msg = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
   console.error(`[Azure SQL][${context}] Error:`, msg);
-  return res.status(500).json({
-    success: false,
-    error: msg,
-    message: `Azure SQL Error during ${context}: ${msg}`,
-  });
+  return sendDatabaseError(res, err, context);
 }
 
 export function sendDatabaseUnavailable(res: Response, operation: string, details?: string) {
+  const sanitized = details ? sanitizeErrorMessage(details) : undefined;
   return res.status(503).json({
     success: false,
     error: 'Azure SQL Database Unavailable',
     message: `Cannot complete ${operation}: Azure SQL database is offline or unreachable. Operation blocked to prevent data loss.`,
-    ...(details ? { details } : {}),
+    ...(sanitized ? { details: sanitized } : {}),
   });
+}
+
+export function sendDatabaseError(res: Response, err: unknown, operation: string) {
+  const classification = classifyDbError(err);
+  const sanitized = classification.originalMessage ? sanitizeErrorMessage(classification.originalMessage) : undefined;
+
+  switch (classification.category) {
+    case 'TRANSIENT_CONNECTION':
+    case 'POOL_ACQUISITION_TIMEOUT':
+      return res.status(503).json({
+        success: false,
+        error: 'Azure SQL Database Unavailable',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Azure SQL database is offline or unreachable. Operation blocked to prevent data loss.`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+
+    case 'AUTH_FAILURE':
+      return res.status(503).json({
+        success: false,
+        error: 'Azure SQL Database Authentication Failure',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Database service authentication failed.`,
+      });
+
+    case 'CONSTRAINT_VIOLATION':
+      return res.status(409).json({
+        success: false,
+        error: 'Database Constraint Violation',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Operation violates database integrity constraints or duplicate records exist.`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+
+    case 'SYNTAX_ERROR':
+      return res.status(500).json({
+        success: false,
+        error: 'Database Query Error',
+        category: classification.category,
+        message: `Cannot complete ${operation}: A database query error occurred while processing the request.`,
+      });
+
+    case 'TRANSACTION_COMMIT_AMBIGUOUS':
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Transaction state is ambiguous due to connection loss during commit.`,
+      });
+
+    case 'QUERY_TIMEOUT':
+      return res.status(504).json({
+        success: false,
+        error: 'Database Query Timeout',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Database operation timed out before completing.`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+
+    default:
+      return res.status(classification.httpStatus).json({
+        success: false,
+        error: classification.userMessage,
+        category: classification.category,
+        message: `Cannot complete ${operation}: ${classification.userMessage}`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+  }
 }
 
 
@@ -728,8 +849,8 @@ router.get('/clients', authenticateToken, async (req: Request, res: Response) =>
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(client_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -755,7 +876,7 @@ router.get('/clients', authenticateToken, async (req: Request, res: Response) =>
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'clients'
+      { tableName: 'clients', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -849,8 +970,8 @@ async function handleSaveClientRoute(req: Request, res: Response) {
     const guidId = toGuid(client.id);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', client.id)
           .input('guidId', guidId)
           .input('rawId', client.id || '')
@@ -890,8 +1011,8 @@ async function handleSaveClientRoute(req: Request, res: Response) {
         const guidId = toGuid(client.id);
         await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('id', guidId)
               .input('rawId', client.id || '')
               .input('brand', client.brand || 'Device Doctor India')
@@ -1007,7 +1128,7 @@ router.delete('/clients/:id', authenticateToken, async (req: Request, res: Respo
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -1045,8 +1166,8 @@ router.get('/categories', async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -1060,7 +1181,7 @@ router.get('/categories', async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'service_categories'
+      { tableName: 'service_categories', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -1095,8 +1216,8 @@ async function handleSaveCategoryRoute(req: Request, res: Response) {
     const guidId = toGuid(cat.id);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', cat.id || '')
           .input('brand', cat.brand || 'Device Doctor India')
@@ -1197,7 +1318,7 @@ router.delete('/categories/:id', async (req: Request, res: Response) => {
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -1235,8 +1356,8 @@ router.get('/services', async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT
@@ -1258,7 +1379,7 @@ router.get('/services', async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR s.brand = @brandFilter)
         ORDER BY s.created_at DESC
       `),
-      'services'
+      { tableName: 'services', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -1311,8 +1432,8 @@ async function handleSaveServiceRoute(req: Request, res: Response) {
 
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', srv.id || '')
           .input('brand', srv.brand || 'Device Doctor India')
@@ -1414,7 +1535,7 @@ router.delete('/services/:id', async (req: Request, res: Response) => {
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -1516,8 +1637,8 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -1554,7 +1675,7 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'projects'
+      { tableName: 'projects', isReadOnly: true }
     );
     const formatted = (q.recordset || []).map((p: any) => {
       let parsedPhases = [];
@@ -1890,8 +2011,8 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
 
       await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('targetId', existingDbId)
             .input('guidTargetId', isExistingDbIdGuid ? existingDbId : null)
             .input('project_id_code', finalProjectCode)
@@ -1980,8 +2101,8 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
 
       await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('id', insertId)
             .input('guidId', insertGuid)
             .input('rawId', insertId)
@@ -2032,8 +2153,8 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         if (isUpdate) {
           await executeSqlWithAutoMigration(
             pool,
-            () =>
-              pool.request()
+            (activePool = pool) =>
+              activePool.request()
                 .input('id', guidId)
                 .input('rawId', cleanId)
                 .input('projectCode', fallbackCode)
@@ -2078,8 +2199,8 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         } else {
           await executeSqlWithAutoMigration(
             pool,
-            () =>
-              pool.request()
+            (activePool = pool) =>
+              activePool.request()
                 .input('id', guidId)
                 .input('rawId', cleanId)
                 .input('brand', proj.brand || 'Device Doctor India')
@@ -2215,7 +2336,7 @@ router.delete('/projects/:id', authenticateToken, async (req: Request, res: Resp
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -2256,8 +2377,8 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
       const guidId = toGuid(id);
       const q = await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('id', guidId)
             .input('rawId', id)
             .query(`
@@ -2269,7 +2390,7 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
               FROM projects
               WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId
             `),
-        'projects'
+        { tableName: 'projects', isReadOnly: true }
       );
       if (q.recordset && q.recordset.length > 0) {
         const row = q.recordset[0];
@@ -2498,8 +2619,8 @@ router.get('/payments', authenticateToken, async (req: Request, res: Response) =
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -2528,7 +2649,7 @@ router.get('/payments', authenticateToken, async (req: Request, res: Response) =
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'payments'
+      { tableName: 'payments', isReadOnly: true }
     );
     const parsedRows = (q.recordset || []).map((row: any) => ({
       ...row,
@@ -2575,7 +2696,7 @@ router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: R
       const guidId = toGuid(id);
       const resDb = await executeSqlWithAutoMigration(
         pool,
-        () => pool.request().input('id', guidId).input('rawId', id).query(`
+        (activePool = pool) => activePool.request().input('id', guidId).input('rawId', id).query(`
           SELECT TOP 1 id, brand, client_name as clientName, amount_inr as amountINR,
                        payment_date as paymentDate, payment_mode as paymentMode,
                        reference_utr as referenceUtr, payment_proof as paymentProof,
@@ -2583,7 +2704,7 @@ router.get('/payments/:id/proof', authenticateToken, async (req: Request, res: R
           FROM payments
           WHERE id = @id OR CAST(id AS NVARCHAR(100)) = @rawId
         `),
-        'payments'
+        { tableName: 'payments', isReadOnly: true }
       );
       if (resDb.recordset && resDb.recordset.length > 0) {
         payment = resDb.recordset[0];
@@ -2639,8 +2760,8 @@ export async function syncPaymentToGstInvoiceSql(
         const payGuid = toGuidOrNull(payId);
         await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('paymentId', payId)
               .input('paymentGuid', payGuid)
               .query(`
@@ -2649,7 +2770,7 @@ export async function syncPaymentToGstInvoiceSql(
                    OR (@paymentGuid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @paymentGuid))
                   AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
               `),
-          'gst_invoices'
+          { tableName: 'gst_invoices', isFinancialMutation: true }
         );
       } catch (cleanErr) {
         console.warn('[syncPaymentToGstInvoiceSql] Clean unfiled invoice notice:', cleanErr);
@@ -2763,8 +2884,8 @@ export async function syncPaymentToGstInvoiceSql(
 
       await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('id', guidGstId)
             .input('rawId', rawGstId)
             .input('brand', brand)
@@ -2801,7 +2922,7 @@ export async function syncPaymentToGstInvoiceSql(
                  OR CAST(payment_id AS NVARCHAR(150)) = @payment_id
                  OR (@payment_guid IS NOT NULL AND CAST(payment_id AS NVARCHAR(150)) = @payment_guid)
             `),
-        'gst_invoices'
+        { tableName: 'gst_invoices', isFinancialMutation: true }
       );
 
       const synced: GstInvoice = {
@@ -2913,8 +3034,8 @@ export async function syncPaymentToGstInvoiceSql(
       try {
         await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('id', guidGstId)
               .input('rawId', gstId)
               .input('brand', brand)
@@ -2935,7 +3056,7 @@ export async function syncPaymentToGstInvoiceSql(
               .input('created_at', now)
               .input('updated_at', now)
               .query(upsertSql),
-          'gst_invoices'
+          { tableName: 'gst_invoices', isFinancialMutation: true }
         );
       } catch (upsertErr: any) {
         const msg = String(upsertErr?.message || upsertErr);
@@ -2943,8 +3064,8 @@ export async function syncPaymentToGstInvoiceSql(
           console.warn('[syncPaymentToGstInvoiceSql] Retrying with GUID parameter bindings due to schema constraint...');
           await executeSqlWithAutoMigration(
             pool,
-            () =>
-              pool.request()
+            (activePool = pool) =>
+              activePool.request()
                 .input('id', guidGstId)
                 .input('rawId', gstId)
                 .input('brand', brand)
@@ -2965,7 +3086,7 @@ export async function syncPaymentToGstInvoiceSql(
                 .input('created_at', now)
                 .input('updated_at', now)
                 .query(upsertSql),
-            'gst_invoices'
+            { tableName: 'gst_invoices', isFinancialMutation: true }
           );
         } else {
           throw upsertErr;
@@ -3321,8 +3442,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', cleanId)
           .input('brand', finalBrand)
@@ -3351,7 +3472,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .input('created_at', finalCreatedAt)
           .input('updated_at', payment.updatedAt)
           .query(buildPaymentSaveQuery()),
-      'payments'
+      { tableName: 'payments', isFinancialMutation: true }
     );
 
     // Automatic GST Invoice synchronization trigger whenever paymentMode === 'GST Invoice'
@@ -3401,8 +3522,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       try {
         await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('id', guidId)
               .input('rawId', cleanId)
               .input('dbId', existingPayment?.id ? String(existingPayment.id) : null)
@@ -3417,7 +3538,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
                 )
                   AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
               `),
-          'gst_invoices'
+          { tableName: 'gst_invoices', isFinancialMutation: true }
         );
       } catch (delErr) {
         console.warn('[handleSavePaymentRoute] Notice cleaning unfiled GST invoice on payment mode change:', delErr);
@@ -3497,8 +3618,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
 
         await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('id', guidId)
               .input('rawId', cleanId)
               .input('brand', finalBrand)
@@ -3527,7 +3648,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
               .input('created_at', finalCreatedAt)
               .input('updated_at', payment.updatedAt)
               .query(buildPaymentSaveQuery()),
-          'payments'
+          { tableName: 'payments', isFinancialMutation: true }
         );
 
         let syncedGstInvoice: GstInvoice | null = null;
@@ -3576,8 +3697,8 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           try {
             await executeSqlWithAutoMigration(
               pool,
-              () =>
-                pool.request()
+              (activePool = pool) =>
+                activePool.request()
                   .input('id', guidId)
                   .input('rawId', cleanId)
                   .input('dbId', existingPayment?.id ? String(existingPayment.id) : null)
@@ -3592,7 +3713,7 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
                     )
                       AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
                   `),
-              'gst_invoices'
+              { tableName: 'gst_invoices', isFinancialMutation: true }
             );
           } catch (delErr) {
             console.warn('[handleSavePaymentRoute] Notice cleaning unfiled GST invoice on retry:', delErr);
@@ -3639,6 +3760,14 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
     }
 
     console.error(`[handleSavePaymentRoute] SQL Transaction Error: name=${errName}, code=${errCode}, message=${errMsg}, paymentId=${cleanId || payment.id}, projectId=${targetProjectId || ''}`);
+    if (errCode === 'TRANSACTION_COMMIT_AMBIGUOUS' || errMsg.includes('TRANSACTION_COMMIT_AMBIGUOUS')) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The payment transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     return res.status(500).json({
       success: false,
       error: 'An internal database error occurred while processing the payment voucher.',
@@ -3838,7 +3967,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -3900,7 +4029,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
             THROW;
           END CATCH;
         `),
-      'payments'
+      { tableName: 'payments', isFinancialMutation: true }
     );
     mockStore.deletePayment(id, brandFilter);
     return res.json({ success: true, id });
@@ -3910,6 +4039,14 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
     const errCode = anyErr?.code || anyErr?.number || 'UNKNOWN';
     const errMsg = anyErr instanceof Error ? anyErr.message : String(anyErr);
     console.error(`[DELETE /payments/${id}] Error in SQL transaction: name=${errName}, code=${errCode}, message=${errMsg}`);
+    if (errCode === 'TRANSACTION_COMMIT_AMBIGUOUS' || errMsg.includes('TRANSACTION_COMMIT_AMBIGUOUS')) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The payment deletion transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     return res.status(500).json({
       success: false,
       error: 'An internal database error occurred while removing the payment voucher.',
@@ -3932,8 +4069,8 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(account_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -3953,7 +4090,7 @@ router.get('/bank-accounts', authenticateToken, async (req: Request, res: Respon
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'bank_accounts'
+      { tableName: 'bank_accounts', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -3978,8 +4115,8 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
         const guidId = toGuid(accountId);
         const checkRes = await executeSqlWithAutoMigration(
           pool,
-          () =>
-            pool.request()
+          (activePool = pool) =>
+            activePool.request()
               .input('id', guidId)
               .input('rawId', accountId)
               .query(`
@@ -3994,7 +4131,7 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
                 FROM bank_accounts
                 WHERE id = @id OR account_id_code = @rawId OR CAST(id AS NVARCHAR(100)) = @rawId
               `),
-          'bank_accounts'
+          { tableName: 'bank_accounts', isReadOnly: true }
         );
         if (checkRes?.recordset && checkRes.recordset.length > 0) {
           existingAccount = checkRes.recordset[0];
@@ -4112,8 +4249,8 @@ async function handleSaveBankAccountRoute(req: Request, res: Response) {
     const guidId = toGuid(account.id);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', account.id || '')
           .input('brand', account.brand || 'Device Doctor India')
@@ -4223,7 +4360,7 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -4248,97 +4385,22 @@ router.delete('/bank-accounts/:id', authenticateToken, async (req: Request, res:
 });
 
 // --- GST INVOICES ---
+// Read-only endpoint: fetches persisted GST invoices without executing mutations or reconciliation
 router.get('/gst-invoices', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
   if (!pool) {
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'fetch gst-invoices');
-  }
-  return res.json(mockStore.getGstInvoices(brand));
+      return sendDatabaseUnavailable(res, 'fetch gst-invoices');
+    }
+    return res.json(mockStore.getGstInvoices(brand));
   }
 
   try {
-    // Self-healing synchronization: auto-sync any payment where payment_mode = 'GST Invoice' lacking a gst_invoices row
-    try {
-      const unsyncedRes = await pool.request()
-        .query(`
-          SELECT
-            CAST(p.id AS NVARCHAR(100)) as id,
-            ISNULL(CAST(p.payment_id_code AS NVARCHAR(100)), '') as paymentIdCode,
-            ISNULL(CAST(p.brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
-            ISNULL(CAST(p.project_id AS NVARCHAR(150)), '') as projectId,
-            ISNULL(CAST(p.client_id AS NVARCHAR(100)), '') as clientId,
-            ISNULL(CAST(p.client_name AS NVARCHAR(255)), '') as clientName,
-            ISNULL(CAST(p.payment_date AS NVARCHAR(50)), '') as paymentDate,
-            ISNULL(p.amount_received, 0) as amountReceived,
-            ISNULL(CAST(p.currency AS NVARCHAR(20)), 'INR') as currency,
-            ISNULL(p.amount_inr, 0) as amountINR,
-            ISNULL(CAST(p.notes AS NVARCHAR(MAX)), '') as notes
-          FROM payments p
-          WHERE (LTRIM(RTRIM(LOWER(p.payment_mode))) = 'gst invoice')
-            AND NOT EXISTS (
-              SELECT 1 FROM gst_invoices g
-              WHERE CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.id AS NVARCHAR(150))
-                 OR CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.payment_id_code AS NVARCHAR(150))
-                 OR (p.payment_id_code IS NOT NULL AND p.payment_id_code <> '' AND CAST(g.payment_id AS NVARCHAR(150)) = CAST(p.payment_id_code AS NVARCHAR(150)))
-            )
-        `);
-
-      const unsyncedList = unsyncedRes.recordset || [];
-      for (const un of unsyncedList) {
-        const dummyPay: Payment = {
-          id: un.paymentIdCode || (un as any).payment_id_code || un.id,
-          brand: un.brand as any,
-          projectId: un.projectId || (un as any).project_id || '',
-          clientId: un.clientId || (un as any).client_id || '',
-          clientName: un.clientName || (un as any).client_name || '',
-          paymentMode: 'GST Invoice',
-          paymentDate: un.paymentDate || (un as any).payment_date || '',
-          dueDate: un.paymentDate || (un as any).payment_date || '',
-          amountReceived: un.amountReceived ?? (un as any).amount_received ?? 0,
-          currency: (un.currency || (un as any).currency || 'INR') as any,
-          exchangeRate: 1,
-          amountINR: un.amountINR ?? (un as any).amount_inr ?? 0,
-          referenceUtr: '',
-          paymentStatus: 'Received',
-          daysOverdue: 0,
-          notes: un.notes || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await syncPaymentToGstInvoiceSql(pool, dummyPay);
-      }
-    } catch (syncErr) {
-      console.warn('[GET /gst-invoices] Notice during self-healing payment sync:', syncErr);
-    }
-
-    // Direction 2: Self-healing stale unfiled GST invoice reconciliation
-    try {
-      await pool.request()
-        .input('brandFilter', brand || null)
-        .query(`
-          DELETE FROM gst_invoices
-          WHERE (@brandFilter IS NULL OR brand = @brandFilter)
-            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '')
-            AND NOT EXISTS (
-              SELECT 1 FROM payments p
-              WHERE (
-                CAST(p.id AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
-                OR CAST(p.payment_id_code AS NVARCHAR(150)) = CAST(gst_invoices.payment_id AS NVARCHAR(150))
-              )
-              AND (LTRIM(RTRIM(LOWER(p.payment_mode))) = 'gst invoice')
-              AND (@brandFilter IS NULL OR p.brand = @brandFilter)
-            );
-        `);
-    } catch (staleErr) {
-      console.warn('[GET /gst-invoices] Notice during self-healing stale invoice cleanup:', staleErr);
-    }
-
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(g.invoice_id_code AS NVARCHAR(150)), ''), CAST(g.id AS NVARCHAR(150))) as id,
@@ -4367,36 +4429,54 @@ router.get('/gst-invoices', authenticateToken, async (req: Request, res: Respons
         /* ORDER BY created_at */
         ORDER BY g.created_at DESC
       `),
-      'gst_invoices'
+      { tableName: 'gst_invoices', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
     console.warn('[GET /gst-invoices] Falling back to mock store:', err);
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'fetch gst-invoices', err instanceof Error ? err.message : String(err));
-  }
-  return res.json(mockStore.getGstInvoices(brand));
+      return sendDatabaseUnavailable(res, 'fetch gst-invoices', err instanceof Error ? err.message : String(err));
+    }
+    return res.json(mockStore.getGstInvoices(brand));
   }
 });
+
+// Shared in-flight synchronization promise map to prevent concurrent execution of POST /gst-invoices/sync
+const activeGstSyncPromises = new Map<string, Promise<{ count: number; invoices: any[] }>>();
 
 // Explicit Sync endpoint to synchronize all payments where paymentMode === 'GST Invoice'
 router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
-  const pool = await getOrInitPool();
+  const brandKey = brand || '__ALL__';
 
+  // Concurrency guard: if a sync is already running for this brand context, wait for it rather than racing
+  const existingSync = activeGstSyncPromises.get(brandKey);
+  if (existingSync) {
+    console.log(`[POST /gst-invoices/sync] Sync already in-flight for brand "${brandKey}". Awaiting active operation...`);
+    try {
+      const joined = await existingSync;
+      return res.json({ success: true, count: joined.count, invoices: joined.invoices });
+    } catch (joinErr: any) {
+      const errMsg = joinErr instanceof Error ? joinErr.message : String(joinErr);
+      return sendDatabaseUnavailable(res, 'sync GST invoices', errMsg);
+    }
+  }
+
+  const pool = await getOrInitPool();
   if (!pool) {
     if (!isMockFallbackAllowed()) {
       return sendDatabaseUnavailable(res, 'sync GST invoices');
     }
-    const resSync = mockStore.syncAllGstInvoicesFromPayments();
+    const resSync = mockStore.syncAllGstInvoicesFromPayments(brand);
     return res.json({ success: true, count: resSync.count, invoices: mockStore.getGstInvoices(brand) });
   }
 
-  try {
+  const syncPromise = (async () => {
+    // 1. Fetch all eligible payments where paymentMode === 'GST Invoice'
     const paymentsRes = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
             SELECT CAST(id AS NVARCHAR(100)) as id,
@@ -4414,7 +4494,7 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
             WHERE (LTRIM(RTRIM(LOWER(payment_mode))) = 'gst invoice')
               AND (@brandFilter IS NULL OR brand = @brandFilter)
           `),
-      'payments'
+      { tableName: 'payments', isReadOnly: true }
     );
 
     const paymentsList = paymentsRes.recordset || [];
@@ -4447,8 +4527,8 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
     // 2. Direction 2: Remove stale unfiled GST ledger entries whose associated payment no longer qualifies or was deleted
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
             DELETE FROM gst_invoices
@@ -4464,15 +4544,15 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
                 AND (@brandFilter IS NULL OR p.brand = @brandFilter)
               );
           `),
-      'gst_invoices'
+      { tableName: 'gst_invoices', isFinancialMutation: true }
     );
 
     mockStore.syncAllGstInvoicesFromPayments(brand);
 
     const allInvoices = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
             SELECT ISNULL(NULLIF(CAST(g.invoice_id_code AS NVARCHAR(150)), ''), CAST(g.id AS NVARCHAR(150))) as id,
@@ -4501,18 +4581,35 @@ router.post('/gst-invoices/sync', authenticateToken, async (req: Request, res: R
             /* ORDER BY created_at */
             ORDER BY g.created_at DESC
           `),
-      'gst_invoices'
+      { tableName: 'gst_invoices', isReadOnly: true }
     );
 
-    return res.json({ success: true, count: syncedCount, invoices: allInvoices.recordset || [] });
+    return { count: syncedCount, invoices: allInvoices.recordset || [] };
+  })();
+
+  activeGstSyncPromises.set(brandKey, syncPromise);
+
+  try {
+    const result = await syncPromise;
+    return res.json({ success: true, count: result.count, invoices: result.invoices });
   } catch (err: any) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn('[POST /gst-invoices/sync] Error syncing:', errMsg);
+    if (err instanceof TransactionCommitAmbiguousError || (err as any)?.code === 'TRANSACTION_COMMIT_AMBIGUOUS') {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'A database write transaction outcome was ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     if (!isMockFallbackAllowed()) {
       return sendDatabaseUnavailable(res, 'sync GST invoices', errMsg);
     }
-    const mockRes = mockStore.syncAllGstInvoicesFromPayments();
+    const mockRes = mockStore.syncAllGstInvoicesFromPayments(brand);
     return res.json({ success: true, count: mockRes.count, invoices: mockStore.getGstInvoices(brand) });
+  } finally {
+    activeGstSyncPromises.delete(brandKey);
   }
 });
 
@@ -4598,8 +4695,8 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
 
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', cleanId)
           .input('brand', inv.brand || 'Device Doctor India')
@@ -4653,15 +4750,23 @@ async function handleSaveGstInvoiceRoute(req: Request, res: Response) {
                 @created_at, @updated_at
               )
           `),
-      'gst_invoices'
+      { tableName: 'gst_invoices', isFinancialMutation: true }
     );
     mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: inv });
   } catch (err) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The GST invoice transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn('[handleSaveGstInvoiceRoute] Falling back to mock store:', errMsg);
     if (!isMockFallbackAllowed()) {
-      return sendDatabaseUnavailable(res, 'save GST invoice', errMsg);
+      return sendDatabaseError(res, err, 'save GST invoice');
     }
     const saved = mockStore.saveGstInvoice(inv);
     return res.json({ success: true, invoice: saved });
@@ -4719,7 +4824,7 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -4728,17 +4833,25 @@ router.delete('/gst-invoices/:id', authenticateToken, async (req: Request, res: 
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR invoice_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
-      'gst_invoices'
+      { tableName: 'gst_invoices', isFinancialMutation: true }
     );
     mockStore.deleteGstInvoice(id, brandFilter);
     return res.json({ success: true, id });
   } catch (err: unknown) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The GST invoice deletion transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /gst-invoices/${id}] Falling back to mock store:`, errMsg);
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete GST invoice', errMsg);
-  }
-  mockStore.deleteGstInvoice(id, brandFilter);
+      return sendDatabaseError(res, err, 'delete GST invoice');
+    }
+    mockStore.deleteGstInvoice(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -4757,8 +4870,8 @@ router.get('/roles', async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(role_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -4773,7 +4886,7 @@ router.get('/roles', async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'employee_roles'
+      { tableName: 'employee_roles', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -4808,8 +4921,8 @@ async function handleSaveRoleRoute(req: Request, res: Response) {
     const guidId = toGuid(role.id);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', role.id || '')
           .input('brand', role.brand || 'Device Doctor India')
@@ -4910,7 +5023,7 @@ router.delete('/roles/:id', async (req: Request, res: Response) => {
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -4963,8 +5076,8 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(employee_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -4988,7 +5101,7 @@ router.get('/employees', authenticateToken, async (req: Request, res: Response) 
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'employees'
+      { tableName: 'employees', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -5139,8 +5252,8 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
     if (isPost) {
       await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('id', guidId)
             .input('rawId', emp.id || '')
             .input('brand', emp.brand || 'Device Doctor India')
@@ -5164,8 +5277,8 @@ async function handleSaveEmployeeRoute(req: Request, res: Response) {
     } else {
       await executeSqlWithAutoMigration(
         pool,
-        () =>
-          pool.request()
+        (activePool = pool) =>
+          activePool.request()
             .input('id', guidId)
             .input('rawId', emp.id || '')
             .input('brand', emp.brand || 'Device Doctor India')
@@ -5283,7 +5396,7 @@ router.delete('/employees/:id', authenticateToken, async (req: Request, res: Res
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -5321,8 +5434,8 @@ router.get('/assignments', async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(assignment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -5346,7 +5459,7 @@ router.get('/assignments', async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'assignments'
+      { tableName: 'assignments', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -5386,8 +5499,8 @@ async function handleSaveAssignmentRoute(req: Request, res: Response) {
     const empGuid = toGuidOrNull(asn.employeeId);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', asn.id || '')
           .input('brand', asn.brand || 'Device Doctor India')
@@ -5501,7 +5614,7 @@ router.delete('/assignments/:id', async (req: Request, res: Response) => {
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -5540,8 +5653,8 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(emp_payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -5563,7 +5676,7 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'employee_payments'
+      { tableName: 'employee_payments', isReadOnly: true }
     );
     const parsedRows = (q.recordset || []).map((row: any) => ({
       ...row,
@@ -5659,8 +5772,8 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
     const empGuid = toGuidOrNull(epay.employeeId);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', epay.id || '')
           .input('brand', epay.brand || 'Device Doctor India')
@@ -5689,15 +5802,23 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
               INSERT INTO employee_payments (id, emp_payment_id_code, brand, assignment_id, project_id, employee_id, employee_name, payment_date, amount_paid, payment_mode, reference_utr, notes, payment_proof, payment_proof_notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @assignment_id, @project_id, @employee_id, @employee_name, @payment_date, @amount_paid, @payment_mode, @reference_utr, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
           `),
-      'employee_payments'
+      { tableName: 'employee_payments', isFinancialMutation: true }
     );
     mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: epay });
   } catch (err) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The employee payout transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', errMsg);
     if (!isMockFallbackAllowed()) {
-      return sendDatabaseUnavailable(res, 'save employee payment', errMsg);
+      return sendDatabaseError(res, err, 'save employee payment');
     }
     const saved = mockStore.saveEmployeePayment(epay);
     return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
@@ -5753,7 +5874,7 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -5762,17 +5883,25 @@ router.delete('/employee-payments/:id', authenticateToken, async (req: Request, 
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR emp_payment_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
-      'employee_payments'
+      { tableName: 'employee_payments', isFinancialMutation: true }
     );
     mockStore.deleteEmployeePayment(id, brandFilter);
     return res.json({ success: true, id });
   } catch (err: unknown) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The employee payout deletion transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /employee-payments/${id}] Falling back to mock store:`, errMsg);
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete employee payment', errMsg);
-  }
-  mockStore.deleteEmployeePayment(id, brandFilter);
+      return sendDatabaseError(res, err, 'delete employee payment');
+    }
+    mockStore.deleteEmployeePayment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -5791,8 +5920,8 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(exp_category_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -5806,7 +5935,7 @@ router.get('/expense-categories', async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'expense_categories'
+      { tableName: 'expense_categories', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -5842,8 +5971,8 @@ async function handleSaveExpenseCategoryRoute(req: Request, res: Response) {
     const guidId = toGuid(cat.id);
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', cat.id || '')
           .input('brand', cat.brand || 'Device Doctor India')
@@ -5945,7 +6074,7 @@ router.delete('/expense-categories/:id', async (req: Request, res: Response) => 
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -5983,8 +6112,8 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(expense_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
@@ -6009,7 +6138,7 @@ router.get('/expenses', authenticateToken, async (req: Request, res: Response) =
         WHERE (@brandFilter IS NULL OR brand = @brandFilter)
         ORDER BY created_at DESC
       `),
-      'other_expenses'
+      { tableName: 'other_expenses', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -6097,8 +6226,8 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
 
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', exp.id || '')
           .input('brand', exp.brand || 'Device Doctor India')
@@ -6139,15 +6268,23 @@ async function handleSaveExpenseRoute(req: Request, res: Response) {
               INSERT INTO other_expenses (id, expense_id_code, brand, project_id, is_na_project, client_id, client_name, expense_category_id, expense_category_name, vendor, description, amount, currency, exchange_rate, amount_inr, expense_date, payment_status, notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @project_id, @is_na_project, @client_id, @client_name, @cat_id, @cat_name, @vendor, @description, @amount, @currency, @exchange_rate, @amount_inr, @expense_date, @payment_status, @notes, @created_at, @updated_at)
           `),
-      'other_expenses'
+      { tableName: 'other_expenses', isFinancialMutation: true }
     );
     mockStore.saveExpense(exp);
     return res.json({ success: true, expense: exp });
   } catch (err) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The expense transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn('[handleSaveExpenseRoute] Falling back to mock store:', errMsg);
     if (!isMockFallbackAllowed()) {
-      return sendDatabaseUnavailable(res, 'save expense', errMsg);
+      return sendDatabaseError(res, err, 'save expense');
     }
     const saved = mockStore.saveExpense(exp);
     return res.json({ success: true, expense: saved });
@@ -6203,7 +6340,7 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -6212,17 +6349,25 @@ router.delete('/expenses/:id', authenticateToken, async (req: Request, res: Resp
           WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR expense_id_code = @rawId)
             AND (@brandFilter IS NULL OR brand = @brandFilter)
         `),
-      'other_expenses'
+      { tableName: 'other_expenses', isFinancialMutation: true }
     );
     mockStore.deleteExpense(id, brandFilter);
     return res.json({ success: true, id });
   } catch (err: unknown) {
+    if (err instanceof TransactionCommitAmbiguousError) {
+      return res.status(500).json({
+        success: false,
+        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+        message: 'The expense deletion transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+      });
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     console.warn(`[DELETE /expenses/${id}] Falling back to mock store:`, errMsg);
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete expense', errMsg);
-  }
-  mockStore.deleteExpense(id, brandFilter);
+      return sendDatabaseError(res, err, 'delete expense');
+    }
+    mockStore.deleteExpense(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
@@ -6241,8 +6386,8 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
   try {
     const q = await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('brandFilter', brand || null)
           .query(`
         SELECT CAST(id AS NVARCHAR(100)) as id,
@@ -6258,7 +6403,7 @@ router.get('/users', authenticateToken, async (req: Request, res: Response) => {
         WHERE (@brandFilter IS NULL OR brand = 'All' OR brand = @brandFilter)
         ORDER BY created_at ASC
       `),
-      'app_users'
+      { tableName: 'app_users', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -6431,8 +6576,8 @@ async function handleSaveUserRoute(req: Request, res: Response) {
 
     await executeSqlWithAutoMigration(
       pool,
-      () =>
-        pool.request()
+      (activePool = pool) =>
+        activePool.request()
           .input('id', guidId)
           .input('rawId', finalId)
           .input('name', user.name)
@@ -6551,7 +6696,7 @@ router.delete('/users/:id', authenticateToken, async (req: Request, res: Respons
 
     await executeSqlWithAutoMigration(
       pool,
-      () => pool.request()
+      (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
         .input('brandFilter', brandFilter)
@@ -6586,8 +6731,11 @@ router.get('/audit', async (_req: Request, res: Response) => {
   }
 
   try {
-    const q = await executeSqlWithAutoMigration(pool, () =>
-      pool.request().query('SELECT TOP 100 * FROM crm_audit_log ORDER BY id DESC')
+    const q = await executeSqlWithAutoMigration(
+      pool,
+      (activePool = pool) =>
+        activePool.request().query('SELECT TOP 100 * FROM crm_audit_log ORDER BY id DESC'),
+      { tableName: 'crm_audit_log', isReadOnly: true }
     );
     return res.json(q.recordset || []);
   } catch (err) {
@@ -6620,19 +6768,22 @@ router.post('/audit', async (req: Request, res: Response) => {
   }
 
   try {
-    await executeSqlWithAutoMigration(pool, () =>
-      pool.request()
-        .input('brand', brand || 'All')
-        .input('module', module || 'General')
-        .input('action', action || 'LOG')
-        .input('entity_id', entityId || '')
-        .input('details', details || '')
-        .input('performed_by', performedBy || 'System')
-        .input('timestamp', now)
-        .query(`
-          INSERT INTO crm_audit_log (brand, module, action, entity_id, details, performed_by, timestamp)
-          VALUES (@brand, @module, @action, @entity_id, @details, @performed_by, @timestamp)
-        `)
+    await executeSqlWithAutoMigration(
+      pool,
+      (activePool = pool) =>
+        activePool.request()
+          .input('brand', brand || 'All')
+          .input('module', module || 'General')
+          .input('action', action || 'LOG')
+          .input('entity_id', entityId || '')
+          .input('details', details || '')
+          .input('performed_by', performedBy || 'System')
+          .input('timestamp', now)
+          .query(`
+            INSERT INTO crm_audit_log (brand, module, action, entity_id, details, performed_by, timestamp)
+            VALUES (@brand, @module, @action, @entity_id, @details, @performed_by, @timestamp)
+          `),
+      { tableName: 'crm_audit_log' }
     );
     return res.json({ success: true });
   } catch (err) {
