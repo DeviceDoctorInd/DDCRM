@@ -375,10 +375,14 @@ class StorageService {
 
   public async saveProject(proj: Project, isUpdate: boolean = false): Promise<{ success: boolean; project?: Project; error?: string }> {
     try {
-      const endpoint = isUpdate ? `/api/projects/${encodeURIComponent(proj.id)}` : '/api/projects';
+      const targetId = (isUpdate && proj.guid) ? proj.guid : (proj.id || (proj as any).projectCode);
+      const endpoint = isUpdate ? `/api/projects/${encodeURIComponent(targetId)}` : '/api/projects';
       const method = isUpdate ? 'PUT' : 'POST';
       const payload = {
         ...proj,
+        guid: proj.guid,
+        projectCode: (proj as any).projectCode || (proj as any).project_id_code || proj.id,
+        project_id_code: (proj as any).project_id_code || (proj as any).projectCode || proj.id,
         ...(isUpdate ? { isUpdate: true } : { isNew: true }),
       };
       const res = await this.apiCall<{ success: boolean; project: Project }>(endpoint, method, payload);

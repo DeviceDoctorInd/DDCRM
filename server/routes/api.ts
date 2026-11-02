@@ -1521,6 +1521,8 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
           .input('brandFilter', brand || null)
           .query(`
         SELECT ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id,
+               CAST(id AS NVARCHAR(150)) as guid,
+               ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as projectCode,
                ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id,
                ISNULL(NULLIF(CAST(project_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as project_id_code,
                ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
@@ -1581,6 +1583,9 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
       }
       return {
         ...p,
+        guid: p.guid || p.id,
+        projectCode: p.projectCode || p.id,
+        project_id_code: p.project_id_code || p.id,
         paymentPhases: parsedPhases,
         proposalDocument: proposalDoc,
         contractDocument: contractDoc,
@@ -1599,7 +1604,7 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
 async function handleSaveProjectRoute(req: Request, res: Response) {
   // --- Input Validation (POST & PUT /api/projects) ---
   const isPost = req.method === 'POST';
-  const isUpdate = Boolean(req.body.isUpdate || req.method === 'PUT');
+  const isUpdate = Boolean(req.body.isUpdate || req.method === 'PUT' || req.method === 'PATCH');
   const isNew = Boolean(req.body.isNew || (isPost && !isUpdate));
 
   // 1. Client Identity (required on POST: at least clientId or clientName)
@@ -1702,14 +1707,41 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
     }
   }
 
+  const paramId = (req.params.id || '').trim();
+  const bodyId = (proj.id || '').trim();
+  const bodyGuid = ((proj as any).guid || '').trim();
+  const bodyCode = (((proj as any).projectCode || (proj as any).project_id_code) || '').trim();
+
+  const isGuidFormat = (val: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+  const guidCandidate = [paramId, bodyGuid, bodyId].find((v) => v && isGuidFormat(v)) || null;
+  const cleanId = paramId || bodyId || bodyGuid || '';
+
   if (!pool) {
     if (!isMockFallbackAllowed()) {
       return sendDatabaseUnavailable(res, 'save project');
     }
+    if (isUpdate) {
+      const existing = mockStore.getProjects(null).find((p) => {
+        const pId = (p.id || '').trim().toLowerCase();
+        const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
+        const pGuid = (((p as any).guid || '') as string).trim().toLowerCase();
+        const target = cleanId.toLowerCase();
+        const codeTarget = bodyCode.toLowerCase();
+        return (
+          (target && (pId === target || pCode === target || pGuid === target)) ||
+          (codeTarget && (pId === codeTarget || pCode === codeTarget || pGuid === codeTarget))
+        );
+      });
+      if (!existing) {
+        return res.status(404).json({ success: false, error: `Project '${cleanId}' not found for update.` });
+      }
+    }
     if (isNew) {
       const existing = mockStore.getProjects(null).find((p) => {
         const pId = (p.id || '').trim().toLowerCase();
-        const pCode = (((p as any).project_id_code || '') as string).trim().toLowerCase();
+        const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
         const target = (proj.id || '').trim().toLowerCase();
         return pId === target || pCode === target;
       });
@@ -1733,25 +1765,55 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
   }
 
   try {
-    let cleanId = (proj.id || '').trim();
-    let guidId = toGuid(cleanId);
     let existingProject: any = null;
 
-    try {
-      const checkRes = await pool.request()
-        .input('id', cleanId)
-        .input('rawId', cleanId)
-        .input('guidId', guidId)
-        .query(`
-          SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
-                 ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
-                 client_id, service_id, brand, contract, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases
-          FROM projects
-          WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId OR id = @guidId
-        `);
-      existingProject = checkRes.recordset[0] || null;
-    } catch (checkErr) {
-      console.warn('[handleSaveProjectRoute] Checking existing project notice:', checkErr);
+    if (cleanId || bodyCode || guidCandidate) {
+      try {
+        const checkRes = await pool.request()
+          .input('rawId', cleanId)
+          .input('cleanId', cleanId)
+          .input('bodyCode', bodyCode || cleanId)
+          .input('guidCandidate', guidCandidate)
+          .query(`
+            SELECT TOP 1
+                   CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
+                   ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                   ISNULL(CAST(client_id AS NVARCHAR(150)), '') as client_id,
+                   ISNULL(CAST(client_name AS NVARCHAR(255)), '') as client_name,
+                   ISNULL(CAST(service_id AS NVARCHAR(150)), '') as service_id,
+                   ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposal_date,
+                   ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contract_date,
+                   ISNULL(CAST(start_date AS NVARCHAR(50)), '') as start_date,
+                   ISNULL(committed_days, 30) as committed_days,
+                   ISNULL(CAST(committed_end_date AS NVARCHAR(50)), '') as committed_end_date,
+                   ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actual_end_date,
+                   ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status,
+                   ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as payment_mode,
+                   ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+                   ISNULL(contract, 0) as contract,
+                   ISNULL(exchange_rate, 1) as exchange_rate,
+                   ISNULL(contract_value, 0) as contract_value,
+                   ISNULL(total_received, 0) as total_received,
+                   ISNULL(balance, 0) as balance,
+                   ISNULL(CAST(project_manager AS NVARCHAR(255)), '') as project_manager,
+                   ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+                   ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposal_document,
+                   ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contract_document,
+                   ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as payment_phases,
+                   ISNULL(CAST(created_at AS NVARCHAR(50)), '') as created_at,
+                   ISNULL(CAST(updated_at AS NVARCHAR(50)), '') as updated_at
+            FROM projects
+            WHERE (
+              (@guidCandidate IS NOT NULL AND CAST(id AS NVARCHAR(150)) = @guidCandidate)
+              OR (@rawId <> '' AND (CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId))
+              OR (@bodyCode <> '' AND CAST(project_id_code AS NVARCHAR(150)) = @bodyCode)
+            )
+          `);
+        existingProject = checkRes.recordset?.[0] || null;
+      } catch (checkErr) {
+        console.warn('[handleSaveProjectRoute] Checking existing project error:', checkErr);
+      }
     }
 
     // Protection: If client signaled this is a genuinely new project (isNew=true),
@@ -1767,8 +1829,6 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         proj.serviceId
       );
       proj.id = calculated.projectId;
-      cleanId = proj.id;
-      guidId = crypto.randomUUID(); // Fresh unique GUID for genuinely new project record!
       existingProject = null;
     }
 
@@ -1780,17 +1840,65 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
     const serviceGuid = toGuidOrNull(proj.serviceId);
 
     if (isUpdate && existingProject) {
+      const existingDbId = String(existingProject.id);
+      const isExistingDbIdGuid = isGuidFormat(existingDbId);
+
+      // Determine final semantic project code:
+      // Must preserve existing business code, never overwriting with a GUID!
+      let finalProjectCode = existingProject.project_id_code;
+      if (!finalProjectCode || finalProjectCode.trim() === '') {
+        finalProjectCode = (!isGuidFormat(cleanId) && cleanId) ? cleanId : (bodyCode || existingDbId);
+      } else if (bodyCode && !isGuidFormat(bodyCode)) {
+        finalProjectCode = bodyCode;
+      }
+
+      let parsedPaymentPhases = proj.paymentPhases;
+      if (parsedPaymentPhases === undefined && existingProject.payment_phases) {
+        try {
+          parsedPaymentPhases = typeof existingProject.payment_phases === 'string'
+            ? JSON.parse(existingProject.payment_phases)
+            : existingProject.payment_phases;
+        } catch {
+          parsedPaymentPhases = [];
+        }
+      }
+
+      let parsedProposalDoc: ProjectDocument | undefined = proj.proposalDocument;
+      if (parsedProposalDoc === undefined && existingProject.proposal_document) {
+        try {
+          parsedProposalDoc = typeof existingProject.proposal_document === 'string'
+            ? JSON.parse(existingProject.proposal_document)
+            : existingProject.proposal_document;
+        } catch {
+          parsedProposalDoc = undefined;
+        }
+      }
+
+      let parsedContractDoc: ProjectDocument | undefined = proj.contractDocument;
+      if (parsedContractDoc === undefined && existingProject.contract_document) {
+        try {
+          parsedContractDoc = typeof existingProject.contract_document === 'string'
+            ? JSON.parse(existingProject.contract_document)
+            : existingProject.contract_document;
+        } catch {
+          parsedContractDoc = undefined;
+        }
+      }
+
+      const resolvedClientGuid = clientGuid || toGuidOrNull(existingProject.client_id);
+      const resolvedServiceGuid = serviceGuid || toGuidOrNull(existingProject.service_id);
+
       await executeSqlWithAutoMigration(
         pool,
         () =>
           pool.request()
-            .input('id', existingProject.id)
-            .input('guidId', guidId)
-            .input('rawId', cleanId)
+            .input('targetId', existingDbId)
+            .input('guidTargetId', isExistingDbIdGuid ? existingDbId : null)
+            .input('project_id_code', finalProjectCode)
             .input('brand', proj.brand || existingProject.brand || 'Device Doctor India')
-            .input('client_id', proj.clientId || existingProject.client_id || clientGuid)
+            .input('client_id', proj.clientId || existingProject.client_id || resolvedClientGuid)
             .input('client_name', proj.clientName || existingProject.client_name || '')
-            .input('service_id', proj.serviceId || existingProject.service_id || serviceGuid)
+            .input('service_id', proj.serviceId || existingProject.service_id || resolvedServiceGuid)
             .input('proposal_date', proj.proposalDate !== undefined ? proj.proposalDate : (existingProject.proposal_date || ''))
             .input('contract_date', proj.contractDate !== undefined ? proj.contractDate : (existingProject.contract_date || ''))
             .input('start_date', proj.startDate !== undefined ? proj.startDate : (existingProject.start_date || ''))
@@ -1820,20 +1928,64 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
                                  contract_value=@contract_value, total_received=@total_received, balance=@balance,
                                  project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
                                  contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
-                                 project_id_code=@rawId
-              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR project_id_code = @rawId OR id = @guidId
+                                 project_id_code=@project_id_code
+              WHERE CAST(id AS NVARCHAR(150)) = @targetId
+                 OR (@guidTargetId IS NOT NULL AND id = @guidTargetId)
             `),
         'projects'
       );
+
+      const mergedProject: Project = {
+        id: finalProjectCode || existingDbId,
+        guid: existingDbId,
+        projectCode: finalProjectCode || existingDbId,
+        project_id_code: finalProjectCode || existingDbId,
+        brand: proj.brand || existingProject.brand || 'Device Doctor India',
+        clientId: proj.clientId || existingProject.client_id || '',
+        clientName: proj.clientName || existingProject.client_name || '',
+        serviceId: proj.serviceId || existingProject.service_id || '',
+        proposalDate: proj.proposalDate !== undefined ? proj.proposalDate : (existingProject.proposal_date || ''),
+        contractDate: proj.contractDate !== undefined ? proj.contractDate : (existingProject.contract_date || ''),
+        startDate: proj.startDate !== undefined ? proj.startDate : (existingProject.start_date || ''),
+        committedDays: proj.committedDays !== undefined ? proj.committedDays : (existingProject.committed_days || 30),
+        committedEndDate: proj.committedEndDate !== undefined ? proj.committedEndDate : (existingProject.committed_end_date || ''),
+        actualEndDate: proj.actualEndDate !== undefined ? proj.actualEndDate : (existingProject.actual_end_date || ''),
+        status: proj.status !== undefined ? proj.status : (existingProject.status || 'In Progress'),
+        paymentMode: proj.paymentMode !== undefined ? proj.paymentMode : (existingProject.payment_mode || 'GST Invoice'),
+        currency: proj.currency !== undefined ? proj.currency : (existingProject.currency || 'INR'),
+        contract: proj.contract !== undefined ? proj.contract : (existingProject.contract || 0),
+        exchangeRate: proj.exchangeRate !== undefined ? proj.exchangeRate : (existingProject.exchange_rate || 1),
+        contractValue: proj.contractValue !== undefined ? proj.contractValue : (existingProject.contract_value || 0),
+        totalReceived: proj.totalReceived !== undefined ? proj.totalReceived : (existingProject.total_received || 0),
+        balance: proj.balance !== undefined ? proj.balance : (existingProject.balance || 0),
+        projectManager: proj.projectManager !== undefined ? proj.projectManager : (existingProject.project_manager || ''),
+        notes: proj.notes !== undefined ? proj.notes : (existingProject.notes || ''),
+        proposalDocument: parsedProposalDoc || undefined,
+        contractDocument: parsedContractDoc || undefined,
+        paymentPhases: parsedPaymentPhases || [],
+        createdAt: existingProject.created_at || proj.createdAt,
+        updatedAt: proj.updatedAt,
+      };
+      try {
+        mockStore.saveProject({ ...mergedProject, isNew: false, isUpdate: false });
+      } catch (cacheErr) {
+        console.warn('[handleSaveProjectRoute] Mock store sync warning:', cacheErr);
+      }
+      return res.json({ success: true, project: mergedProject });
     } else {
       // Genuinely New Project: Strict INSERT
+      const insertId = (proj.id || '').trim();
+      const insertGuid = isGuidFormat(insertId) ? insertId : crypto.randomUUID();
+      const insertCode = !isGuidFormat(insertId) ? insertId : (bodyCode || insertId);
+
       await executeSqlWithAutoMigration(
         pool,
         () =>
           pool.request()
-            .input('id', cleanId)
-            .input('guidId', guidId)
-            .input('rawId', cleanId)
+            .input('id', insertId)
+            .input('guidId', insertGuid)
+            .input('rawId', insertId)
+            .input('project_id_code', insertCode)
             .input('brand', proj.brand || 'Device Doctor India')
             .input('client_id', proj.clientId || clientGuid)
             .input('client_name', proj.clientName || '')
@@ -1861,13 +2013,13 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
             .input('updated_at', proj.updatedAt)
             .query(`
               INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
-              VALUES (@id, @rawId, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
+              VALUES (@id, @project_id_code, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
             `),
         'projects'
       );
+      mockStore.saveProject({ ...proj, id: insertId, guid: insertGuid, projectCode: insertCode, project_id_code: insertCode, isNew: true });
+      return res.json({ success: true, project: { ...proj, id: insertId, guid: insertGuid, projectCode: insertCode, project_id_code: insertCode } });
     }
-    mockStore.saveProject({ ...proj, isNew, isUpdate });
-    return res.json({ success: true, project: proj });
   } catch (err: any) {
     const errMsg = String(err?.message || err);
     if (errMsg.includes('uniqueidentifier') || errMsg.includes('Conversion failed')) {
@@ -1876,6 +2028,7 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         const guidId = toGuid(cleanId);
         const clientGuid = toGuidOrNull(proj.clientId);
         const serviceGuid = toGuidOrNull(proj.serviceId);
+        const fallbackCode = (!isGuidFormat(cleanId) && cleanId) ? cleanId : (((proj as any).projectCode || (proj as any).project_id_code) || cleanId);
         if (isUpdate) {
           await executeSqlWithAutoMigration(
             pool,
@@ -1883,6 +2036,7 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
               pool.request()
                 .input('id', guidId)
                 .input('rawId', cleanId)
+                .input('projectCode', fallbackCode)
                 .input('brand', proj.brand || 'Device Doctor India')
                 .input('client_id', clientGuid)
                 .input('client_name', proj.clientName || '')
@@ -1916,8 +2070,8 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
                                      contract_value=@contract_value, total_received=@total_received, balance=@balance,
                                      project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
                                      contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
-                                     project_id_code=@rawId
-                  WHERE id = @id OR project_id_code = @rawId
+                                     project_id_code=@projectCode
+                  WHERE CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId
                 `),
             'projects'
           );
@@ -1977,7 +2131,22 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
 
 router.post('/projects', authenticateToken, handleSaveProjectRoute);
 router.put('/projects/:id', authenticateToken, (req: Request, res: Response) => {
-  req.body.id = req.params.id;
+  if (!req.body.id) {
+    req.body.id = req.params.id;
+  }
+  if (!req.body.guid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    req.body.guid = req.params.id;
+  }
+  req.body.isUpdate = true;
+  return handleSaveProjectRoute(req, res);
+});
+router.patch('/projects/:id', authenticateToken, (req: Request, res: Response) => {
+  if (!req.body.id) {
+    req.body.id = req.params.id;
+  }
+  if (!req.body.guid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    req.body.guid = req.params.id;
+  }
   req.body.isUpdate = true;
   return handleSaveProjectRoute(req, res);
 });
@@ -2098,7 +2267,7 @@ router.get('/projects/:id/documents/:docType', authenticateToken, async (req: Re
                      client_name as clientName,
                      brand
               FROM projects
-              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId
+              WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId
             `),
         'projects'
       );
