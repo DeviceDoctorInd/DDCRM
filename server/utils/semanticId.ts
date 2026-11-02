@@ -104,6 +104,11 @@ export function extractProjectSequence(projectId: string, basePrefix?: string): 
   if (!projectId || typeof projectId !== 'string') return null;
   const trimmed = projectId.trim();
 
+  // Pure GUIDs must not be interpreted as sequence numbers
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+    return null;
+  }
+
   if (basePrefix) {
     const escaped = basePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`^${escaped}-(\\d+)$`, 'i');

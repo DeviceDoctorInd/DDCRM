@@ -373,9 +373,15 @@ class StorageService {
     });
   }
 
-  public async saveProject(proj: Project): Promise<{ success: boolean; project?: Project; error?: string }> {
+  public async saveProject(proj: Project, isUpdate: boolean = false): Promise<{ success: boolean; project?: Project; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; project: Project }>('/api/projects', 'POST', proj);
+      const endpoint = isUpdate ? `/api/projects/${encodeURIComponent(proj.id)}` : '/api/projects';
+      const method = isUpdate ? 'PUT' : 'POST';
+      const payload = {
+        ...proj,
+        ...(isUpdate ? { isUpdate: true } : { isNew: true }),
+      };
+      const res = await this.apiCall<{ success: boolean; project: Project }>(endpoint, method, payload);
       this.notifyListeners();
       return { success: true, project: res.project };
     } catch (err: unknown) {
@@ -858,18 +864,27 @@ class StorageService {
     const basePrefix = `${prefix}-${clientSlug}-${serviceSlug}`;
 
     const matchingProjects = existingProjects.filter((p) => {
-      if (currentProjectId && p.id === currentProjectId) return false;
-      const matchExactPrefix = p.id.startsWith(basePrefix);
+      const pId = (p.id || '').trim();
+      const pCode = (((p as any).project_id_code || '') as string).trim();
+      if (currentProjectId && (pId === currentProjectId || pCode === currentProjectId)) return false;
+      const matchExactPrefix = pId.startsWith(basePrefix) || pCode.startsWith(basePrefix);
       const matchClientAndService = clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
-      const matchLegacySpacePattern = p.id.startsWith(`${prefix} - `) && p.id.toUpperCase().includes(clientSlug.replace(/-/g, ' '));
+      const matchLegacySpacePattern =
+        (pId.startsWith(`${prefix} - `) || pCode.startsWith(`${prefix} - `)) &&
+        (pId.toUpperCase().includes(clientSlug.replace(/-/g, ' ')) || pCode.toUpperCase().includes(clientSlug.replace(/-/g, ' ')));
       return matchExactPrefix || matchClientAndService || matchLegacySpacePattern;
     });
 
     let maxSeq = 0;
     for (const p of matchingProjects) {
+      const pId = (p.id || '').trim();
+      const pCode = (((p as any).project_id_code || '') as string).trim();
+
       // 1. Strict semantic match: BASE-N
       const escaped = basePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const strictMatch = p.id.match(new RegExp(`^${escaped}-(\\d+)$`, 'i'));
+      const strict1 = pId.match(new RegExp(`^${escaped}-(\\d+)$`, 'i'));
+      const strict2 = pCode ? pCode.match(new RegExp(`^${escaped}-(\\d+)$`, 'i')) : null;
+      const strictMatch = strict1 || strict2;
       if (strictMatch && strictMatch[1]) {
         const seq = parseInt(strictMatch[1], 10);
         if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
@@ -877,14 +892,18 @@ class StorageService {
       }
 
       // 2. Space-delimited legacy match: BASE - N
-      const spaceMatch = p.id.match(/[-_\s](\d+)$/);
+      const space1 = pId.match(/[-_\s](\d+)$/);
+      const space2 = pCode ? pCode.match(/[-_\s](\d+)$/) : null;
+      const spaceMatch = space1 || space2;
       if (spaceMatch && spaceMatch[1]) {
-        const seq = parseInt(spaceMatch[1], 10);
-        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pId)) {
+          const seq = parseInt(spaceMatch[1], 10);
+          if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+        }
       }
     }
 
-    const nextSeq = maxSeq + 1;
+    const nextSeq = Math.max(maxSeq + 1, matchingProjects.length > 0 ? matchingProjects.length + 1 : 1);
     return `${basePrefix}-${nextSeq}`;
   }
 
@@ -927,7 +946,8 @@ class StorageService {
     clientName: string,
     serviceName: string,
     clientId?: string,
-    serviceId?: string
+    serviceId?: string,
+    existingProjects: Project[] = []
   ): Promise<{ projectId: string; sequence: number }> {
     try {
       const query = new URLSearchParams({
@@ -946,8 +966,18 @@ class StorageService {
     } catch (err) {
       console.warn('[fetchNextSemanticProjectId] API error, using client fallback:', err);
     }
-    const pid = this.generateSemanticProjectId(brand, clientName, serviceName);
-    return { projectId: pid, sequence: 1 };
+    const pid = this.generateSemanticProjectId(
+      brand,
+      clientName,
+      serviceName,
+      existingProjects,
+      undefined,
+      clientId,
+      serviceId
+    );
+    const seqMatch = pid.match(/-(\d+)$/);
+    const sequence = seqMatch ? parseInt(seqMatch[1], 10) : 1;
+    return { projectId: pid, sequence };
   }
 
   public async fetchNextSemanticPaymentId(brand: BrandName, existingPayments: Payment[] = []): Promise<string> {

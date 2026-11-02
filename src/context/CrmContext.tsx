@@ -119,7 +119,7 @@ interface CrmContextType {
   deleteService: (serviceId: string) => Promise<{ success: boolean; error?: string }>;
   setServiceStatus: (serviceId: string, status: Service['status']) => Promise<void>;
 
-  saveProject: (project: Project) => Promise<{ success: boolean; error?: string }>;
+  saveProject: (project: Project, isUpdate?: boolean) => Promise<{ success: boolean; project?: Project; error?: string }>;
   deleteProject: (projectId: string) => Promise<{ success: boolean; error?: string }>;
   setProjectStatus: (projectId: string, status: Project['status']) => Promise<void>;
 
@@ -1131,37 +1131,55 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await saveServiceAction({ ...srv, status });
   };
 
-  const saveProjectAction = async (project: Project) => {
+  const saveProjectAction = async (project: Project, isUpdate?: boolean) => {
     if (!project.brand || (project.brand as string) === 'All' || (project.brand as string) === 'All Brands') {
       project.brand = activeBrand;
     }
     if (project.brand !== 'Device Doctor India' && project.brand !== 'Codestro' && project.brand !== 'FX Launch Pad' && project.brand !== 'DUNS') {
       project.brand = 'Device Doctor India';
     }
-    if (!project.id || /^([A-Z]+-)?PRJ-\d+/i.test(project.id) || /^[0-9a-f-]{36}$/i.test(project.id) || project.id.includes(' - ')) {
+
+    const pool = rawProjects;
+    const updateMode = isUpdate !== undefined
+      ? isUpdate
+      : ((project as any).isUpdate === true || (!(project as any).isNew && pool.some((p) => p.id === project.id || (((p as any).project_id_code || '') as string) === project.id)));
+
+    if (!updateMode) {
+      (project as any).isNew = true;
       const client = getClientById(project.clientId);
       const service = getServiceById(project.serviceId);
-      project.id = storageService.generateSemanticProjectId(
-        project.brand,
-        client?.name || project.clientName || 'CLIENT',
-        service?.name || 'SERVICE',
-        rawProjects,
-        undefined,
-        project.clientId,
-        project.serviceId
-      );
+      const cName = client?.name || project.clientName || 'CLIENT';
+      const sName = service?.name || 'SERVICE';
+
+      const isColliding = pool.some((p) => p.id === project.id || (((p as any).project_id_code || '') as string) === project.id);
+      if (!project.id || isColliding || /^([A-Z]+-)?PRJ-\d+/i.test(project.id) || /^[0-9a-f-]{36}$/i.test(project.id) || project.id.includes(' - ')) {
+        project.id = storageService.generateSemanticProjectId(
+          project.brand,
+          cName,
+          sName,
+          pool,
+          undefined,
+          project.clientId,
+          project.serviceId
+        );
+      }
     }
-    const res = await storageService.saveProject(project);
+
+    const res = await storageService.saveProject(project, updateMode);
     if (res.success) {
       const savedProject = res.project || project;
       setRawProjects((prev) => {
-        const idx = prev.findIndex((p) => p.id === savedProject.id);
-        if (idx >= 0) {
+        const idx = prev.findIndex(
+          (p) =>
+            p.id === savedProject.id ||
+            (((savedProject as any).project_id_code || '') as string && p.id === ((savedProject as any).project_id_code as string))
+        );
+        if (idx >= 0 && updateMode) {
           const updated = [...prev];
           updated[idx] = savedProject;
           return updated;
         }
-        return [savedProject, ...prev];
+        return [savedProject, ...prev.filter((p) => p.id !== savedProject.id)];
       });
       showToast(`Project "${project.id}" saved under ${project.brand} workspace.`, 'success');
       loadAll().catch((err) => console.warn('[Background refresh after saveProject]', err));
@@ -1211,7 +1229,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setProjectStatus = async (projectId: string, status: Project['status']) => {
     const proj = getProjectById(projectId);
     if (!proj) return;
-    await saveProjectAction({ ...proj, status });
+    await saveProjectAction({ ...proj, status }, true);
   };
 
   const savePaymentAction = async (payment: Payment, isUpdate?: boolean) => {
