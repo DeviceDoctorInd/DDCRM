@@ -14,9 +14,29 @@ import {
   isTransientError,
   SQL_POOL_CONFIG,
   SQL_OPTIONS_CONFIG,
+  getPoolMax,
+  validateDbEnvironment,
+  EnvironmentValidationResult,
+  classifyDbError,
+  sanitizeErrorMessage,
+  ClassifiedDbError,
+  DbErrorCategory,
+  TransactionCommitAmbiguousError,
 } from './db.config';
 
 export * from './db.config';
+
+export interface SafePoolMetrics {
+  connected: boolean;
+  totalConnections: number;
+  activeConnections: number;
+  idleConnections: number;
+  pendingAcquires: number;
+  pendingCreates: number;
+  maxCapacity: number;
+  minCapacity: number;
+  saturationPercent: number;
+}
 
 // Singleton pool state & lock
 let globalPool: sql.ConnectionPool | null = null;
@@ -29,24 +49,82 @@ let hasRunInitialSchemaSync = false;
 
 /**
  * Retrieve current active pool if connected
+ * Automatically invalidates stale or closed pool references.
  */
 export function getPool(): sql.ConnectionPool | null {
-  if (globalPool && isConnected) {
+  if (globalPool && isConnected && globalPool.connected && !(globalPool as any)._isClosed) {
     return globalPool;
+  }
+  if (globalPool && (!globalPool.connected || (globalPool as any)._isClosed)) {
+    globalPool = null;
+    isConnected = false;
   }
   return null;
 }
 
+/**
+ * Testing helper to set the global pool instance in isolation
+ */
+export function setGlobalPoolForTesting(pool: sql.ConnectionPool | null, connected: boolean = true): void {
+  globalPool = pool;
+  isConnected = Boolean(pool && connected);
+}
+
+/**
+ * Checks whether the database is actively connected with a healthy pool instance
+ */
 export function isDbConnected(): boolean {
-  return isConnected && globalPool !== null;
+  return Boolean(globalPool && isConnected && globalPool.connected && !(globalPool as any)._isClosed);
+}
+
+/**
+ * Verified safe pool metrics reporting without sensitive credential or server leakage
+ */
+export function getSafePoolMetrics(): SafePoolMetrics {
+  if (!globalPool || !isConnected || !globalPool.connected || (globalPool as any)._isClosed) {
+    return {
+      connected: false,
+      totalConnections: 0,
+      activeConnections: 0,
+      idleConnections: 0,
+      pendingAcquires: 0,
+      pendingCreates: 0,
+      maxCapacity: getPoolMax(),
+      minCapacity: 0,
+      saturationPercent: 0,
+    };
+  }
+
+  const tarnPool = (globalPool as any).pool;
+  const active = typeof tarnPool?.numUsed === 'function' ? tarnPool.numUsed() : 0;
+  const idle = typeof tarnPool?.numFree === 'function' ? tarnPool.numFree() : 0;
+  const pending = typeof tarnPool?.numPendingAcquires === 'function' ? tarnPool.numPendingAcquires() : 0;
+  const pendingCreates = typeof tarnPool?.numPendingCreates === 'function' ? tarnPool.numPendingCreates() : 0;
+  const max = typeof tarnPool?.max === 'number' ? tarnPool.max : getPoolMax();
+  const min = typeof tarnPool?.min === 'number' ? tarnPool.min : 0;
+  const total = active + idle;
+  const saturation = max > 0 ? Math.min(100, Math.round(((active + pending) / max) * 100)) : 0;
+
+  return {
+    connected: globalPool.connected,
+    totalConnections: total,
+    activeConnections: active,
+    idleConnections: idle,
+    pendingAcquires: pending,
+    pendingCreates: pendingCreates,
+    maxCapacity: max,
+    minCapacity: min,
+    saturationPercent: saturation,
+  };
 }
 
 /**
  * Global pool accessor with deduplicated in-flight connection promise
  * Reuses the single connection pool across all controllers and API requests.
+ * Shares the single connection promise across both initial acquires and forced reconnects.
  */
-export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
-  if (globalPool && isConnected) {
+export async function getOrInitPool(forceReconnect: boolean = false): Promise<sql.ConnectionPool | null> {
+  if (globalPool && isConnected && globalPool.connected && !(globalPool as any)._isClosed && !forceReconnect) {
     return globalPool;
   }
 
@@ -56,8 +134,8 @@ export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
 
   poolConnectingPromise = (async () => {
     try {
-      const ok = await connectPoolCore(false);
-      if (ok && globalPool && isConnected) {
+      const ok = await connectPoolCore(forceReconnect);
+      if (ok && globalPool && isConnected && globalPool.connected) {
         return globalPool;
       }
       return null;
@@ -75,10 +153,10 @@ export async function getOrInitPool(): Promise<sql.ConnectionPool | null> {
 }
 
 /**
- * Initialize or reconnect the global Azure SQL ConnectionPool
+ * Initialize or reconnect the global Azure SQL ConnectionPool core implementation
  */
 async function connectPoolCore(forceReconnect: boolean = false): Promise<boolean> {
-  if (globalPool && isConnected && !forceReconnect) {
+  if (globalPool && isConnected && globalPool.connected && !(globalPool as any)._isClosed && !forceReconnect) {
     return true;
   }
 
@@ -103,6 +181,7 @@ async function connectPoolCore(forceReconnect: boolean = false): Promise<boolean
         // Ignore close errors during recycling
       }
       globalPool = null;
+      isConnected = false;
     }
 
     // Proactively verify DNS
@@ -124,12 +203,17 @@ async function connectPoolCore(forceReconnect: boolean = false): Promise<boolean
 
     const newPool = new sql.ConnectionPool(config);
 
-    // Attach background error listener to handle network drops and pool errors gracefully
+    // Attach background error listener to handle individual socket drops safely
+    // tarn.js automatically purges dropped sockets from its pool.
+    // Invalidate the global pool reference ONLY if the pool itself has disconnected or closed completely.
     newPool.on('error', (err: any) => {
-      console.warn('[Azure SQL Pool Event] Pool connection error:', err?.message || err);
-      if (isTransientError(err)) {
+      console.warn('[Azure SQL Pool Event] Background socket error:', err?.message || err);
+      if (!newPool.connected || (newPool as any)._isClosed) {
+        console.warn('[Azure SQL Pool Event] Connection pool is closed/disconnected. Marking pool as unready.');
         isConnected = false;
-        globalPool = null;
+        if (globalPool === newPool) {
+          globalPool = null;
+        }
       }
     });
 
@@ -172,27 +256,16 @@ async function connectPoolCore(forceReconnect: boolean = false): Promise<boolean
 }
 
 /**
- * Shared singleton pool initialization helper
- */
-/**
  * Initialize or reconnect the global Azure SQL ConnectionPool
  * Shares the single connection promise with getOrInitPool to prevent duplicate pool creation.
  */
 export async function initAzureSql(forceReconnect: boolean = false): Promise<boolean> {
-  if (globalPool && isConnected && !forceReconnect) {
+  if (globalPool && isConnected && globalPool.connected && !(globalPool as any)._isClosed && !forceReconnect) {
     return true;
   }
 
-  if (forceReconnect) {
-    try {
-      return await connectPoolCore(true);
-    } catch {
-      return false;
-    }
-  }
-
-  const pool = await getOrInitPool();
-  return Boolean(pool && isConnected);
+  const pool = await getOrInitPool(forceReconnect);
+  return Boolean(pool && isConnected && pool.connected);
 }
 
 async function initSchemaInBackground(activePool: sql.ConnectionPool) {
@@ -209,58 +282,109 @@ async function initSchemaInBackground(activePool: sql.ConnectionPool) {
   }
 }
 
+export interface ExecuteSqlOptions {
+  tableName?: string;
+  isReadOnly?: boolean;
+  isFinancialMutation?: boolean;
+  isIdempotentWrite?: boolean;
+  maxRetries?: number;
+}
+
 /**
  * Execute SQL Query with Automatic Retry and Schema Healing
  * - Uses parameterized queries to leverage SQL Server execution plan caching
- * - Catches transient drops and retries with backoff
+ * - Catches transient drops and retries with bounded exponential backoff & jitter
+ * - STRICT: Never automatically retries non-idempotent financial mutations
+ * - STRICT: Default-deny retry policy enforces 0 retries for all writes unless explicitly idempotent
  * - Heals missing column errors on-demand in <50ms instead of running all migrations
  */
 export async function executeSql<T>(
   queryFn: (pool: sql.ConnectionPool) => Promise<T>,
-  tableName?: string
+  optionsOrTableName?: string | ExecuteSqlOptions
 ): Promise<T> {
+  const options: ExecuteSqlOptions =
+    typeof optionsOrTableName === 'string'
+      ? { tableName: optionsOrTableName }
+      : optionsOrTableName || {};
+
+  const isFinancial = Boolean(options.isFinancialMutation);
+  const isReadOnly = Boolean(options.isReadOnly);
+  const isIdempotentWrite = Boolean(options.isIdempotentWrite);
+
+  // STRICT DEFAULT-DENY RETRY POLICY:
+  // 1. Financial mutations override all other options and ALWAYS receive 0 retries.
+  // 2. Only explicitly declared read-only queries (isReadOnly: true) or authorized idempotent writes (isIdempotentWrite: true) can retry.
+  // 3. Default is false (0 retries). Missing metadata, ordinary INSERT, UPDATE, or DELETE receive 0 retries.
+  let maxRetries = 0;
+  if (isFinancial) {
+    maxRetries = 0;
+  } else if (isReadOnly) {
+    maxRetries = Math.min(options.maxRetries ?? 2, 2);
+  } else if (isIdempotentWrite) {
+    maxRetries = Math.min(options.maxRetries ?? 1, 2);
+  } else {
+    maxRetries = 0;
+  }
+
+  const tableName = options.tableName;
+
   let pool = await getOrInitPool();
   if (!pool) {
     throw new Error('Database pool not connected.');
   }
 
-  try {
-    return await queryFn(pool);
-  } catch (err: any) {
-    const msg = String(err?.message || err);
+  let attempt = 0;
+  while (true) {
+    try {
+      return await queryFn(pool);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
 
-    // 1. Check for missing column error and heal on-demand instantly
-    if (msg.includes('Invalid column name') && tableName) {
-      const colMatch = msg.match(/Invalid column name '([^']+)'/i);
-      if (colMatch && colMatch[1]) {
-        const colName = colMatch[1];
-        try {
-          console.warn(`[Azure SQL Auto-Heal] Adding missing column [${colName}] to [${tableName}]...`);
-          await pool.request().query(`
-            IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
-            AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
-            ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
-          `);
-          return await queryFn(pool);
-        } catch {
-          // If auto-heal fails, continue to retry/throw
+      // 1. Check for missing column error and heal on-demand instantly
+      if (msg.includes('Invalid column name') && tableName) {
+        const colMatch = msg.match(/Invalid column name '([^']+)'/i);
+        if (colMatch && colMatch[1]) {
+          const colName = colMatch[1];
+          try {
+            console.warn(`[Azure SQL Auto-Heal] Adding missing column [${colName}] to [${tableName}]...`);
+            await pool.request().query(`
+              IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
+              AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
+              ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
+            `);
+            return await queryFn(pool);
+          } catch {
+            // If auto-heal fails, continue to retry/throw
+          }
         }
       }
-    }
 
-    // 2. Check for transient connection drops and retry with reconnected pool
-    if (isTransientError(err)) {
-      console.warn(`[Azure SQL Transient Retry] Network glitch detected (${msg}). Reconnecting pool...`);
-      isConnected = false;
-      globalPool = null;
-      await new Promise((r) => setTimeout(r, 500));
-      const newPool = await getOrInitPool();
-      if (newPool) {
-        return await queryFn(newPool);
+      // CRITICAL FINANCIAL SAFETY RULE:
+      // NEVER automatically retry non-idempotent financial mutations
+      if (isFinancial) {
+        console.warn(`[Azure SQL Safety] Non-idempotent financial write failed: ${msg.slice(0, 100)}. Automatic retry BLOCKED.`);
+        throw err;
       }
-    }
 
-    throw err;
+      const classification = classifyDbError(err);
+
+      // 2. Bounded retry with backoff and jitter for eligible transient failures
+      if (classification.isRetryable && attempt < maxRetries) {
+        attempt++;
+        const baseDelay = 150 * Math.pow(2, attempt);
+        const jitter = Math.floor(Math.random() * 100);
+        const delay = baseDelay + jitter;
+        console.warn(`[Azure SQL Transient Retry] Network glitch detected (${classification.category}). Retrying in ${delay}ms (attempt ${attempt}/${maxRetries})...`);
+        await new Promise((r) => setTimeout(r, delay));
+        const newPool = await getOrInitPool(true);
+        if (newPool && newPool.connected) {
+          pool = newPool;
+          continue;
+        }
+      }
+
+      throw err;
+    }
   }
 }
 
@@ -318,7 +442,7 @@ export async function refreshTableCounts(): Promise<Record<string, number>> {
 export function getAzureDbStatus(): AzureDbStatus {
   const authType = getAuthType();
   return {
-    connected: isConnected,
+    connected: isDbConnected(),
     server: activeConnectedServer || getServer(),
     database: getDatabase(),
     authType: (authType === 'sql-server' || authType === 'sql')
@@ -668,6 +792,13 @@ const db = {
   isDbConnected,
   isTransientError,
   getSqlConfig,
+  getSafePoolMetrics,
+  validateDbEnvironment,
+  getPoolMax,
+  classifyDbError,
+  sanitizeErrorMessage,
+  TransactionCommitAmbiguousError,
+  setGlobalPoolForTesting,
 };
 
 export default db;

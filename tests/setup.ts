@@ -1,5 +1,10 @@
 import { vi, beforeAll } from 'vitest';
 import { mockStore } from '../server/db/mockStore';
+import {
+  classifyDbError,
+  sanitizeErrorMessage,
+  TransactionCommitAmbiguousError,
+} from '../server/db/db.config';
 
 // Strict safety rule: disable Azure SQL credentials & force mock store mode
 process.env.NODE_ENV = 'test';
@@ -32,6 +37,9 @@ vi.mock('../server/db/azureSql', () => ({
   migrateAzureSqlSchema: vi.fn(async () => {}),
   isTransientError: vi.fn(() => false),
   isMockFallbackAllowed: vi.fn(() => true),
+  classifyDbError,
+  sanitizeErrorMessage,
+  TransactionCommitAmbiguousError,
 }));
 
 // Also mock server/db/db to be doubly sure
@@ -54,6 +62,9 @@ vi.mock('../server/db/db', () => ({
   migrateAzureSqlSchema: vi.fn(async () => {}),
   isTransientError: vi.fn(() => false),
   isMockFallbackAllowed: vi.fn(() => true),
+  classifyDbError,
+  sanitizeErrorMessage,
+  TransactionCommitAmbiguousError,
 }));
 
 beforeAll(() => {
