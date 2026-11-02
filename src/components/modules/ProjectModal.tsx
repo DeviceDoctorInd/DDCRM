@@ -98,6 +98,7 @@ export const ProjectModal: React.FC = () => {
     clients,
     getClientById,
     projects,
+    allProjects,
     services,
     employees,
     getRoleById,
@@ -109,6 +110,7 @@ export const ProjectModal: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [pendingProjectPayload, setPendingProjectPayload] = useState<Project | null>(null);
   const [isSavingProject, setIsSavingProject] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Live employee records fetched strictly from database / API
   const [liveEmployees, setLiveEmployees] = useState<Employee[]>([]);
@@ -243,6 +245,7 @@ export const ProjectModal: React.FC = () => {
       }
 
       // Auto-generate semantic project ID if not already assigned or legacy formatted
+      const projectPool = allProjects && allProjects.length > 0 ? allProjects : projects;
       let initialId = projectModalData.id;
       if (!isProjectModalEditing || !initialId || initialId.includes(' - ') || /^([A-Z]+-)?PRJ-\d+/i.test(initialId)) {
         if (resolvedClientName) {
@@ -251,7 +254,7 @@ export const ProjectModal: React.FC = () => {
             projectModalData.brand || activeBrand,
             resolvedClientName,
             matchedService?.name || 'SERVICE',
-            projects,
+            projectPool,
             isProjectModalEditing ? projectModalData.id : undefined,
             resolvedClientId,
             projectModalData.serviceId
@@ -317,13 +320,14 @@ export const ProjectModal: React.FC = () => {
     const currentServiceId = formData.serviceId;
     const matchedService = services.find((s) => s.id === currentServiceId);
 
+    const projectPool = allProjects && allProjects.length > 0 ? allProjects : projects;
     let nextId = formData.id;
     if (!isProjectModalEditing && actualClientName) {
       nextId = storageService.generateSemanticProjectId(
         formData.brand || activeBrand,
         actualClientName,
         matchedService?.name || 'SERVICE',
-        projects,
+        projectPool,
         undefined,
         actualClientId,
         currentServiceId
@@ -336,11 +340,12 @@ export const ProjectModal: React.FC = () => {
             actualClientName,
             matchedService.name,
             actualClientId,
-            currentServiceId
+            currentServiceId,
+            projectPool
           )
           .then((res) => {
             if (res.projectId) {
-              setFormData((p) => ({ ...p, id: res.projectId }));
+              setFormData((p) => (!isProjectModalEditing ? { ...p, id: res.projectId } : p));
             }
           })
           .catch(() => {});
@@ -372,13 +377,14 @@ export const ProjectModal: React.FC = () => {
     const clientName = matchedClient?.name || (matchedClient as any)?.client_name || formData.clientName || '';
     const clientId = matchedClient?.id || (matchedClient as any)?.client_id || currentClientId;
 
+    const projectPool = allProjects && allProjects.length > 0 ? allProjects : projects;
     let nextId = formData.id;
     if (!isProjectModalEditing && clientName && matchedService) {
       nextId = storageService.generateSemanticProjectId(
         formData.brand || activeBrand,
         clientName,
         matchedService.name,
-        projects,
+        projectPool,
         undefined,
         clientId,
         matchedService.id
@@ -390,11 +396,12 @@ export const ProjectModal: React.FC = () => {
           clientName,
           matchedService.name,
           clientId,
-          matchedService.id
+          matchedService.id,
+          projectPool
         )
         .then((res) => {
           if (res.projectId) {
-            setFormData((p) => ({ ...p, id: res.projectId }));
+            setFormData((p) => (!isProjectModalEditing ? { ...p, id: res.projectId } : p));
           }
         })
         .catch(() => {});
@@ -646,6 +653,7 @@ export const ProjectModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || isSavingProject) return;
 
     if (!formData.clientId) {
       setFormError('Please select a Client from the dropdown.');
@@ -668,8 +676,27 @@ export const ProjectModal: React.FC = () => {
       return;
     }
 
+    const projectPool = allProjects && allProjects.length > 0 ? allProjects : projects;
+    let finalId = formData.id;
+    if (!isProjectModalEditing) {
+      const isColliding = !finalId || projectPool.some((p) => p.id === finalId || (((p as any).project_id_code || '') as string) === finalId);
+      if (isColliding) {
+        const cName = formData.clientName || 'CLIENT';
+        const matchedService = services.find((s) => s.id === formData.serviceId);
+        finalId = storageService.generateSemanticProjectId(
+          formData.brand || activeBrand,
+          cName,
+          matchedService?.name || 'SERVICE',
+          projectPool,
+          undefined,
+          formData.clientId,
+          formData.serviceId
+        );
+      }
+    }
+
     const payload: Project = {
-      id: formData.id || '',
+      id: finalId || '',
       brand: formData.brand || activeBrand,
       clientId: formData.clientId,
       clientName: formData.clientName || 'Client',
@@ -696,6 +723,7 @@ export const ProjectModal: React.FC = () => {
       paymentPhases: formData.paymentPhases || [],
       createdAt: formData.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      ...(!isProjectModalEditing ? { isNew: true } : { isUpdate: true }),
     };
 
     // Safety Guard: If creating a new project, show confirmation modal to verify active workspace
@@ -710,8 +738,9 @@ export const ProjectModal: React.FC = () => {
 
   const executeSaveProject = async (payloadToSave: Project) => {
     try {
+      setIsSubmitting(true);
       setIsSavingProject(true);
-      const res = await saveProject(payloadToSave);
+      const res = await saveProject(payloadToSave, isProjectModalEditing);
       if (res.success) {
         setIsConfirmModalOpen(false);
         setPendingProjectPayload(null);
@@ -722,6 +751,7 @@ export const ProjectModal: React.FC = () => {
       }
     } finally {
       setIsSavingProject(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -1721,10 +1751,11 @@ export const ProjectModal: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+              disabled={isSavingProject || isSubmitting}
+              className="px-5 py-2 text-xs font-semibold text-white bg-black hover:bg-neutral-800 active:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
-              <span>{isProjectModalEditing ? 'Save Project Changes' : 'Add Project'}</span>
+              <span>{isSavingProject || isSubmitting ? 'Saving...' : isProjectModalEditing ? 'Save Project Changes' : 'Add Project'}</span>
             </button>
           </div>
         </form>

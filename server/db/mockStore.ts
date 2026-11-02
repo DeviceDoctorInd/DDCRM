@@ -1882,7 +1882,7 @@ class MockStore {
   ): number {
     const basePrefix = getBaseProjectPrefix(brand, clientName, serviceName);
     const matching = this.projects.filter((p) => {
-      const matchPrefix = p.id.startsWith(basePrefix);
+      const matchPrefix = (p.id || '').startsWith(basePrefix) || (((p as any).project_id_code || '') as string).startsWith(basePrefix);
       const matchClientAndService =
         clientId && serviceId && p.clientId === clientId && p.serviceId === serviceId;
       return matchPrefix || matchClientAndService;
@@ -1890,12 +1890,14 @@ class MockStore {
 
     let maxSeq = 0;
     for (const p of matching) {
-      const seq = extractProjectSequence(p.id, basePrefix);
+      const seq1 = extractProjectSequence(p.id, basePrefix);
+      const seq2 = (p as any).project_id_code ? extractProjectSequence((p as any).project_id_code, basePrefix) : null;
+      const seq = Math.max(seq1 || 0, seq2 || 0);
       if (seq !== null && seq > maxSeq) {
         maxSeq = seq;
       }
     }
-    return maxSeq + 1;
+    return Math.max(maxSeq + 1, matching.length > 0 ? matching.length + 1 : 1);
   }
 
   public generateSemanticProjectId(
@@ -1909,19 +1911,42 @@ class MockStore {
     return generateSemanticProjectId(brand, clientName, serviceName, seq);
   }
 
-  public saveProject(proj: Project): Project {
+  public saveProject(proj: Project & { isNew?: boolean; isUpdate?: boolean }): Project {
     if (!proj.brand) proj.brand = 'Device Doctor India';
-    const idx = proj.id ? this.projects.findIndex((p) => p.id === proj.id) : -1;
+    const isNew = Boolean((proj as any).isNew);
+    const cleanId = (proj.id || '').trim();
+    let finalId = cleanId;
+
+    let idx = cleanId
+      ? this.projects.findIndex(
+          (p) =>
+            (p.id || '').trim().toLowerCase() === cleanId.toLowerCase() ||
+            (((p as any).project_id_code || '') as string).trim().toLowerCase() === cleanId.toLowerCase()
+        )
+      : -1;
+
+    if (isNew && idx >= 0) {
+      const clientName = proj.clientName || this.getClientById(proj.clientId)?.name || 'CLIENT';
+      const serviceName = (proj as any).serviceName || (proj as any).serviceType || this.getServices().find((s) => s.id === proj.serviceId)?.name || 'SERVICE';
+      finalId = this.generateSemanticProjectId(
+        proj.brand,
+        clientName,
+        serviceName,
+        proj.clientId,
+        proj.serviceId
+      );
+      idx = -1;
+    }
     if (idx >= 0) {
       this.projects[idx] = { ...this.projects[idx], ...proj, updatedAt: new Date().toISOString() };
       return this.projects[idx];
     }
 
     // Auto-generate semantic project ID with sequence counter if missing
-    if (!proj.id) {
+    if (!finalId) {
       const clientName = proj.clientName || this.getClientById(proj.clientId)?.name || 'CLIENT';
       const serviceName = (proj as any).serviceName || (proj as any).serviceType || this.getServices().find((s) => s.id === proj.serviceId)?.name || 'SERVICE';
-      proj.id = this.generateSemanticProjectId(
+      finalId = this.generateSemanticProjectId(
         proj.brand,
         clientName,
         serviceName,
@@ -1930,7 +1955,8 @@ class MockStore {
       );
     }
 
-    const created = { ...proj, createdAt: proj.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    proj.id = finalId;
+    const created = { ...proj, id: finalId, createdAt: proj.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.projects.unshift(created);
     return created;
   }
