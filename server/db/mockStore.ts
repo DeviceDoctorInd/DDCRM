@@ -2334,29 +2334,11 @@ class MockStore {
   }
 
   public getGstInvoices(brand?: string | null): GstInvoice[] {
-    // Run self-healing sync so any GST invoice payments are reflected
-    for (const p of this.payments) {
-      if (p.paymentMode === 'GST Invoice') {
-        if (!this.gstInvoices.some((inv) => (inv.paymentId || '').toLowerCase() === (p.id || '').toLowerCase() || (inv.paymentId || '').toLowerCase() === ((p as any).payment_id_code || '').toLowerCase())) {
-          this.syncPaymentToGstInvoice(p);
-        }
-      }
-    }
-    // Reconcile stale unfiled GST invoices
-    this.gstInvoices = this.gstInvoices.filter((inv) => {
-      if (inv.uploadedToGstPortal === 'Yes') return true;
-      const linkedPayment = this.payments.find(
-        (p) =>
-          (p.id || '').toLowerCase() === (inv.paymentId || '').toLowerCase() ||
-          ((p as any).payment_id_code || '').toLowerCase() === (inv.paymentId || '').toLowerCase()
-      );
-      if (!linkedPayment) return false;
-      return linkedPayment.paymentMode === 'GST Invoice';
-    });
+    // Pure read-only accessor: returns existing persisted records without mutating store
     if (brand && brand !== 'All' && brand !== 'All Brands' && brand !== 'All Brands (Consolidated View)') {
-      return this.gstInvoices.filter((i) => i.brand === brand);
+      return this.gstInvoices.filter((i) => i.brand === brand).map((i) => ({ ...i }));
     }
-    return [...this.gstInvoices];
+    return this.gstInvoices.map((i) => ({ ...i }));
   }
 
   public saveGstInvoice(inv: GstInvoice): GstInvoice {

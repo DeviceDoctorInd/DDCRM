@@ -44,7 +44,7 @@ export const GstInvoicesModule: React.FC = () => {
   const [portalFilter, setPortalFilter] = useState<'ALL' | 'Yes' | 'No'>('ALL');
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Proactively refresh GST Invoices on module load to guarantee instant sync
+  // Load persisted GST Invoices on module load (read-only; use manual sync for reconciliation)
   useEffect(() => {
     refreshGstInvoices().catch((err) =>
       console.warn('[GstInvoicesModule] Initial refresh notice:', err)
