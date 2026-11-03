@@ -58,7 +58,247 @@ export const normalizePaymentMode = (mode: unknown): PaymentMode => {
   return 'GST Invoice';
 };
 
+export type VerifySessionResult =
+  | { status: 'valid'; user: AuthUser }
+  | { status: 'invalid'; error?: string }
+  | { status: 'unavailable'; error: string };
+
+// --- Stale Read Error for Concurrent Mutation Invalidation ---
+export class StaleReadError extends Error {
+  public readonly isStaleRead = true;
+  public readonly resource: string;
+
+  constructor(resource: string, message?: string) {
+    super(message || `Stale read rejected for resource "${resource}": A mutation was in-flight or completed during read.`);
+    this.name = 'StaleReadError';
+    this.resource = resource;
+    Object.setPrototypeOf(this, StaleReadError.prototype);
+  }
+}
+
+export const KNOWN_RESOURCE_MAP: Record<string, string> = {
+  projects: 'projects',
+  clients: 'clients',
+  services: 'services',
+  categories: 'categories',
+  employees: 'employees',
+  roles: 'roles',
+  assignments: 'assignments',
+  expenses: 'expenses',
+  'expense-categories': 'expenseCategories',
+  expensecategories: 'expenseCategories',
+  payments: 'payments',
+  'upload-proof': 'payments',
+  uploadproof: 'payments',
+  'bank-accounts': 'bankAccounts',
+  bankaccounts: 'bankAccounts',
+  'employee-payments': 'employeePayments',
+  employeepayments: 'employeePayments',
+  'gst-invoices': 'gstInvoices',
+  gstinvoices: 'gstInvoices',
+  users: 'users',
+  auth: 'auth',
+  db: 'db',
+};
+
+export function extractResourceKey(url: string): string {
+  const trimmed = url.trim().toLowerCase().split('?')[0];
+  let pathname = trimmed;
+  try {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      pathname = new URL(trimmed).pathname;
+    }
+  } catch {
+    // fallback
+  }
+  const segments = pathname.split('/').filter(Boolean);
+  const rawKey = segments[0] === 'api' && segments[1] ? segments[1] : segments[0];
+
+  if (rawKey && KNOWN_RESOURCE_MAP[rawKey]) {
+    return KNOWN_RESOURCE_MAP[rawKey];
+  }
+  return 'global';
+}
+
+export function normalizeUrlForDedup(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  try {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      const parsed = new URL(trimmed);
+      const pathname = parsed.pathname.toLowerCase();
+      const normPath = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+      return `${parsed.origin.toLowerCase()}${normPath}${parsed.search}`;
+    }
+  } catch {
+    // fallback
+  }
+
+  const qIndex = trimmed.indexOf('?');
+  if (qIndex === -1) {
+    const path = trimmed.toLowerCase();
+    return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+  }
+  const path = trimmed.substring(0, qIndex).toLowerCase();
+  const normalizedPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+  const queryString = trimmed.substring(qIndex);
+  return `${normalizedPath}${queryString}`;
+}
+
+export function getAffectedResources(url: string): string[] {
+  const primary = extractResourceKey(url);
+  if (primary === 'global' || primary === '*' || primary === 'db' || url.includes('/clear-demo')) {
+    return ['*'];
+  }
+  if (primary === 'payments') {
+    return ['payments', 'projects', 'gstInvoices'];
+  }
+  return [primary];
+}
+
+export interface InFlightGetEntry<T = any> {
+  promise: Promise<T>;
+  abortController: AbortController;
+  resourceKey: string;
+  startVersion: number;
+  sessionToken: string;
+}
+
+// --- Async Concurrency Limiter (Strict Maximum 3 Active Requests) ---
+export class AsyncConcurrencyLimiter {
+  private activeCount = 0;
+  private queue: Array<() => void> = [];
+
+  constructor(private maxConcurrent: number = 3) {}
+
+  public async acquire(): Promise<void> {
+    if (this.activeCount < this.maxConcurrent) {
+      this.activeCount++;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(() => {
+        this.activeCount++;
+        resolve();
+      });
+    });
+  }
+
+  public release(): void {
+    this.activeCount--;
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    }
+  }
+
+  public async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+
+  public getActiveCount(): number {
+    return this.activeCount;
+  }
+
+  public getPendingCount(): number {
+    return this.queue.length;
+  }
+
+  public getMaxConcurrent(): number {
+    return this.maxConcurrent;
+  }
+}
+
 class StorageService {
+  private limiter = new AsyncConcurrencyLimiter(3);
+  private inFlightGetRequests = new Map<string, InFlightGetEntry>();
+  private mutationVersion = 0;
+  private resourceVersions = new Map<string, number>();
+  private activeMutationsCount = new Map<string, number>();
+
+  public getLimiter(): AsyncConcurrencyLimiter {
+    return this.limiter;
+  }
+
+  public getMutationVersion(): number {
+    return this.mutationVersion;
+  }
+
+  public getResourceVersion(resource: string): number {
+    return this.resourceVersions.get(resource) || 0;
+  }
+
+  public hasActiveMutation(resource: string): boolean {
+    if ((this.activeMutationsCount.get('*') || 0) > 0) return true;
+    return (this.activeMutationsCount.get(resource) || 0) > 0;
+  }
+
+  public isStaleRead(
+    resource: string,
+    startResourceVersion: number,
+    startGlobalVersion: number,
+    hadActiveMutationAtStart: boolean
+  ): boolean {
+    if (hadActiveMutationAtStart) return true;
+    if (this.hasActiveMutation(resource)) return true;
+    if (this.getResourceVersion(resource) !== startResourceVersion) return true;
+    if (this.hasActiveMutation('*')) return true;
+    if (this.getResourceVersion('*') !== startGlobalVersion) return true;
+    return false;
+  }
+
+  public startActiveMutation(resources: string[]) {
+    this.mutationVersion++;
+    for (const r of resources) {
+      this.activeMutationsCount.set(r, (this.activeMutationsCount.get(r) || 0) + 1);
+      this.resourceVersions.set(r, (this.resourceVersions.get(r) || 0) + 1);
+    }
+  }
+
+  public finishActiveMutation(resources: string[]) {
+    this.mutationVersion++;
+    for (const r of resources) {
+      const count = (this.activeMutationsCount.get(r) || 1) - 1;
+      if (count <= 0) {
+        this.activeMutationsCount.delete(r);
+      } else {
+        this.activeMutationsCount.set(r, count);
+      }
+      this.resourceVersions.set(r, (this.resourceVersions.get(r) || 0) + 1);
+    }
+  }
+
+  public getInFlightGetCount(): number {
+    return this.inFlightGetRequests.size;
+  }
+
+  public getInFlightGetEntry(key: string): InFlightGetEntry | undefined {
+    return this.inFlightGetRequests.get(key);
+  }
+
+  public getDedupKey(url: string, method: string = 'GET'): string {
+    const upperMethod = method.toUpperCase();
+    const isConsolidated = this.getIsConsolidated();
+    const activeBrand = isConsolidated ? 'All' : this.getActiveBrand();
+    const normalizedUrl = normalizeUrlForDedup(url);
+    const sessionToken = this.getAuthToken() || 'anon';
+    return `${upperMethod}:${sessionToken}:${normalizedUrl}:${activeBrand}`;
+  }
+
+  public abortInFlightGetRequestsForSessionChange(oldSessionToken?: string) {
+    for (const [key, entry] of this.inFlightGetRequests.entries()) {
+      if (!oldSessionToken || entry.sessionToken === oldSessionToken || entry.sessionToken !== (this.getAuthToken() || 'anon')) {
+        entry.abortController.abort();
+        if (this.inFlightGetRequests.get(key) === entry)
+          this.inFlightGetRequests.delete(key);
+      }
+    }
+  }
+
   private notifyListeners() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('ddi_crm_store_updated'));
@@ -76,17 +316,118 @@ class StorageService {
     }
   }
 
-  // --- Strict Live API Call Helper with Active Brand Context and JWT Bearer Header ---
+  // --- Strict Live API Call Helper with Concurrency Control, In-Flight GET Deduplication & Stale-Read Invalidation ---
   public async apiCall<T = any>(
     url: string,
     method: string = 'GET',
     body?: unknown,
     customHeaders?: Record<string, string>
   ): Promise<T> {
+    const upperMethod = method.toUpperCase();
     const isConsolidated = this.getIsConsolidated();
     const activeBrand = isConsolidated ? 'All' : this.getActiveBrand();
+    const normalizedUrl = normalizeUrlForDedup(url);
+    const resourceKey = extractResourceKey(url);
+
+    // 1. In-flight GET deduplication before acquiring limiter slot
+    if (upperMethod === 'GET') {
+      const dedupKey = this.getDedupKey(url, upperMethod);
+      const existing = this.inFlightGetRequests.get(dedupKey);
+      if (existing) {
+        return existing.promise as Promise<T>;
+      }
+
+      const abortController = new AbortController();
+      const startResourceVersion = this.getResourceVersion(resourceKey);
+      const startGlobalVersion = this.getResourceVersion('*');
+      const hadActiveMutationAtStart = this.hasActiveMutation(resourceKey);
+
+      const getPromise = (async () => {
+        return await this.limiter.run(async () => {
+          if (abortController.signal.aborted) {
+            throw new StaleReadError(resourceKey, `GET request for "${resourceKey}" was canceled due to a subsequent mutation.`);
+          }
+
+          const data = await this.executeFetch<T>(
+            url,
+            upperMethod,
+            body,
+            customHeaders,
+            activeBrand,
+            abortController.signal
+          );
+
+          // Stale Read Validation: Validate that no mutation occurred or was active during this GET request
+          if (this.isStaleRead(resourceKey, startResourceVersion, startGlobalVersion, hadActiveMutationAtStart)) {
+            throw new StaleReadError(
+              resourceKey,
+              `Stale read rejected for "${resourceKey}": A mutation was active or completed during the request.`
+            );
+          }
+
+          return data;
+        });
+      })();
+
+      const entry: InFlightGetEntry<T> = {
+        promise: getPromise,
+        abortController,
+        resourceKey,
+        startVersion: startResourceVersion,
+        sessionToken: this.getAuthToken() || 'anon',
+      };
+
+      this.inFlightGetRequests.set(dedupKey, entry);
+      try {
+        return await getPromise;
+      } catch (err: any) {
+        if (err?.status === 401 || err?.status === 403) {
+          throw err;
+        }
+        if (err?.name === 'AbortError' || abortController.signal.aborted) {
+          throw new StaleReadError(resourceKey, `GET request for "${resourceKey}" was canceled due to a concurrent mutation.`);
+        }
+        throw err;
+      } finally {
+        if (this.inFlightGetRequests.get(dedupKey) === entry) {
+          this.inFlightGetRequests.delete(dedupKey);
+        }
+      }
+    }
+
+    // 2. Mutations (POST, PUT, DELETE): NEVER deduplicated!
+    const affectedResources = getAffectedResources(url);
+
+    // Cancel and remove running in-flight GET requests for affected resources
+    for (const [key, entry] of this.inFlightGetRequests.entries()) {
+      if (affectedResources.includes('*') || affectedResources.includes(entry.resourceKey)) {
+        entry.abortController.abort();
+        if (this.inFlightGetRequests.get(key) === entry) {
+          this.inFlightGetRequests.delete(key);
+        }
+      }
+    }
+
+    this.startActiveMutation(affectedResources);
+
+    try {
+      return await this.limiter.run(async () => {
+        return await this.executeFetch<T>(url, upperMethod, body, customHeaders, activeBrand);
+      });
+    } finally {
+      this.finishActiveMutation(affectedResources);
+    }
+  }
+
+  private async executeFetch<T>(
+    url: string,
+    method: string,
+    body: unknown,
+    customHeaders: Record<string, string> | undefined,
+    activeBrand: string,
+    signal?: AbortSignal
+  ): Promise<T> {
     const token = this.getAuthToken();
-    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Active-Brand': activeBrand,
@@ -98,55 +439,71 @@ class StorageService {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     });
 
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-      if (res.status === 401 && !url.includes('/api/auth/login')) {
-        console.warn('[StorageService] Session expired or unauthorized (401). Clearing session token.');
+      const isSessionAuthFailure =
+        (res.status === 401 || (res.status === 403 && url.includes('/api/auth/me'))) &&
+        !url.includes('/api/auth/login');
+
+      if (isSessionAuthFailure) {
+        console.warn(`[StorageService] Session expired or unauthorized (${res.status}). Clearing session token.`);
         this.setAuthToken(null);
         this.setAuthUser(null);
       }
       const errMsg = data?.error || data?.message || `HTTP ${res.status}: Request to ${url} failed.`;
-      throw new Error(errMsg);
+      const err: any = new Error(errMsg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
 
     return data as T;
   }
 
-  // --- Live Azure SQL Database Diagnostics & Actions ---
+  // --- Live Azure SQL Database Diagnostics & Actions (Routed Through Limiter) ---
   public async getDatabaseStatus(): Promise<DatabaseStatus> {
     try {
-      const token = this.getAuthToken();
-      const headers: Record<string, string> = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-      const res = await fetch('/api/db/status', { headers });
-      if (res.ok) {
-        const data = await res.json();
-        return {
-          connected: data.connected ?? false,
-          isMock: data.isMock ?? false,
-          server: data.server,
-          database: data.database,
-          authType: data.authType,
-          user: data.user,
-          error: data.error,
-          timestamp: data.lastChecked || new Date().toISOString(),
-          tables: data.tableCounts || {},
+      return await this.limiter.run(async () => {
+        const token = this.getAuthToken();
+        const headers: Record<string, string> = {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
-      }
+        const res = await fetch('/api/db/status', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            connected: data.connected ?? false,
+            isMock: data.isMock ?? false,
+            server: data.server,
+            database: data.database,
+            authType: data.authType,
+            user: data.user,
+            error: data.error,
+            timestamp: data.lastChecked || new Date().toISOString(),
+            tables: data.tableCounts || {},
+          };
+        }
+        return {
+          connected: false,
+          isMock: true,
+          error: 'Connecting to Azure SQL Database...',
+          timestamp: new Date().toISOString(),
+          tables: {},
+        };
+      });
     } catch {
-      // Ignored
+      return {
+        connected: false,
+        isMock: true,
+        error: 'Connecting to Azure SQL Database...',
+        timestamp: new Date().toISOString(),
+        tables: {},
+      };
     }
-    return {
-      connected: false,
-      isMock: true,
-      error: 'Connecting to Azure SQL Database...',
-      timestamp: new Date().toISOString(),
-      tables: {},
-    };
   }
 
   public async reconnectDatabase(): Promise<DatabaseStatus> {
@@ -229,25 +586,35 @@ class StorageService {
   }
 
   // --- Strict Live Session Verification ---
-  public async verifySession(): Promise<AuthUser | null> {
+  public async verifySession(): Promise<VerifySessionResult> {
     const token = this.getAuthToken();
     if (!token) {
       this.setAuthUser(null);
-      return null;
+      return { status: 'invalid', error: 'No session token found.' };
     }
 
     try {
       const res = await this.apiCall<{ success: boolean; user: AuthUser }>('/api/auth/me', 'GET');
       if (res.success && res.user) {
         this.setAuthUser(res.user);
-        return res.user;
+        return { status: 'valid', user: res.user };
       }
-    } catch (err) {
-      console.warn('[StorageService] Session verification against database failed:', err);
-      this.setAuthToken(null);
-      this.setAuthUser(null);
+      return { status: 'invalid', error: 'Invalid user response.' };
+    } catch (err: any) {
+      const status = err?.status;
+      const isExplicitInvalid = status === 401 || status === 403;
+
+      if (isExplicitInvalid) {
+        console.warn(`[StorageService] Session confirmed invalid/expired (${status}). Clearing session token.`);
+        this.setAuthToken(null);
+        this.setAuthUser(null);
+        return { status: 'invalid', error: err?.message || String(err) };
+      }
+
+      // Temporary database failure, HTTP 5xx, network error, timeout
+      console.warn('[StorageService] Session verification service unavailable (preserving auth):', err?.message || String(err));
+      return { status: 'unavailable', error: err?.message || String(err) };
     }
-    return null;
   }
 
   // --- Strict Live Entity Queries (Direct from Azure SQL) ---
@@ -1175,6 +1542,10 @@ class StorageService {
 
   public setAuthToken(token: string | null) {
     if (typeof window === 'undefined') return;
+    const oldToken = localStorage.getItem(PREFERENCE_KEYS.AUTH_TOKEN);
+    if (oldToken !== token) {
+      this.abortInFlightGetRequestsForSessionChange(oldToken || 'anon');
+    }
     if (token) {
       localStorage.setItem(PREFERENCE_KEYS.AUTH_TOKEN, token);
     } else {
@@ -1194,7 +1565,11 @@ class StorageService {
 
   public setAuthUser(user: AuthUser | null) {
     if (typeof window === 'undefined') return;
+    const oldUser = this.getAuthUser();
     if (user) {
+      if (oldUser && oldUser.id !== user.id) {
+        this.abortInFlightGetRequestsForSessionChange();
+      }
       localStorage.setItem(PREFERENCE_KEYS.AUTH_USER, JSON.stringify(user));
     } else {
       localStorage.removeItem(PREFERENCE_KEYS.AUTH_USER);

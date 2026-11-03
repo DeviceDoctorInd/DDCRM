@@ -29,9 +29,33 @@ import {
   ReportsSubTab,
   BankAccount,
 } from '../types/crm';
-import { storageService, DatabaseStatus } from '../services/storageService';
+import { storageService, DatabaseStatus, VerifySessionResult } from '../services/storageService';
+
+export type ModuleKey =
+  | 'clients'
+  | 'categories'
+  | 'services'
+  | 'projects'
+  | 'payments'
+  | 'bankAccounts'
+  | 'gstInvoices'
+  | 'roles'
+  | 'employees'
+  | 'assignments'
+  | 'employeePayments'
+  | 'expenseCategories'
+  | 'expenses'
+  | 'users';
+
+export interface ModuleState {
+  isLoading: boolean;
+  error: string | null;
+  lastLoadedAt: string | null;
+}
 
 interface CrmContextType {
+  moduleStates: Record<ModuleKey, ModuleState>;
+  refreshModule: (moduleKey: ModuleKey) => Promise<boolean>;
   activeModule: ActiveModule;
   setActiveModule: (module: ActiveModule) => void;
   activeBrand: BrandName;
@@ -242,7 +266,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [rawUsers, setRawUsers] = useState<AppUser[]>([]);
 
   // Authentication State
-  const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
+  const [authUser, setAuthUserState] = useState<AuthUser | null>(() => storageService.getAuthUser());
 
   // Live Azure SQL Database Connection Diagnostics
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus>({
@@ -369,6 +393,518 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  // --- Module States & Version Tracking ---
+  const initialModuleStates: Record<ModuleKey, ModuleState> = {
+    clients: { isLoading: false, error: null, lastLoadedAt: null },
+    categories: { isLoading: false, error: null, lastLoadedAt: null },
+    services: { isLoading: false, error: null, lastLoadedAt: null },
+    projects: { isLoading: false, error: null, lastLoadedAt: null },
+    payments: { isLoading: false, error: null, lastLoadedAt: null },
+    bankAccounts: { isLoading: false, error: null, lastLoadedAt: null },
+    gstInvoices: { isLoading: false, error: null, lastLoadedAt: null },
+    roles: { isLoading: false, error: null, lastLoadedAt: null },
+    employees: { isLoading: false, error: null, lastLoadedAt: null },
+    assignments: { isLoading: false, error: null, lastLoadedAt: null },
+    employeePayments: { isLoading: false, error: null, lastLoadedAt: null },
+    expenseCategories: { isLoading: false, error: null, lastLoadedAt: null },
+    expenses: { isLoading: false, error: null, lastLoadedAt: null },
+    users: { isLoading: false, error: null, lastLoadedAt: null },
+  };
+
+  const [moduleStates, setModuleStates] = useState<Record<ModuleKey, ModuleState>>(initialModuleStates);
+  const moduleDataVersionsRef = useRef<Record<ModuleKey, number>>({
+    clients: 0,
+    categories: 0,
+    services: 0,
+    projects: 0,
+    payments: 0,
+    bankAccounts: 0,
+    gstInvoices: 0,
+    roles: 0,
+    employees: 0,
+    assignments: 0,
+    employeePayments: 0,
+    expenseCategories: 0,
+    expenses: 0,
+    users: 0,
+  });
+
+  const isCrmDataLoadingRef = useRef<boolean>(false);
+  const hasPendingReloadRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<any>(null);
+
+  const setModuleLoading = (key: ModuleKey, isLoading: boolean) => {
+    setModuleStates((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], isLoading },
+    }));
+  };
+
+  const setModuleSuccess = (key: ModuleKey) => {
+    setModuleStates((prev) => ({
+      ...prev,
+      [key]: { isLoading: false, error: null, lastLoadedAt: new Date().toISOString() },
+    }));
+  };
+
+  const setModuleError = (key: ModuleKey, error: string) => {
+    setModuleStates((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], isLoading: false, error },
+    }));
+  };
+
+  // Centralized debounced refresh request
+  const requestCentralizedRefresh = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      loadCrmData().catch((err) => console.warn('[Centralized Refresh Notice]', err));
+    }, 250);
+  };
+
+  // --- Granular Non-Destructive Module Loaders ---
+  // Stage 1: Foundational Metadata & Lookup Entities
+  const loadRoles = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.roles;
+    setModuleLoading('roles', true);
+    try {
+      const data = await storageService.fetchRoles();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.roles === v) {
+          setRawRoles(data);
+          setModuleSuccess('roles');
+          return true;
+        }
+        console.warn('[Fetch Roles Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('roles', false);
+        return false;
+      }
+      throw new Error('Invalid roles data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Roles Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('roles', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Roles Failed - Preserving Previous State]', msg);
+      setModuleError('roles', msg);
+      return false;
+    }
+  };
+
+  const loadUsers = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.users;
+    setModuleLoading('users', true);
+    try {
+      const data = await storageService.fetchAppUsers();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.users === v) {
+          setRawUsers(data);
+          setModuleSuccess('users');
+          return true;
+        }
+        console.warn('[Fetch Users Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('users', false);
+        return false;
+      }
+      throw new Error('Invalid users data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Users Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('users', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Users Failed - Preserving Previous State]', msg);
+      setModuleError('users', msg);
+      return false;
+    }
+  };
+
+  const loadCategories = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.categories;
+    setModuleLoading('categories', true);
+    try {
+      const data = await storageService.fetchCategories();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.categories === v) {
+          setRawCategories(data);
+          setModuleSuccess('categories');
+          return true;
+        }
+        console.warn('[Fetch Categories Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('categories', false);
+        return false;
+      }
+      throw new Error('Invalid categories data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Categories Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('categories', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Categories Failed - Preserving Previous State]', msg);
+      setModuleError('categories', msg);
+      return false;
+    }
+  };
+
+  const loadExpenseCategories = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.expenseCategories;
+    setModuleLoading('expenseCategories', true);
+    try {
+      const data = await storageService.fetchExpenseCategories();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.expenseCategories === v) {
+          setRawExpenseCategories(data);
+          setModuleSuccess('expenseCategories');
+          return true;
+        }
+        console.warn('[Fetch ExpenseCategories Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('expenseCategories', false);
+        return false;
+      }
+      throw new Error('Invalid expense categories data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Expense Categories Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('expenseCategories', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Expense Categories Failed - Preserving Previous State]', msg);
+      setModuleError('expenseCategories', msg);
+      return false;
+    }
+  };
+
+  const loadBankAccounts = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.bankAccounts;
+    setModuleLoading('bankAccounts', true);
+    try {
+      const data = await storageService.fetchBankAccounts();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.bankAccounts === v) {
+          setRawBankAccounts(data);
+          setModuleSuccess('bankAccounts');
+          return true;
+        }
+        console.warn('[Fetch BankAccounts Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('bankAccounts', false);
+        return false;
+      }
+      throw new Error('Invalid bank accounts data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Bank Accounts Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('bankAccounts', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Bank Accounts Failed - Preserving Previous State]', msg);
+      setModuleError('bankAccounts', msg);
+      return false;
+    }
+  };
+
+  // Stage 2: Primary Master Entities
+  const loadClients = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.clients;
+    setModuleLoading('clients', true);
+    try {
+      const data = await storageService.fetchClients();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.clients === v) {
+          setRawClients(data);
+          setModuleSuccess('clients');
+          return true;
+        }
+        console.warn('[Fetch Clients Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('clients', false);
+        return false;
+      }
+      throw new Error('Invalid clients data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Clients Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('clients', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Clients Failed - Preserving Previous State]', msg);
+      setModuleError('clients', msg);
+      return false;
+    }
+  };
+
+  const loadServices = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.services;
+    setModuleLoading('services', true);
+    try {
+      const data = await storageService.fetchServices();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.services === v) {
+          setRawServices(data);
+          setModuleSuccess('services');
+          return true;
+        }
+        console.warn('[Fetch Services Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('services', false);
+        return false;
+      }
+      throw new Error('Invalid services data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Services Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('services', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Services Failed - Preserving Previous State]', msg);
+      setModuleError('services', msg);
+      return false;
+    }
+  };
+
+  const loadEmployees = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.employees;
+    setModuleLoading('employees', true);
+    try {
+      const data = await storageService.fetchEmployees();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.employees === v) {
+          setRawEmployees(data);
+          setModuleSuccess('employees');
+          return true;
+        }
+        console.warn('[Fetch Employees Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('employees', false);
+        return false;
+      }
+      throw new Error('Invalid employees data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Employees Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('employees', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Employees Failed - Preserving Previous State]', msg);
+      setModuleError('employees', msg);
+      return false;
+    }
+  };
+
+  // Stage 3: Core Operational Entities
+  const loadProjects = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.projects;
+    setModuleLoading('projects', true);
+    try {
+      const data = await storageService.fetchProjects();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.projects === v) {
+          setRawProjects(data);
+          setModuleSuccess('projects');
+          return true;
+        }
+        console.warn('[Fetch Projects Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('projects', false);
+        return false;
+      }
+      throw new Error('Invalid projects data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Projects Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('projects', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Projects Failed - Preserving Previous State]', msg);
+      setModuleError('projects', msg);
+      return false;
+    }
+  };
+
+  const loadExpenses = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.expenses;
+    setModuleLoading('expenses', true);
+    try {
+      const data = await storageService.fetchExpenses();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.expenses === v) {
+          setRawExpenses(data);
+          setModuleSuccess('expenses');
+          return true;
+        }
+        console.warn('[Fetch Expenses Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('expenses', false);
+        return false;
+      }
+      throw new Error('Invalid expenses data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Expenses Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('expenses', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Expenses Failed - Preserving Previous State]', msg);
+      setModuleError('expenses', msg);
+      return false;
+    }
+  };
+
+  // Stage 4: Ledgers & Transactional Entities
+  const loadPayments = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.payments;
+    setModuleLoading('payments', true);
+    try {
+      const data = await storageService.fetchPayments();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.payments === v) {
+          setRawPayments(data);
+          setModuleSuccess('payments');
+          return true;
+        }
+        console.warn('[Fetch Payments Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('payments', false);
+        return false;
+      }
+      throw new Error('Invalid payments data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Payments Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('payments', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Payments Failed - Preserving Previous State]', msg);
+      setModuleError('payments', msg);
+      return false;
+    }
+  };
+
+  const loadAssignments = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.assignments;
+    setModuleLoading('assignments', true);
+    try {
+      const data = await storageService.fetchAssignments();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.assignments === v) {
+          setRawAssignments(data);
+          setModuleSuccess('assignments');
+          return true;
+        }
+        console.warn('[Fetch Assignments Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('assignments', false);
+        return false;
+      }
+      throw new Error('Invalid assignments data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Assignments Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('assignments', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Assignments Failed - Preserving Previous State]', msg);
+      setModuleError('assignments', msg);
+      return false;
+    }
+  };
+
+  const loadEmployeePayments = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.employeePayments;
+    setModuleLoading('employeePayments', true);
+    try {
+      const data = await storageService.fetchEmployeePayments();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.employeePayments === v) {
+          setRawEmployeePayments(data);
+          setModuleSuccess('employeePayments');
+          return true;
+        }
+        console.warn('[Fetch EmployeePayments Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('employeePayments', false);
+        return false;
+      }
+      throw new Error('Invalid employee payments data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch Employee Payments Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('employeePayments', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch Employee Payments Failed - Preserving Previous State]', msg);
+      setModuleError('employeePayments', msg);
+      return false;
+    }
+  };
+
+  // Stage 5: Compliance & Derived Leaves
+  const loadGstInvoices = async (): Promise<boolean> => {
+    const v = moduleDataVersionsRef.current.gstInvoices;
+    setModuleLoading('gstInvoices', true);
+    setIsGstInvoicesLoading(true);
+    try {
+      const data = await storageService.fetchGstInvoices();
+      if (Array.isArray(data)) {
+        if (moduleDataVersionsRef.current.gstInvoices === v) {
+          setRawGstInvoices(data);
+          setGstInvoiceError(null);
+          setModuleSuccess('gstInvoices');
+          setIsGstInvoicesLoading(false);
+          return true;
+        }
+        console.warn('[Fetch GST Invoices Discarded - Module version changed, preserving newer state]');
+        setModuleLoading('gstInvoices', false);
+        setIsGstInvoicesLoading(false);
+        return false;
+      }
+      throw new Error('Invalid GST invoices data');
+    } catch (err: unknown) {
+      if ((err as any)?.isStaleRead) {
+        console.warn('[Fetch GST Invoices Discarded - Stale read safely discarded to preserve recent mutation]');
+        setModuleLoading('gstInvoices', false);
+        return false;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[Fetch GST Invoices Failed - Preserving Previous State]', msg);
+      setGstInvoiceError(msg);
+      setModuleError('gstInvoices', msg);
+      return false;
+    } finally {
+      setIsGstInvoicesLoading(false);
+    }
+  };
+
+  // Granular Single Module Refresh API
+  const refreshModule = async (moduleKey: ModuleKey): Promise<boolean> => {
+    switch (moduleKey) {
+      case 'roles': return await loadRoles();
+      case 'users': return await loadUsers();
+      case 'categories': return await loadCategories();
+      case 'expenseCategories': return await loadExpenseCategories();
+      case 'bankAccounts': return await loadBankAccounts();
+      case 'clients': return await loadClients();
+      case 'services': return await loadServices();
+      case 'employees': return await loadEmployees();
+      case 'projects': return await loadProjects();
+      case 'expenses': return await loadExpenses();
+      case 'payments': return await loadPayments();
+      case 'assignments': return await loadAssignments();
+      case 'employeePayments': return await loadEmployeePayments();
+      case 'gstInvoices': return await loadGstInvoices();
+      default: return false;
+    }
+  };
+
+  // --- Dependency-Aware Staged Workspace Loading Pipeline ---
   const loadCrmData = async (): Promise<void> => {
     const currentToken = storageService.getAuthToken();
     const hasConfirmed = storageService.getHasConfirmedWorkspace();
@@ -377,114 +913,58 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
-    if (inFlightLoadRef.current) {
-      return inFlightLoadRef.current;
+    if (isCrmDataLoadingRef.current) {
+      hasPendingReloadRef.current = true;
+      return;
     }
 
-    inFlightLoadRef.current = (async () => {
-      try {
-        const [
-          clients,
-          categories,
-          services,
-          projects,
-          payments,
-          bankAccounts,
-          gstInvoices,
-          roles,
-          employees,
-          assignments,
-          employeePayments,
-          expenseCategories,
-          expenses,
-          users,
-        ] = await Promise.all([
-          storageService.fetchClients().catch((err) => {
-            console.warn('[Fetch Clients]', err);
-            return [] as Client[];
-          }),
-          storageService.fetchCategories().catch((err) => {
-            console.warn('[Fetch Categories]', err);
-            return [] as ServiceCategory[];
-          }),
-          storageService.fetchServices().catch((err) => {
-            console.warn('[Fetch Services]', err);
-            return [] as Service[];
-          }),
-          storageService.fetchProjects().catch((err) => {
-            console.warn('[Fetch Projects]', err);
-            return [] as Project[];
-          }),
-          storageService.fetchPayments().catch((err) => {
-            console.warn('[Fetch Payments]', err);
-            return [] as Payment[];
-          }),
-          storageService.fetchBankAccounts().catch((err) => {
-            console.warn('[Fetch Bank Accounts]', err);
-            return [] as BankAccount[];
-          }),
-          storageService.fetchGstInvoices().then((res) => {
-            setGstInvoiceError(null);
-            return res;
-          }).catch((err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.warn('[Fetch GST Invoices]', msg);
-            setGstInvoiceError(msg);
-            return [] as GstInvoice[];
-          }),
-          storageService.fetchRoles().catch((err) => {
-            console.warn('[Fetch Roles]', err);
-            return [] as EmployeeRole[];
-          }),
-          storageService.fetchEmployees().catch((err) => {
-            console.warn('[Fetch Employees]', err);
-            return [] as Employee[];
-          }),
-          storageService.fetchAssignments().catch((err) => {
-            console.warn('[Fetch Assignments]', err);
-            return [] as Assignment[];
-          }),
-          storageService.fetchEmployeePayments().catch((err) => {
-            console.warn('[Fetch Employee Payments]', err);
-            return [] as EmployeePayment[];
-          }),
-          storageService.fetchExpenseCategories().catch((err) => {
-            console.warn('[Fetch Expense Categories]', err);
-            return [] as ExpenseCategory[];
-          }),
-          storageService.fetchExpenses().catch((err) => {
-            console.warn('[Fetch Expenses]', err);
-            return [] as Expense[];
-          }),
-          storageService.fetchAppUsers().catch((err) => {
-            console.warn('[Fetch Users]', err);
-            return [] as AppUser[];
-          }),
-        ]);
+    isCrmDataLoadingRef.current = true;
+    hasPendingReloadRef.current = false;
 
-        setRawClients(clients);
-        setRawCategories(categories);
-        setRawServices(services);
-        setRawProjects(projects);
-        setRawPayments(payments);
-        setRawBankAccounts(bankAccounts);
-        setRawGstInvoices(gstInvoices);
-        setRawRoles(roles);
-        setRawEmployees(employees);
-        setRawAssignments(assignments);
-        setRawEmployeePayments(employeePayments);
-        setRawExpenseCategories(expenseCategories);
-        setRawExpenses(expenses);
-        setRawUsers(users);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        showToast(`Azure SQL Connection Notice: ${msg}`, 'warning');
-      } finally {
-        inFlightLoadRef.current = null;
+    try {
+      // Stage 1: Foundational Metadata & Lookup Entities (Independent, max 3 concurrent)
+      await Promise.allSettled([
+        loadRoles(),
+        loadUsers(),
+        loadCategories(),
+        loadExpenseCategories(),
+        loadBankAccounts(),
+      ]);
+
+      // Stage 2: Primary Master Entities (Depend on Stage 1 lookups)
+      await Promise.allSettled([
+        loadClients(),
+        loadServices(),
+        loadEmployees(),
+      ]);
+
+      // Stage 3: Core Operational Entities (Depend on Stage 2 primary entities)
+      await Promise.allSettled([
+        loadProjects(),
+        loadExpenses(),
+      ]);
+
+      // Stage 4: Ledgers & Transactional Entities (Depend on Stage 2 & 3 operational entities)
+      await Promise.allSettled([
+        loadPayments(),
+        loadAssignments(),
+        loadEmployeePayments(),
+      ]);
+
+      // Stage 5: Compliance & Derived Leaves (Strictly dependent on transactions)
+      await Promise.allSettled([
+        loadGstInvoices(),
+      ]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(`Azure SQL Connection Notice: ${msg}`, 'warning');
+    } finally {
+      isCrmDataLoadingRef.current = false;
+      if (hasPendingReloadRef.current) {
+        hasPendingReloadRef.current = false;
+        requestCentralizedRefresh();
       }
-    })();
-
-    return inFlightLoadRef.current;
+    }
   };
 
   // --- Strict Live SQL Loader ---
@@ -531,25 +1011,49 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 4. Verify session with backend before fetching module data
     try {
-      const verifiedUser = await storageService.verifySession();
-      if (verifiedUser) {
-        setAuthUserState(verifiedUser);
+      const verification = await storageService.verifySession();
+      if (verification.status === 'valid') {
+        setAuthUserState(verification.user);
+        if (storageService.getHasConfirmedWorkspace()) {
+          await loadCrmData();
+        }
+      } else if (verification.status === 'unavailable') {
+        // Temporary failure (Azure SQL offline, network error, timeout, HTTP 5xx):
+        // PRESERVE user session, auth token, and workspace confirmation!
+        console.warn('[CRM Session Verification] Verification service unavailable (preserving session):', verification.error);
         if (storageService.getHasConfirmedWorkspace()) {
           await loadCrmData();
         }
       } else {
+        // Explicitly invalid or expired session (401 / 403)
+        console.warn('[CRM Session Verification] Session explicitly invalid or expired. Logging out.');
         setAuthUserState(null);
         storageService.setAuthUser(null);
         storageService.setAuthToken(null);
         storageService.setHasConfirmedWorkspace(false);
         setHasConfirmedWorkspaceState(false);
+        setRawClients([]);
+        setRawCategories([]);
+        setRawServices([]);
+        setRawProjects([]);
+        setRawPayments([]);
+        setRawBankAccounts([]);
+        setRawGstInvoices([]);
+        setRawRoles([]);
+        setRawEmployees([]);
+        setRawAssignments([]);
+        setRawEmployeePayments([]);
+        setRawExpenseCategories([]);
+        setRawExpenses([]);
+        setRawUsers([]);
+        showToast('Session expired. Please sign in again.', 'warning');
       }
-    } catch {
-      setAuthUserState(null);
-      storageService.setAuthUser(null);
-      storageService.setAuthToken(null);
-      storageService.setHasConfirmedWorkspace(false);
-      setHasConfirmedWorkspaceState(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[CRM Session Verification] Unexpected verification error (preserving session):', msg);
+      if (storageService.getHasConfirmedWorkspace()) {
+        await loadCrmData();
+      }
     }
   };
 
@@ -558,12 +1062,15 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const handleUpdate = () => {
       if (storageService.getAuthToken() && storageService.getHasConfirmedWorkspace()) {
-        loadCrmData().catch((err) => console.warn('[CRM Store Update Sync]', err));
+        requestCentralizedRefresh();
       }
     };
 
     window.addEventListener('ddi_crm_store_updated', handleUpdate);
     return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
       window.removeEventListener('ddi_crm_store_updated', handleUpdate);
     };
   }, []);
@@ -935,6 +1442,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- Strict Live SQL Entity Actions ---
   const saveClientAction = async (client: Client) => {
+    moduleDataVersionsRef.current.clients++;
     if (!client.brand || (client.brand as string) === 'All' || (client.brand as string) === 'All Brands') {
       client.brand = activeBrand;
     }
@@ -957,7 +1465,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedClient, ...prev];
       });
       showToast(`Client "${client.name}" saved under ${client.brand} workspace.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveClient]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save client to Azure SQL.', 'error');
     }
@@ -965,6 +1473,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteClientAction = async (clientId: string) => {
+    moduleDataVersionsRef.current.clients++;
     const client = getClientById(clientId);
     const clientName = client?.name || clientId;
     const check = storageService.canDeleteClient(clientId, rawProjects);
@@ -990,7 +1499,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawClients((prev) => prev.filter((c) => c.id !== clientId && (c as any).client_id_code !== clientId));
       showToast(`Client "${clientName}" deleted successfully.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteClient]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete client from Azure SQL.', 'error');
     }
@@ -1004,6 +1513,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveCategoryAction = async (category: ServiceCategory) => {
+    moduleDataVersionsRef.current.categories++;
     if (!category.brand) category.brand = activeBrand;
     if (!category.id) {
       category.id = storageService.generateId('CAT', category.brand, rawCategories);
@@ -1021,7 +1531,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedCategory, ...prev];
       });
       showToast(`Category "${category.name}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveCategory]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save category to Azure SQL.', 'error');
     }
@@ -1029,6 +1539,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteCategoryAction = async (categoryId: string) => {
+    moduleDataVersionsRef.current.categories++;
     const cat = getCategoryById(categoryId);
     const catName = cat?.name || categoryId;
     const check = storageService.canDeleteCategory(categoryId, rawServices);
@@ -1054,7 +1565,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawCategories((prev) => prev.filter((c) => c.id !== categoryId && (c as any).category_id_code !== categoryId && (c as any).guid !== categoryId));
       showToast(`Category "${catName}" deleted successfully.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteCategory]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete category.', 'error');
     }
@@ -1068,6 +1579,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveServiceAction = async (service: Service) => {
+    moduleDataVersionsRef.current.services++;
     if (!service.brand) service.brand = activeBrand;
     if (!service.id) {
       service.id = storageService.generateId('SRV', service.brand, rawServices);
@@ -1085,7 +1597,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedService, ...prev];
       });
       showToast(`Service "${service.name}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveService]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save service.', 'error');
     }
@@ -1093,6 +1605,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteServiceAction = async (serviceId: string) => {
+    moduleDataVersionsRef.current.services++;
     const srv = getServiceById(serviceId);
     const srvName = srv?.name || serviceId;
     const check = storageService.canDeleteService(serviceId, rawProjects);
@@ -1118,7 +1631,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawServices((prev) => prev.filter((s) => s.id !== serviceId && (s as any).service_id_code !== serviceId && (s as any).guid !== serviceId));
       showToast(`Service "${srvName}" deleted successfully.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteService]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete service.', 'error');
     }
@@ -1132,6 +1645,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveProjectAction = async (project: Project, isUpdate?: boolean) => {
+    moduleDataVersionsRef.current.projects++;
     if (!project.brand || (project.brand as string) === 'All' || (project.brand as string) === 'All Brands') {
       project.brand = activeBrand;
     }
@@ -1184,7 +1698,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedProject, ...prev.filter((p) => p.id !== savedProject.id && (!savedProject.guid || p.guid !== savedProject.guid))];
       });
       showToast(`Project "${savedProject.projectCode || savedProject.id}" saved under ${savedProject.brand} workspace.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveProject]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save project.', 'error');
     }
@@ -1192,6 +1706,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteProjectAction = async (projectId: string) => {
+    moduleDataVersionsRef.current.projects++;
     const check = storageService.canDeleteProject(
       projectId,
       rawPayments,
@@ -1221,7 +1736,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawProjects((prev) => prev.filter((p) => p.id !== projectId && (p as any).project_id_code !== projectId));
       showToast(`Project "${projectId}" deleted successfully.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteProject]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete project.', 'error');
     }
@@ -1235,6 +1750,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const savePaymentAction = async (payment: Payment, isUpdate?: boolean) => {
+    moduleDataVersionsRef.current.payments++;
     if (!payment.brand) payment.brand = activeBrand;
     const pool = rawPayments;
     const updateMode = isUpdate !== undefined
@@ -1306,7 +1822,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       } else {
         showToast(`Payment voucher "${savedPayment.id}" recorded in Azure SQL.`, 'success');
       }
-      loadAll().catch((err) => console.warn('[Background refresh after savePayment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to record payment in Azure SQL.', 'error');
     }
@@ -1314,11 +1830,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deletePaymentAction = async (paymentId: string) => {
+    moduleDataVersionsRef.current.payments++;
     const res = await storageService.deletePayment(paymentId);
     if (res.success) {
       setRawPayments((prev) => prev.filter((p) => p.id !== paymentId && (p as any).payment_id_code !== paymentId));
       showToast(`Payment "${paymentId}" removed from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deletePayment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to remove payment.', 'error');
     }
@@ -1326,6 +1843,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveBankAccountAction = async (account: BankAccount) => {
+    moduleDataVersionsRef.current.bankAccounts++;
     if (!account.brand) account.brand = activeBrand;
     if (!account.id) {
       account.id = storageService.generateId('ACC', account.brand, rawBankAccounts);
@@ -1343,7 +1861,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedAccount, ...prev];
       });
       showToast(`Bank account "${account.accountName}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveBankAccount]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save bank account to Azure SQL.', 'error');
     }
@@ -1351,6 +1869,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteBankAccountAction = async (bankAccountId: string) => {
+    moduleDataVersionsRef.current.bankAccounts++;
     const bnk = getBankAccountById(bankAccountId);
     const bnkName = bnk?.accountName || bankAccountId;
     const check = storageService.canDeleteBankAccount(bankAccountId, rawPayments);
@@ -1376,7 +1895,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawBankAccounts((prev) => prev.filter((b) => b.id !== bankAccountId && (b as any).account_id_code !== bankAccountId));
       showToast(`Bank account "${bnkName}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteBankAccount]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete bank account.', 'error');
     }
@@ -1390,6 +1909,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveRoleAction = async (role: EmployeeRole) => {
+    moduleDataVersionsRef.current.roles++;
     if (!role.brand) role.brand = activeBrand;
     if (!role.id) {
       role.id = storageService.generateId('ROL', role.brand, rawRoles);
@@ -1407,7 +1927,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedRole, ...prev];
       });
       showToast(`Role "${role.roleName}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveRole]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save role.', 'error');
     }
@@ -1415,6 +1935,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteRoleAction = async (roleId: string) => {
+    moduleDataVersionsRef.current.roles++;
     const role = getRoleById(roleId);
     const roleName = role?.roleName || roleId;
     const check = storageService.canDeleteRole(roleId, rawEmployees);
@@ -1435,7 +1956,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawRoles((prev) => prev.filter((r) => r.id !== roleId && (r as any).role_id_code !== roleId));
       showToast(`Role "${roleName}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteRole]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete role.', 'error');
     }
@@ -1443,6 +1964,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveEmployeeAction = async (employee: Employee, isUpdate?: boolean) => {
+    moduleDataVersionsRef.current.employees++;
     if (!employee.brand) employee.brand = activeBrand;
     if (!employee.id) {
       employee.id = storageService.generateId('EMP', employee.brand, rawEmployees);
@@ -1461,7 +1983,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedEmployee, ...prev];
       });
       showToast(`Staff profile for "${employee.name}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveEmployee]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save staff profile.', 'error');
     }
@@ -1469,6 +1991,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteEmployeeAction = async (employeeId: string) => {
+    moduleDataVersionsRef.current.employees++;
     const emp = getEmployeeById(employeeId);
     const empName = emp?.name || employeeId;
     const check = storageService.canDeleteEmployee(employeeId, rawAssignments, rawEmployeePayments);
@@ -1496,7 +2019,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawEmployees((prev) => prev.filter((e) => e.id !== employeeId && (e as any).employee_id_code !== employeeId));
       showToast(`Employee "${empName}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteEmployee]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete employee.', 'error');
     }
@@ -1504,6 +2027,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveAssignmentAction = async (assignment: Assignment) => {
+    moduleDataVersionsRef.current.assignments++;
     if (!assignment.brand) assignment.brand = activeBrand;
     if (!assignment.id) {
       assignment.id = storageService.generateId('ASN', assignment.brand, rawAssignments);
@@ -1521,7 +2045,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedAssignment, ...prev];
       });
       showToast(`Assignment "${assignment.id}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveAssignment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save assignment.', 'error');
     }
@@ -1529,6 +2053,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteAssignmentAction = async (assignmentId: string) => {
+    moduleDataVersionsRef.current.assignments++;
     const check = storageService.canDeleteAssignment(assignmentId, rawEmployeePayments);
 
     if (!check.allowed) {
@@ -1547,7 +2072,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawAssignments((prev) => prev.filter((a) => a.id !== assignmentId && (a as any).assignment_id_code !== assignmentId));
       showToast(`Assignment "${assignmentId}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteAssignment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete assignment.', 'error');
     }
@@ -1555,6 +2080,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveEmployeePaymentAction = async (payment: EmployeePayment) => {
+    moduleDataVersionsRef.current.employeePayments++;
     if (!payment.brand) payment.brand = activeBrand;
     if (!payment.id) {
       payment.id = storageService.generateId('EPAY', payment.brand, rawEmployeePayments);
@@ -1572,7 +2098,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedPayment, ...prev];
       });
       showToast(`Staff payout "${payment.id}" recorded in Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveEmployeePayment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to record payout.', 'error');
     }
@@ -1580,11 +2106,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteEmployeePaymentAction = async (paymentId: string) => {
+    moduleDataVersionsRef.current.employeePayments++;
     const res = await storageService.deleteEmployeePayment(paymentId);
     if (res.success) {
       setRawEmployeePayments((prev) => prev.filter((p) => p.id !== paymentId && (p as any).payment_id_code !== paymentId));
       showToast(`Payout "${paymentId}" removed from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteEmployeePayment]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to remove payout.', 'error');
     }
@@ -1592,6 +2119,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveExpenseCategoryAction = async (category: ExpenseCategory) => {
+    moduleDataVersionsRef.current.expenseCategories++;
     if (!category.brand) category.brand = activeBrand;
     if (!category.id) {
       category.id = storageService.generateId('EXC', category.brand, rawExpenseCategories);
@@ -1609,7 +2137,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedCat, ...prev];
       });
       showToast(`Expense category "${category.name}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveExpenseCategory]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save expense category.', 'error');
     }
@@ -1617,6 +2145,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteExpenseCategoryAction = async (categoryId: string) => {
+    moduleDataVersionsRef.current.expenseCategories++;
     const cat = getExpenseCategoryById(categoryId);
     const catName = cat?.name || categoryId;
     const check = storageService.canDeleteExpenseCategory(categoryId, rawExpenses);
@@ -1642,7 +2171,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.success) {
       setRawExpenseCategories((prev) => prev.filter((c) => c.id !== categoryId && (c as any).category_id_code !== categoryId));
       showToast(`Expense category "${catName}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteExpenseCategory]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete expense category.', 'error');
     }
@@ -1656,6 +2185,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveExpenseAction = async (expense: Expense) => {
+    moduleDataVersionsRef.current.expenses++;
     if (!expense.brand) expense.brand = activeBrand;
     if (!expense.id) {
       expense.id = storageService.generateId('EXP', expense.brand, rawExpenses);
@@ -1673,7 +2203,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedExpense, ...prev];
       });
       showToast(`Expense "${expense.id}" recorded in Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveExpense]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save expense.', 'error');
     }
@@ -1681,11 +2211,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteExpenseAction = async (expenseId: string) => {
+    moduleDataVersionsRef.current.expenses++;
     const res = await storageService.deleteExpense(expenseId);
     if (res.success) {
       setRawExpenses((prev) => prev.filter((e) => e.id !== expenseId && (e as any).expense_id_code !== expenseId));
       showToast(`Expense "${expenseId}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteExpense]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete expense.', 'error');
     }
@@ -1693,6 +2224,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveGstInvoiceAction = async (invoice: GstInvoice) => {
+    moduleDataVersionsRef.current.gstInvoices++;
     if (!invoice.brand) invoice.brand = activeBrand;
     if (!invoice.id) {
       invoice.id = storageService.generateId('GST', invoice.brand, rawGstInvoices);
@@ -1710,7 +2242,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [savedInv, ...prev];
       });
       showToast(`GST Invoice "${invoice.id}" saved to Azure SQL.`, 'success');
-      loadAll().catch((err) => console.warn('[Background refresh after saveGstInvoice]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save GST invoice.', 'error');
     }
@@ -1718,11 +2250,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteGstInvoiceAction = async (invoiceId: string) => {
+    moduleDataVersionsRef.current.gstInvoices++;
     const res = await storageService.deleteGstInvoice(invoiceId);
     if (res.success) {
       setRawGstInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId && (inv as any).invoice_id_code !== invoiceId));
       showToast(`GST Invoice "${invoiceId}" deleted from Azure SQL.`, 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteGstInvoice]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete GST invoice.', 'error');
     }
@@ -1783,6 +2316,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveUserAction = async (user: AppUser) => {
+    moduleDataVersionsRef.current.users++;
     if (!user.brand) user.brand = activeBrand;
     if (!user.id) {
       user.id = storageService.generateId('USR', 'Device Doctor India', rawUsers as any);
@@ -1798,11 +2332,12 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteUserAction = async (userId: string) => {
+    moduleDataVersionsRef.current.users++;
     const res = await storageService.deleteAppUser(userId);
     if (res.success) {
       setRawUsers((prev) => prev.filter((u) => u.id !== userId && (u as any).user_id_code !== userId && (u as any).adminId !== userId));
       showToast('User account deleted from Azure SQL.', 'info');
-      loadAll().catch((err) => console.warn('[Background refresh after deleteUser]', err));
+      requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to delete user account.', 'error');
     }
@@ -1981,8 +2516,10 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteGstInvoice: deleteGstInvoiceAction,
         refreshGstInvoices: refreshGstInvoicesAction,
         syncGstInvoicesFromPayments: syncGstInvoicesFromPaymentsAction,
-        gstInvoiceError,
-        isGstInvoicesLoading,
+        moduleStates,
+        refreshModule,
+        gstInvoiceError: moduleStates.gstInvoices.error,
+        isGstInvoicesLoading: moduleStates.gstInvoices.isLoading,
         users,
         saveUser: saveUserAction,
         deleteUser: deleteUserAction,
