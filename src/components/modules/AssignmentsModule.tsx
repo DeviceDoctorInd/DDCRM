@@ -142,7 +142,7 @@ export const AssignmentsModule: React.FC = () => {
     const defaultRole = defaultEmployee ? getRoleById(defaultEmployee.roleId) : undefined;
     const defaultClient = defaultProject ? getClientById(defaultProject.clientId) : undefined;
 
-    const newId = storageService.generateId('ASN', activeBrand);
+    const newId = storageService.generateId('ASN', activeBrand, assignments);
     const today = new Date().toISOString().slice(0, 10);
 
     setFormData({
@@ -312,8 +312,12 @@ export const AssignmentsModule: React.FC = () => {
     }
 
     const payload: Assignment = {
-      id: formData.id || storageService.generateId('ASN', activeBrand),
+      id: isEditing
+        ? (formData.id || '')
+        : (formData.id || storageService.generateId('ASN', activeBrand, assignments)),
       brand: formData.brand || activeBrand,
+      isNew: !isEditing,
+      isUpdate: isEditing,
       projectId: formData.projectId,
       clientId: formData.clientId || '',
       clientName: formData.clientName || '',
@@ -331,7 +335,7 @@ export const AssignmentsModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = await saveAssignment(payload);
+    const res = await saveAssignment(payload, isEditing);
     if (!res.success) {
       setFormError(res.error || 'Failed to save assignment.');
       return;

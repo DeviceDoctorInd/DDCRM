@@ -2484,18 +2484,51 @@ class MockStore {
     return [...this.assignments];
   }
 
-  public saveAssignment(asn: Assignment): Assignment {
+  public saveAssignment(asn: Assignment & { isNew?: boolean; isUpdate?: boolean }): Assignment {
     if (!asn.brand) asn.brand = 'Device Doctor India';
+    const isNew = Boolean((asn as any).isNew);
+    const isUpdate = Boolean((asn as any).isUpdate);
     const cleanId = (asn.id || '').trim();
-    const finalId = cleanId || generateSemanticEntityId('ASN', asn.brand, this.assignments);
-    const idx = cleanId ? this.assignments.findIndex((a) => a.id === cleanId) : -1;
-    if (idx >= 0) {
-      this.assignments[idx] = { ...this.assignments[idx], ...asn, id: finalId, updatedAt: new Date().toISOString() };
-      return this.assignments[idx];
+    let finalId = cleanId;
+
+    let idx = cleanId
+      ? this.assignments.findIndex((a) => {
+          const aId = (a.id || '').trim().toLowerCase();
+          const codeId = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+          const target = cleanId.toLowerCase();
+          return aId === target || codeId === target;
+        })
+      : -1;
+
+    if ((isNew || !isUpdate) && idx >= 0) {
+      finalId = generateSemanticEntityId('ASN', asn.brand, this.assignments);
+      idx = -1;
+    } else if (!finalId) {
+      finalId = generateSemanticEntityId('ASN', asn.brand, this.assignments);
     }
-    const created: Assignment = { ...asn, id: finalId, createdAt: asn.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+
+    if (isUpdate && idx >= 0) {
+      const existing = this.assignments[idx];
+      this.assignments[idx] = {
+        ...existing,
+        ...asn,
+        id: existing.id,
+        assignment_id_code: (existing as any).assignment_id_code || existing.id,
+        updatedAt: new Date().toISOString(),
+      };
+      return JSON.parse(JSON.stringify(this.assignments[idx]));
+    }
+
+    asn.id = finalId;
+    const created: Assignment = {
+      ...asn,
+      id: finalId,
+      assignment_id_code: finalId,
+      createdAt: asn.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
     this.assignments.unshift(created);
-    return created;
+    return JSON.parse(JSON.stringify(created));
   }
 
   public deleteAssignment(id: string, brand?: string | null): boolean {
@@ -2526,21 +2559,60 @@ class MockStore {
     }));
   }
 
-  public saveEmployeePayment(payment: EmployeePayment): EmployeePayment {
+  public saveEmployeePayment(payment: EmployeePayment & { isNew?: boolean; isUpdate?: boolean }): EmployeePayment {
     if (!payment.brand) payment.brand = 'Device Doctor India';
+    const isNew = Boolean((payment as any).isNew);
+    const isUpdate = Boolean((payment as any).isUpdate);
     const cleanId = (payment.id || '').trim();
-    const finalId = cleanId || generateSemanticEntityId('EPAY', payment.brand, this.employeePayments);
-    const clonedPayment: EmployeePayment = {
-      ...payment,
-      id: finalId,
-      paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
-    };
-    const idx = cleanId ? this.employeePayments.findIndex((p) => p.id === cleanId) : -1;
-    if (idx >= 0) {
-      this.employeePayments[idx] = { ...this.employeePayments[idx], ...clonedPayment, id: finalId, updatedAt: new Date().toISOString() };
+    let finalId = cleanId;
+
+    let idx = cleanId
+      ? this.employeePayments.findIndex((p) => {
+          const pId = (p.id || '').trim().toLowerCase();
+          const codeId = (((p as any).emp_payment_id_code || '') as string).trim().toLowerCase();
+          const target = cleanId.toLowerCase();
+          return pId === target || codeId === target;
+        })
+      : -1;
+
+    if ((isNew || !isUpdate) && idx >= 0) {
+      const existing = this.employeePayments[idx];
+      const sameUtr = Boolean(
+        existing.referenceUtr &&
+        payment.referenceUtr &&
+        existing.referenceUtr.trim().toLowerCase() === payment.referenceUtr.trim().toLowerCase()
+      );
+      if (sameUtr) {
+        return JSON.parse(JSON.stringify(existing));
+      }
+      finalId = generateSemanticEntityId('EPAY', payment.brand, this.employeePayments);
+      idx = -1;
+    } else if (!finalId) {
+      finalId = generateSemanticEntityId('EPAY', payment.brand, this.employeePayments);
+    }
+
+    if (isUpdate && idx >= 0) {
+      const existing = this.employeePayments[idx];
+      this.employeePayments[idx] = {
+        ...existing,
+        ...payment,
+        id: existing.id,
+        emp_payment_id_code: (existing as any).emp_payment_id_code || existing.id,
+        paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : existing.paymentProof,
+        updatedAt: new Date().toISOString(),
+      };
       return JSON.parse(JSON.stringify(this.employeePayments[idx]));
     }
-    const created = { ...clonedPayment, id: finalId, createdAt: clonedPayment.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+
+    payment.id = finalId;
+    const created: EmployeePayment = {
+      ...payment,
+      id: finalId,
+      emp_payment_id_code: finalId,
+      paymentProof: payment.paymentProof ? JSON.parse(JSON.stringify(payment.paymentProof)) : undefined,
+      createdAt: payment.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
     this.employeePayments.unshift(created);
     return JSON.parse(JSON.stringify(created));
   }
