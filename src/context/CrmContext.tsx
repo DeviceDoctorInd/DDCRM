@@ -168,10 +168,10 @@ interface CrmContextType {
   saveEmployee: (employee: Employee, isUpdate?: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteEmployee: (employeeId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveAssignment: (assignment: Assignment) => Promise<{ success: boolean; error?: string }>;
+  saveAssignment: (assignment: Assignment, isUpdate?: boolean) => Promise<{ success: boolean; assignment?: Assignment; error?: string }>;
   deleteAssignment: (assignmentId: string) => Promise<{ success: boolean; error?: string }>;
 
-  saveEmployeePayment: (payment: EmployeePayment) => Promise<{ success: boolean; error?: string }>;
+  saveEmployeePayment: (payment: EmployeePayment, isUpdate?: boolean) => Promise<{ success: boolean; payment?: EmployeePayment; error?: string }>;
   deleteEmployeePayment: (paymentId: string) => Promise<{ success: boolean; error?: string }>;
 
   saveExpenseCategory: (category: ExpenseCategory) => Promise<{ success: boolean; error?: string }>;
@@ -2026,25 +2026,42 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
-  const saveAssignmentAction = async (assignment: Assignment) => {
+  const saveAssignmentAction = async (assignment: Assignment, isUpdate?: boolean) => {
     moduleDataVersionsRef.current.assignments++;
     if (!assignment.brand) assignment.brand = activeBrand;
-    if (!assignment.id) {
-      assignment.id = storageService.generateId('ASN', assignment.brand, rawAssignments);
+    const pool = rawAssignments;
+    const updateMode = isUpdate !== undefined
+      ? isUpdate
+      : (Boolean((assignment as any).isUpdate) || (!Boolean((assignment as any).isNew) && pool.some((a) => a.id === assignment.id || (a as any).assignment_id_code === assignment.id)));
+
+    if (!updateMode) {
+      (assignment as any).isNew = true;
+      (assignment as any).isUpdate = false;
+      if (!assignment.id || pool.some((a) => a.id === assignment.id || (a as any).assignment_id_code === assignment.id)) {
+        assignment.id = storageService.generateId('ASN', assignment.brand, pool);
+      }
+    } else {
+      (assignment as any).isNew = false;
+      (assignment as any).isUpdate = true;
     }
-    const res = await storageService.saveAssignment(assignment);
+
+    const res = await storageService.saveAssignment(assignment, updateMode);
     if (res.success) {
       const savedAssignment = res.assignment || assignment;
       setRawAssignments((prev) => {
-        const idx = prev.findIndex((a) => a.id === savedAssignment.id);
-        if (idx >= 0) {
+        const idx = prev.findIndex(
+          (a) =>
+            a.id === savedAssignment.id ||
+            Boolean((savedAssignment as any).assignment_id_code && a.id === (savedAssignment as any).assignment_id_code)
+        );
+        if (idx >= 0 && updateMode) {
           const updated = [...prev];
           updated[idx] = savedAssignment;
           return updated;
         }
-        return [savedAssignment, ...prev];
+        return [savedAssignment, ...prev.filter((a) => a.id !== savedAssignment.id && (!((savedAssignment as any).assignment_id_code) || a.id !== (savedAssignment as any).assignment_id_code))];
       });
-      showToast(`Assignment "${assignment.id}" saved to Azure SQL.`, 'success');
+      showToast(`Assignment "${savedAssignment.id}" saved to Azure SQL.`, 'success');
       requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to save assignment.', 'error');
@@ -2079,25 +2096,42 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return res;
   };
 
-  const saveEmployeePaymentAction = async (payment: EmployeePayment) => {
+  const saveEmployeePaymentAction = async (payment: EmployeePayment, isUpdate?: boolean) => {
     moduleDataVersionsRef.current.employeePayments++;
     if (!payment.brand) payment.brand = activeBrand;
-    if (!payment.id) {
-      payment.id = storageService.generateId('EPAY', payment.brand, rawEmployeePayments);
+    const pool = rawEmployeePayments;
+    const updateMode = isUpdate !== undefined
+      ? isUpdate
+      : (Boolean((payment as any).isUpdate) || (!Boolean((payment as any).isNew) && pool.some((p) => p.id === payment.id || (p as any).emp_payment_id_code === payment.id)));
+
+    if (!updateMode) {
+      (payment as any).isNew = true;
+      (payment as any).isUpdate = false;
+      if (!payment.id || pool.some((p) => p.id === payment.id || (p as any).emp_payment_id_code === payment.id)) {
+        payment.id = storageService.generateId('EPAY', payment.brand, pool);
+      }
+    } else {
+      (payment as any).isNew = false;
+      (payment as any).isUpdate = true;
     }
-    const res = await storageService.saveEmployeePayment(payment);
+
+    const res = await storageService.saveEmployeePayment(payment, updateMode);
     if (res.success) {
       const savedPayment = res.payment || payment;
       setRawEmployeePayments((prev) => {
-        const idx = prev.findIndex((p) => p.id === savedPayment.id);
-        if (idx >= 0) {
+        const idx = prev.findIndex(
+          (p) =>
+            p.id === savedPayment.id ||
+            Boolean((savedPayment as any).emp_payment_id_code && p.id === (savedPayment as any).emp_payment_id_code)
+        );
+        if (idx >= 0 && updateMode) {
           const updated = [...prev];
           updated[idx] = savedPayment;
           return updated;
         }
-        return [savedPayment, ...prev];
+        return [savedPayment, ...prev.filter((p) => p.id !== savedPayment.id && (!((savedPayment as any).emp_payment_id_code) || p.id !== (savedPayment as any).emp_payment_id_code))];
       });
-      showToast(`Staff payout "${payment.id}" recorded in Azure SQL.`, 'success');
+      showToast(`Staff payout "${savedPayment.id}" recorded in Azure SQL.`, 'success');
       requestCentralizedRefresh();
     } else {
       showToast(res.error || 'Failed to record payout.', 'error');

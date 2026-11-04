@@ -389,6 +389,143 @@ export async function calculateNextEmployeeIdSql(
   }
 }
 
+// In-memory serialized lock to prevent simultaneous concurrent sequence allocation
+class AsyncKeyedLock {
+  private locks = new Map<string, Promise<void>>();
+
+  async acquire<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    while (this.locks.has(key)) {
+      try {
+        await this.locks.get(key);
+      } catch {
+        // ignore errors from previous task
+      }
+    }
+    let resolveLock!: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    this.locks.set(key, lockPromise);
+    try {
+      return await fn();
+    } finally {
+      this.locks.delete(key);
+      resolveLock();
+    }
+  }
+}
+export const sequenceLock = new AsyncKeyedLock();
+
+export async function calculateNextAssignmentIdSql(
+  poolOrTx: sql.ConnectionPool | sql.Transaction | null,
+  brand: string | null | undefined
+): Promise<string> {
+  const prefix = getBrandSemanticPrefix(brand);
+  const pattern = `${prefix}-ASN-%`;
+
+  if (!poolOrTx) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate assignment ID.');
+    }
+    return generateSemanticEntityId('ASN', brand, mockStore.getAssignments(brand));
+  }
+
+  try {
+    const res = await poolOrTx.request()
+      .input('pattern', pattern)
+      .query(`
+        SELECT ISNULL(NULLIF(CAST(assignment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id
+        FROM assignments WITH (UPDLOCK, HOLDLOCK, TABLOCK)
+        WHERE CAST(id AS NVARCHAR(150)) LIKE @pattern OR assignment_id_code LIKE @pattern
+      `);
+
+    const rows = res.recordset || [];
+    let maxSeq = 0;
+    const regex = new RegExp(`^${prefix}-ASN-(\\d+)$`, 'i');
+    for (const row of rows) {
+      const match = (row.id || '').match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    const mockSeq = isMockFallbackAllowed()
+      ? (() => {
+          const m = generateSemanticEntityId('ASN', brand, mockStore.getAssignments(brand));
+          const match = m.match(regex);
+          return match && match[1] ? parseInt(match[1], 10) : 1;
+        })()
+      : 1;
+
+    const nextSequence = Math.max(maxSeq + 1, rows.length > 0 ? rows.length + 1 : 1, mockSeq > 1 ? mockSeq : 1);
+    return `${prefix}-ASN-${String(nextSequence).padStart(3, '0')}`;
+  } catch (err) {
+    console.warn('[calculateNextAssignmentIdSql] Error querying DB sequence:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL assignment ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return generateSemanticEntityId('ASN', brand, mockStore.getAssignments(brand));
+  }
+}
+
+export async function calculateNextEmployeePaymentIdSql(
+  poolOrTx: sql.ConnectionPool | sql.Transaction | null,
+  brand: string | null | undefined
+): Promise<string> {
+  const prefix = getBrandSemanticPrefix(brand);
+  const pattern = `${prefix}-EPAY-%`;
+
+  if (!poolOrTx) {
+    if (!isMockFallbackAllowed()) {
+      throw new Error('Azure SQL Database is offline. Cannot calculate employee payment ID.');
+    }
+    return generateSemanticEntityId('EPAY', brand, mockStore.getEmployeePayments(brand));
+  }
+
+  try {
+    const res = await poolOrTx.request()
+      .input('pattern', pattern)
+      .query(`
+        SELECT ISNULL(NULLIF(CAST(emp_payment_id_code AS NVARCHAR(150)), ''), CAST(id AS NVARCHAR(150))) as id
+        FROM employee_payments WITH (UPDLOCK, HOLDLOCK, TABLOCK)
+        WHERE CAST(id AS NVARCHAR(150)) LIKE @pattern OR emp_payment_id_code LIKE @pattern
+      `);
+
+    const rows = res.recordset || [];
+    let maxSeq = 0;
+    const regex = new RegExp(`^${prefix}-EPAY-(\\d+)$`, 'i');
+    for (const row of rows) {
+      const match = (row.id || '').match(regex);
+      if (match && match[1]) {
+        const seq = parseInt(match[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+
+    const mockSeq = isMockFallbackAllowed()
+      ? (() => {
+          const m = generateSemanticEntityId('EPAY', brand, mockStore.getEmployeePayments(brand));
+          const match = m.match(regex);
+          return match && match[1] ? parseInt(match[1], 10) : 1;
+        })()
+      : 1;
+
+    const nextSequence = Math.max(maxSeq + 1, rows.length > 0 ? rows.length + 1 : 1, mockSeq > 1 ? mockSeq : 1);
+    return `${prefix}-EPAY-${String(nextSequence).padStart(3, '0')}`;
+  } catch (err) {
+    console.warn('[calculateNextEmployeePaymentIdSql] Error querying DB sequence:', err);
+    if (!isMockFallbackAllowed()) {
+      throw new Error(`Azure SQL employee payment ID calculation failure: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return generateSemanticEntityId('EPAY', brand, mockStore.getEmployeePayments(brand));
+  }
+}
+
 // Auto-healing, bounded-retry, and default-deny safe query executor
 export interface QueryExecutionOptions {
   tableName?: string;
@@ -5471,7 +5608,27 @@ router.get('/assignments', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/assignments/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  try {
+    const nextId = await calculateNextAssignmentIdSql(pool, brand);
+    return res.json({ success: true, nextId });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next assignment ID', errMsg);
+    }
+    const nextId = generateSemanticEntityId('ASN', brand, mockStore.getAssignments(brand));
+    return res.json({ success: true, nextId });
+  }
+});
+
 async function handleSaveAssignmentRoute(req: Request, res: Response) {
+  const isPost = req.method === 'POST';
+  const isUpdate = Boolean(req.body.isUpdate || req.method === 'PUT');
+  const isNew = req.body.isNew !== undefined ? Boolean(req.body.isNew) : (isPost && !isUpdate);
+
   const asn: Assignment = req.body;
   const brandContext = getBrandContext(req);
   asn.brand = sanitizeBrand(asn.brand, brandContext) as any;
@@ -5481,74 +5638,236 @@ async function handleSaveAssignmentRoute(req: Request, res: Response) {
   asn.updatedAt = now;
   asn.createdAt = asn.createdAt || now;
 
-  asn.id = (asn.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand)) : generateSemanticEntityId('ASN', asn.brand));
+  const targetId = (req.params.id || asn.id || '').trim();
 
-  const pool = await getOrInitPool();
-  if (!pool) {
-    if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'save assignment');
-  }
-  const saved = mockStore.saveAssignment(asn);
-    return res.json({ success: true, assignment: saved });
-  }
+  return sequenceLock.acquire('ASN_' + (asn.brand || 'ALL'), async () => {
+    const pool = await getOrInitPool();
 
-  try {
-    const guidId = toGuid(asn.id);
-    const projGuid = toGuidOrNull(asn.projectId);
-    const clientGuid = toGuidOrNull(asn.clientId);
-    const empGuid = toGuidOrNull(asn.employeeId);
-    await executeSqlWithAutoMigration(
-      pool,
-      (activePool = pool) =>
-        activePool.request()
-          .input('id', guidId)
-          .input('rawId', asn.id || '')
-          .input('brand', asn.brand || 'Device Doctor India')
-          .input('project_id', projGuid)
-          .input('client_id', clientGuid)
-          .input('client_name', asn.clientName || '')
-          .input('employee_id', empGuid)
-          .input('employee_name', asn.employeeName || '')
-          .input('role_name', asn.roleName || '')
-          .input('assigned_date', asn.assignedDate || '')
-          .input('work_assigned', asn.workAssigned || '')
-          .input('amount', asn.amount || 0)
-          .input('amount_paid', asn.amountPaid || 0)
-          .input('payment_status', asn.paymentStatus || 'Pending')
-          .input('employee_notes', asn.employeeNotes || '')
-          .input('last_note_update', asn.lastNoteUpdate || '')
-          .input('created_at', asn.createdAt)
-          .input('updated_at', asn.updatedAt)
-          .query(`
-            IF EXISTS (SELECT 1 FROM assignments WHERE id = @id OR (assignment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE assignments SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
-                                     employee_id=@employee_id, employee_name=@employee_name, role_name=@role_name,
-                                     assigned_date=@assigned_date, work_assigned=@work_assigned, work_module_assigned=@work_assigned,
-                                     amount=@amount, amount_paid=@amount_paid, payment_status=@payment_status,
-                                     employee_notes=@employee_notes, last_note_update=@last_note_update, updated_at=@updated_at,
-                                     assignment_id_code=@rawId
-              WHERE id = @id OR (assignment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
-            ELSE
+    // 1. Mock Fallback (pool unavailable)
+    if (!pool) {
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'save assignment');
+      }
+
+      if (isPost) {
+        if (!asn.id) {
+          asn.id = generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand));
+        } else if (isNew) {
+          const existing = mockStore.getAssignments(null).find((a) => {
+            const aId = (a.id || '').trim().toLowerCase();
+            const aCode = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+            return aId === asn.id.toLowerCase() || aCode === asn.id.toLowerCase();
+          });
+          if (existing) {
+            asn.id = generateSemanticEntityId('ASN', asn.brand, mockStore.getAssignments(asn.brand));
+          }
+        } else {
+          const existing = mockStore.getAssignments(null).find((a) => {
+            const aId = (a.id || '').trim().toLowerCase();
+            const aCode = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+            return aId === asn.id.toLowerCase() || aCode === asn.id.toLowerCase();
+          });
+          if (existing) {
+            return res.status(409).json({
+              success: false,
+              error: `Assignment with ID "${asn.id}" already exists. Cannot overwrite existing assignment on POST.`
+            });
+          }
+        }
+        const saved = mockStore.saveAssignment({ ...asn, isNew: true, isUpdate: false });
+        return res.json({ success: true, assignment: saved });
+      } else {
+        // PUT update
+        if (!targetId) {
+          return res.status(400).json({ success: false, error: 'Assignment ID is required for update.' });
+        }
+        const existing = mockStore.getAssignments(null).find((a) => {
+          const aId = (a.id || '').trim().toLowerCase();
+          const aCode = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+          return aId === targetId.toLowerCase() || aCode === targetId.toLowerCase();
+        });
+        if (!existing) {
+          return res.status(404).json({ success: false, error: `Assignment '${targetId}' not found for update.` });
+        }
+        const saved = mockStore.saveAssignment({ ...asn, id: targetId, isNew: false, isUpdate: true });
+        return res.json({ success: true, assignment: saved });
+      }
+    }
+
+    // 2. Live Azure SQL
+    try {
+      if (isPost) {
+        // Mandatory SQL Transaction for production POST
+        const transaction: sql.Transaction = typeof (pool as any).transaction === 'function'
+          ? (pool as any).transaction()
+          : new sql.Transaction(pool);
+
+        try {
+          await transaction.begin();
+        } catch (beginErr) {
+          const errMsg = beginErr instanceof Error ? beginErr.message : String(beginErr);
+          console.error('[handleSaveAssignmentRoute] Mandatory transaction begin failed:', errMsg);
+          if (!isMockFallbackAllowed()) {
+            return sendDatabaseError(res, beginErr, 'begin transaction for create assignment');
+          }
+          const saved = mockStore.saveAssignment({ ...asn, isNew: true, isUpdate: false });
+          return res.json({ success: true, assignment: saved });
+        }
+
+        try {
+          if (!asn.id) {
+            asn.id = await calculateNextAssignmentIdSql(transaction, asn.brand);
+          } else {
+            // Check if ID collides with existing record in Azure SQL inside the transaction boundary
+            const checkGuid = toGuid(asn.id);
+            const checkRes = await transaction.request()
+              .input('id', checkGuid)
+              .input('rawId', asn.id)
+              .query(`
+                SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id, assignment_id_code
+                FROM assignments WITH (UPDLOCK, HOLDLOCK, TABLOCK)
+                WHERE CAST(id AS NVARCHAR(150)) = @id 
+                   OR CAST(id AS NVARCHAR(150)) = @rawId 
+                   OR assignment_id_code = @rawId
+              `);
+
+            if (checkRes.recordset && checkRes.recordset.length > 0) {
+              if (isNew) {
+                // Allocate next safe non-colliding ID inside the transaction
+                asn.id = await calculateNextAssignmentIdSql(transaction, asn.brand);
+              } else {
+                await transaction.rollback();
+                return res.status(409).json({
+                  success: false,
+                  error: `Assignment with ID "${asn.id}" already exists. Cannot overwrite existing assignment on POST.`
+                });
+              }
+            }
+          }
+
+          const guidId = toGuid(asn.id);
+          const projGuid = toGuidOrNull(asn.projectId);
+          const clientGuid = toGuidOrNull(asn.clientId);
+          const empGuid = toGuidOrNull(asn.employeeId);
+
+          await transaction.request()
+            .input('id', guidId)
+            .input('rawId', asn.id)
+            .input('brand', asn.brand || 'Device Doctor India')
+            .input('project_id', projGuid)
+            .input('client_id', clientGuid)
+            .input('client_name', asn.clientName || '')
+            .input('employee_id', empGuid)
+            .input('employee_name', asn.employeeName || '')
+            .input('role_name', asn.roleName || '')
+            .input('assigned_date', asn.assignedDate || '')
+            .input('work_assigned', asn.workAssigned || '')
+            .input('amount', asn.amount || 0)
+            .input('amount_paid', asn.amountPaid || 0)
+            .input('payment_status', asn.paymentStatus || 'Pending')
+            .input('employee_notes', asn.employeeNotes || '')
+            .input('last_note_update', asn.lastNoteUpdate || '')
+            .input('created_at', asn.createdAt)
+            .input('updated_at', asn.updatedAt)
+            .query(`
               INSERT INTO assignments (id, assignment_id_code, brand, project_id, client_id, client_name, employee_id, employee_name, role_name, assigned_date, work_assigned, work_module_assigned, amount, amount_paid, payment_status, employee_notes, last_note_update, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @project_id, @client_id, @client_name, @employee_id, @employee_name, @role_name, @assigned_date, @work_assigned, @work_assigned, @amount, @amount_paid, @payment_status, @employee_notes, @last_note_update, @created_at, @updated_at)
-          `),
-      'assignments'
-    );
-    mockStore.saveAssignment(asn);
-    return res.json({ success: true, assignment: asn });
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn('[handleSaveAssignmentRoute] Falling back to mock store:', errMsg);
-    if (!isMockFallbackAllowed()) {
-      return sendDatabaseUnavailable(res, 'save assignment', errMsg);
+            `);
+
+          await transaction.commit();
+        } catch (txErr) {
+          try {
+            await transaction.rollback();
+          } catch (rbErr) {
+            console.warn('[handleSaveAssignmentRoute] Rollback notice:', rbErr);
+          }
+          throw txErr;
+        }
+
+        mockStore.saveAssignment({ ...asn, isNew: true, isUpdate: false });
+        return res.json({ success: true, assignment: asn });
+      } else {
+        // Strict PUT update mode
+        if (!targetId) {
+          return res.status(400).json({ success: false, error: 'Assignment ID is required for update.' });
+        }
+
+        const targetGuid = toGuid(targetId);
+        const checkRes = await pool.request()
+          .input('id', targetGuid)
+          .input('rawId', targetId)
+          .query(`
+            SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                         ISNULL(CAST(assignment_id_code AS NVARCHAR(150)), '') as assignment_id_code,
+                         ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+            FROM assignments
+            WHERE CAST(id AS NVARCHAR(150)) = @id 
+               OR CAST(id AS NVARCHAR(150)) = @rawId 
+               OR assignment_id_code = @rawId
+          `);
+
+        const existing = checkRes.recordset?.[0];
+        if (!existing) {
+          return res.status(404).json({ success: false, error: `Assignment '${targetId}' not found for update.` });
+        }
+
+        const existingDbId = String(existing.id);
+        const projGuid = toGuidOrNull(asn.projectId);
+        const clientGuid = toGuidOrNull(asn.clientId);
+        const empGuid = toGuidOrNull(asn.employeeId);
+
+        await executeSqlWithAutoMigration(
+          pool,
+          (activePool = pool) =>
+            activePool.request()
+              .input('targetId', existingDbId)
+              .input('rawId', targetId)
+              .input('brand', asn.brand || existing.brand || 'Device Doctor India')
+              .input('project_id', projGuid)
+              .input('client_id', clientGuid)
+              .input('client_name', asn.clientName || '')
+              .input('employee_id', empGuid)
+              .input('employee_name', asn.employeeName || '')
+              .input('role_name', asn.roleName || '')
+              .input('assigned_date', asn.assignedDate || '')
+              .input('work_assigned', asn.workAssigned || '')
+              .input('amount', asn.amount || 0)
+              .input('amount_paid', asn.amountPaid || 0)
+              .input('payment_status', asn.paymentStatus || 'Pending')
+              .input('employee_notes', asn.employeeNotes || '')
+              .input('last_note_update', asn.lastNoteUpdate || '')
+              .input('updated_at', asn.updatedAt)
+              .query(`
+                UPDATE assignments
+                SET brand=@brand, project_id=@project_id, client_id=@client_id, client_name=@client_name,
+                    employee_id=@employee_id, employee_name=@employee_name, role_name=@role_name,
+                    assigned_date=@assigned_date, work_assigned=@work_assigned, work_module_assigned=@work_assigned,
+                    amount=@amount, amount_paid=@amount_paid, payment_status=@payment_status,
+                    employee_notes=@employee_notes, last_note_update=@last_note_update, updated_at=@updated_at
+                WHERE CAST(id AS NVARCHAR(150)) = @targetId 
+                   OR assignment_id_code = @rawId
+              `),
+          'assignments'
+        );
+
+        asn.id = targetId;
+        mockStore.saveAssignment({ ...asn, id: targetId, isNew: false, isUpdate: true });
+        return res.json({ success: true, assignment: asn });
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn('[handleSaveAssignmentRoute] Falling back to mock store:', errMsg);
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'save assignment', errMsg);
+      }
+      const saved = mockStore.saveAssignment({ ...asn, isNew, isUpdate });
+      return res.json({ success: true, assignment: saved });
     }
-    const saved = mockStore.saveAssignment(asn);
-    return res.json({ success: true, assignment: saved });
-  }
+  });
 }
 
-router.post('/assignments', handleSaveAssignmentRoute);
-router.put('/assignments/:id', (req: Request, res: Response) => {
+router.post('/assignments', authenticateToken, handleSaveAssignmentRoute);
+router.put('/assignments/:id', authenticateToken, (req: Request, res: Response) => {
   req.body.id = req.params.id;
   return handleSaveAssignmentRoute(req, res);
 });
@@ -5694,9 +6013,266 @@ router.get('/employee-payments', authenticateToken, async (req: Request, res: Re
   }
 });
 
+router.get('/employee-payments/next-semantic-id', authenticateToken, async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  try {
+    const nextId = await calculateNextEmployeePaymentIdSql(pool, brand);
+    return res.json({ success: true, nextId });
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'calculate next employee payment ID', errMsg);
+    }
+    const nextId = generateSemanticEntityId('EPAY', brand, mockStore.getEmployeePayments(brand));
+    return res.json({ success: true, nextId });
+  }
+});
+
+function normalizeBrandKey(brandVal?: any): string {
+  if (!brandVal || typeof brandVal !== 'string') return '';
+  const clean = brandVal.trim().toLowerCase();
+  if (!clean) return '';
+  return getBrandSemanticPrefix(clean);
+}
+
+function normalizeDateStr(dateVal?: any): string {
+  if (!dateVal) return '';
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return '';
+    return dateVal.toISOString().slice(0, 10);
+  }
+  const str = String(dateVal).trim();
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return str.toLowerCase();
+}
+
+function normalizeTrimmedStr(val?: any): string {
+  if (val === null || val === undefined) return '';
+  return String(val).trim().toLowerCase();
+}
+
+export function parseValidFiniteAmount(val: any): number | null {
+  // 1. Reject non-number and non-string types (booleans, objects, arrays, functions, symbols, null, undefined)
+  if (typeof val === 'boolean' || val === null || val === undefined) {
+    return null;
+  }
+  if (Array.isArray(val) || typeof val === 'object') {
+    return null;
+  }
+
+  // 2. Handle number type: must be finite, non-NaN
+  if (typeof val === 'number') {
+    if (!Number.isFinite(val)) {
+      return null;
+    }
+    return val;
+  }
+
+  // 3. Handle string type: must be non-empty, valid decimal representation only
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    // Reject non-decimal formats: hexadecimal (0x), binary (0b), octal (0o)
+    if (/^0[xXoObB]/.test(trimmed)) {
+      return null;
+    }
+
+    // Strictly match valid decimal numbers: optional sign, digits, optional decimal point with digits
+    // Supports optional exponent notation (e.g. 1e4) but strictly disallows hex, trailing non-digits, etc.
+    const decimalPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+    if (!decimalPattern.test(trimmed)) {
+      return null;
+    }
+
+    const num = Number(trimmed);
+    if (!Number.isFinite(num)) {
+      return null;
+    }
+    return num;
+  }
+
+  return null;
+}
+
+export function verifyUtrIdempotency(existing: any, incoming: EmployeePayment): { isIdentical: boolean; conflictReason?: string } {
+  // 1. Amount check: strictly numerical equality (within 0.001 tolerance)
+  // Both existing and incoming amounts must be present and convert to finite numbers.
+  // Missing or invalid amounts must never be defaulted to zero or qualified as identical.
+  const rawExistingAmt = existing.amount_paid ?? existing.amountPaid ?? (existing as any).amount;
+  const rawIncomingAmt = incoming.amountPaid ?? (incoming as any).amount_paid ?? (incoming as any).amount;
+
+  const existingAmt = parseValidFiniteAmount(rawExistingAmt);
+  const incomingAmt = parseValidFiniteAmount(rawIncomingAmt);
+
+  if (existingAmt === null && incomingAmt === null) {
+    return {
+      isIdentical: false,
+      conflictReason: 'missing amount on both existing and requested payment'
+    };
+  }
+
+  if (existingAmt === null) {
+    return {
+      isIdentical: false,
+      conflictReason: `invalid or missing amount on existing payment (existing: ${rawExistingAmt ?? '<missing>'})`
+    };
+  }
+
+  if (incomingAmt === null) {
+    return {
+      isIdentical: false,
+      conflictReason: `invalid or missing amount on requested payment (requested: ${rawIncomingAmt ?? '<missing>'})`
+    };
+  }
+
+  if (Math.abs(existingAmt - incomingAmt) >= 0.001) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting amount (existing: ₹${existingAmt}, requested: ₹${incomingAmt})`
+    };
+  }
+
+  // 2. Employee Identity check:
+  // Both ID and Name must be compared with strict presence and value equality.
+  const existingEmpId = normalizeTrimmedStr(existing.employee_id ?? existing.employeeId);
+  const incomingEmpId = normalizeTrimmedStr(incoming.employeeId ?? (incoming as any).employee_id);
+  const existingEmpName = normalizeTrimmedStr(existing.employee_name ?? existing.employeeName);
+  const incomingEmpName = normalizeTrimmedStr(incoming.employeeName ?? (incoming as any).employee_name);
+
+  // 2a. Contradictory employee IDs: MUST always produce a conflict, even if employee name matches
+  if (existingEmpId && incomingEmpId && existingEmpId !== incomingEmpId) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting employee ID (existing: "${existingEmpId}", requested: "${incomingEmpId}")`
+    };
+  }
+
+  // 2b. Contradictory employee names: MUST produce a conflict
+  if (existingEmpName && incomingEmpName && existingEmpName !== incomingEmpName) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting employee name (existing: "${existingEmpName}", requested: "${incomingEmpName}")`
+    };
+  }
+
+  // 2c. Employee ID presence mismatch: missing on either side must not silently count as a match
+  if (Boolean(existingEmpId) !== Boolean(incomingEmpId)) {
+    return {
+      isIdentical: false,
+      conflictReason: `employee ID presence mismatch (existing: "${existingEmpId || '<missing>'}", requested: "${incomingEmpId || '<missing>'}")`
+    };
+  }
+
+  // 2d. Employee Name presence mismatch: missing on either side must not silently count as a match
+  if (Boolean(existingEmpName) !== Boolean(incomingEmpName)) {
+    return {
+      isIdentical: false,
+      conflictReason: `employee name presence mismatch (existing: "${existingEmpName || '<missing>'}", requested: "${incomingEmpName || '<missing>'}")`
+    };
+  }
+
+  // 2e. Positive identity verification: at least one positive identifier must match without contradiction
+  const idMatched = Boolean(existingEmpId && incomingEmpId && existingEmpId === incomingEmpId);
+  const nameMatched = Boolean(existingEmpName && incomingEmpName && existingEmpName === incomingEmpName);
+  if (!idMatched && !nameMatched) {
+    return {
+      isIdentical: false,
+      conflictReason: `unverifiable employee identity (neither ID nor name matched)`
+    };
+  }
+
+  // 3. Assignment ID check:
+  // Required in payment identity contract. Missing on either side must not silently count as a match.
+  const existingAsnId = normalizeTrimmedStr(existing.assignment_id ?? existing.assignmentId);
+  const incomingAsnId = normalizeTrimmedStr(incoming.assignmentId ?? (incoming as any).assignment_id);
+  if (Boolean(existingAsnId) !== Boolean(incomingAsnId)) {
+    return {
+      isIdentical: false,
+      conflictReason: `assignment ID presence mismatch (existing: "${existingAsnId || '<missing>'}", requested: "${incomingAsnId || '<missing>'}")`
+    };
+  }
+  if (existingAsnId && incomingAsnId && existingAsnId !== incomingAsnId) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting assignment ID (existing: "${existingAsnId}", requested: "${incomingAsnId}")`
+    };
+  }
+
+  // 4. Payment Date check (normalized to YYYY-MM-DD):
+  // Required in payment identity contract. Missing on either side must not silently count as a match.
+  const existingDate = normalizeDateStr(existing.payment_date ?? existing.paymentDate);
+  const incomingDate = normalizeDateStr(incoming.paymentDate ?? (incoming as any).payment_date);
+  if (Boolean(existingDate) !== Boolean(incomingDate)) {
+    return {
+      isIdentical: false,
+      conflictReason: `payment date presence mismatch (existing: "${existingDate || '<missing>'}", requested: "${incomingDate || '<missing>'}")`
+    };
+  }
+  if (existingDate && incomingDate && existingDate !== incomingDate) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting payment date (existing: "${existingDate}", requested: "${incomingDate}")`
+    };
+  }
+
+  // 5. Brand check (handles brand and brand_id aliases consistently):
+  // Required in payment identity contract. Missing on either side must not silently count as a match.
+  const existingBrandRaw = (existing.brand ?? existing.brand_id ?? '').toString().trim();
+  const incomingBrandRaw = (incoming.brand ?? (incoming as any).brand_id ?? '').toString().trim();
+  const existingBrand = normalizeBrandKey(existingBrandRaw);
+  const incomingBrand = normalizeBrandKey(incomingBrandRaw);
+  if (Boolean(existingBrand) !== Boolean(incomingBrand)) {
+    return {
+      isIdentical: false,
+      conflictReason: `brand presence mismatch (existing: "${existingBrandRaw || '<missing>'}", requested: "${incomingBrandRaw || '<missing>'}")`
+    };
+  }
+  if (existingBrand && incomingBrand && existingBrand !== incomingBrand) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting brand (existing: "${existingBrandRaw}", requested: "${incomingBrandRaw}")`
+    };
+  }
+
+  // 6. Project ID check (if present on both):
+  const existingProjId = normalizeTrimmedStr(existing.project_id ?? existing.projectId);
+  const incomingProjId = normalizeTrimmedStr(incoming.projectId ?? (incoming as any).project_id);
+  if (existingProjId && incomingProjId && existingProjId !== incomingProjId) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting project ID (existing: "${existingProjId}", requested: "${incomingProjId}")`
+    };
+  }
+
+  // 7. Payment Mode check (if specified on both and contradictory):
+  const existingMode = normalizeTrimmedStr(existing.payment_mode ?? existing.paymentMode);
+  const incomingMode = normalizeTrimmedStr(incoming.paymentMode ?? (incoming as any).payment_mode);
+  if (existingMode && incomingMode && existingMode !== incomingMode) {
+    return {
+      isIdentical: false,
+      conflictReason: `conflicting payment mode (existing: "${existingMode}", requested: "${incomingMode}")`
+    };
+  }
+
+  return { isIdentical: true };
+}
+
 async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   // --- Input Validation (POST & PUT /api/employee-payments) ---
   const isPost = req.method === 'POST';
+  const isUpdate = Boolean(req.body.isUpdate || req.method === 'PUT');
+  const isNew = req.body.isNew !== undefined ? Boolean(req.body.isNew) : (isPost && !isUpdate);
 
   // 1. Amount Validation (required on POST; on PUT validate only if provided; 0 is valid; negative rejected)
   const rawAmount = req.body.amountPaid ?? req.body.amount ?? req.body.amount_paid ?? req.body.amountINR ?? req.body.amount_inr;
@@ -5751,78 +6327,385 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   epay.updatedAt = now;
   epay.createdAt = epay.createdAt || now;
 
-  epay.id = (epay.id || '').trim() || (isMockFallbackAllowed() ? generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand)) : generateSemanticEntityId('EPAY', epay.brand));
-
   epay.paymentProof = parsePaymentProof(epay.paymentProof);
   const serializedProof = serializePaymentProof(epay.paymentProof);
 
-  const pool = await getOrInitPool();
-  if (!pool) {
-    if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'save employee payment');
-  }
-  const saved = mockStore.saveEmployeePayment(epay);
-    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
-  }
+  const targetId = (req.params.id || epay.id || '').trim();
+  const finalUtr = (epay.referenceUtr || '').trim();
 
-  try {
-    const guidId = toGuid(epay.id);
-    const asnGuid = toGuidOrNull(epay.assignmentId);
-    const projGuid = toGuidOrNull(epay.projectId);
-    const empGuid = toGuidOrNull(epay.employeeId);
-    await executeSqlWithAutoMigration(
-      pool,
-      (activePool = pool) =>
-        activePool.request()
-          .input('id', guidId)
-          .input('rawId', epay.id || '')
-          .input('brand', epay.brand || 'Device Doctor India')
-          .input('assignment_id', asnGuid)
-          .input('project_id', projGuid)
-          .input('employee_id', empGuid)
-          .input('employee_name', epay.employeeName || '')
-          .input('payment_date', epay.paymentDate || '')
-          .input('amount_paid', epay.amountPaid || 0)
-          .input('payment_mode', epay.paymentMode || 'GST Invoice')
-          .input('reference_utr', epay.referenceUtr || '')
-          .input('notes', epay.notes || '')
-          .input('payment_proof', serializedProof)
-          .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
-          .input('created_at', epay.createdAt)
-          .input('updated_at', epay.updatedAt)
-          .query(`
-            IF EXISTS (SELECT 1 FROM employee_payments WHERE id = @id OR (emp_payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL))
-              UPDATE employee_payments SET brand=@brand, assignment_id=@assignment_id, project_id=@project_id,
-                                          employee_id=@employee_id, employee_name=@employee_name, payment_date=@payment_date,
-                                          amount_paid=@amount_paid, payment_mode=@payment_mode, reference_utr=@reference_utr,
-                                          notes=@notes, payment_proof=@payment_proof, payment_proof_notes=@payment_proof_notes,
-                                          updated_at=@updated_at, emp_payment_id_code=@rawId
-              WHERE id = @id OR (emp_payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL) OR (CAST(id AS NVARCHAR(100)) = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
-            ELSE
+  return sequenceLock.acquire('EPAY_' + (epay.brand || 'ALL'), async () => {
+    const pool = await getOrInitPool();
+
+    // 1. Mock Fallback (pool unavailable)
+    if (!pool) {
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseUnavailable(res, 'save employee payment');
+      }
+
+      // UTR Duplicate & Idempotency Check in mockStore
+      if (finalUtr) {
+        const dup = mockStore.getEmployeePayments(null).find((p) => {
+          return (p.referenceUtr || '').trim().toLowerCase() === finalUtr.toLowerCase();
+        });
+
+        if (dup) {
+          const check = verifyUtrIdempotency(dup, epay);
+          if (check.isIdentical) {
+            // IDENTICAL REPEATED REQUEST: Idempotent return with HTTP 200 without modifying state
+            return res.json({
+              success: true,
+              payment: { ...dup, paymentProof: parsePaymentProof(dup.paymentProof) }
+            });
+          } else {
+            // DIFFERENT DETAILS: Reject with HTTP 409 Conflict
+            return res.status(409).json({
+              success: false,
+              error: `Reference / UTR "${finalUtr}" is already in use by Employee Payment ${dup.id} with ${check.conflictReason}. Reference / UTR must be strictly unique.`
+            });
+          }
+        }
+      }
+
+      if (isPost) {
+        if (!epay.id) {
+          epay.id = generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand));
+        } else if (isNew) {
+          const existing = mockStore.getEmployeePayments(null).find((p) => {
+            const pId = (p.id || '').trim().toLowerCase();
+            const pCode = (((p as any).emp_payment_id_code || '') as string).trim().toLowerCase();
+            return pId === epay.id.toLowerCase() || pCode === epay.id.toLowerCase();
+          });
+          if (existing) {
+            const sameUtr = Boolean(
+              existing.referenceUtr &&
+              finalUtr &&
+              existing.referenceUtr.trim().toLowerCase() === finalUtr.toLowerCase()
+            );
+            if (sameUtr) {
+              const check = verifyUtrIdempotency(existing, epay);
+              if (check.isIdentical) {
+                return res.json({ success: true, payment: { ...existing, paymentProof: parsePaymentProof(existing.paymentProof) } });
+              } else {
+                return res.status(409).json({
+                  success: false,
+                  error: `Reference / UTR "${finalUtr}" is already in use by Employee Payment ${existing.id} with ${check.conflictReason}. Reference / UTR must be strictly unique.`
+                });
+              }
+            }
+            epay.id = generateSemanticEntityId('EPAY', epay.brand, mockStore.getEmployeePayments(epay.brand));
+          }
+        } else {
+          const existing = mockStore.getEmployeePayments(null).find((p) => {
+            const pId = (p.id || '').trim().toLowerCase();
+            const pCode = (((p as any).emp_payment_id_code || '') as string).trim().toLowerCase();
+            return pId === epay.id.toLowerCase() || pCode === epay.id.toLowerCase();
+          });
+          if (existing) {
+            return res.status(409).json({
+              success: false,
+              error: `Employee payment with ID "${epay.id}" already exists. Cannot overwrite existing payment on POST.`
+            });
+          }
+        }
+        const saved = mockStore.saveEmployeePayment({ ...epay, isNew: true, isUpdate: false });
+        return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
+      } else {
+        // PUT update
+        if (!targetId) {
+          return res.status(400).json({ success: false, error: 'Employee payment ID is required for update.' });
+        }
+        const existing = mockStore.getEmployeePayments(null).find((p) => {
+          const pId = (p.id || '').trim().toLowerCase();
+          const pCode = (((p as any).emp_payment_id_code || '') as string).trim().toLowerCase();
+          return pId === targetId.toLowerCase() || pCode === targetId.toLowerCase();
+        });
+        if (!existing) {
+          return res.status(404).json({ success: false, error: `Employee payment '${targetId}' not found for update.` });
+        }
+        const saved = mockStore.saveEmployeePayment({ ...epay, id: targetId, isNew: false, isUpdate: true });
+        return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
+      }
+    }
+
+    // 2. Live Azure SQL
+    try {
+      if (isPost) {
+        // Mandatory SQL Transaction for production POST
+        const transaction: sql.Transaction = typeof (pool as any).transaction === 'function'
+          ? (pool as any).transaction()
+          : new sql.Transaction(pool);
+
+        try {
+          await transaction.begin();
+        } catch (beginErr) {
+          const errMsg = beginErr instanceof Error ? beginErr.message : String(beginErr);
+          console.error('[handleSaveEmployeePaymentRoute] Mandatory transaction begin failed:', errMsg);
+          if (!isMockFallbackAllowed()) {
+            return sendDatabaseError(res, beginErr, 'begin transaction for create employee payment');
+          }
+          const saved = mockStore.saveEmployeePayment({ ...epay, isNew: true, isUpdate: false });
+          return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
+        }
+
+        try {
+          // 1. Atomic UTR Duplicate Check & Idempotency inside the transaction boundary
+          if (finalUtr) {
+            const utrRes = await transaction.request()
+              .input('utr', finalUtr)
+              .query(`
+                SELECT TOP 1 
+                  CAST(id AS NVARCHAR(150)) as id,
+                  ISNULL(CAST(emp_payment_id_code AS NVARCHAR(150)), '') as emp_payment_id_code,
+                  reference_utr,
+                  amount_paid,
+                  employee_id,
+                  employee_name,
+                  payment_date,
+                  brand,
+                  assignment_id,
+                  project_id,
+                  payment_mode,
+                  notes,
+                  payment_proof,
+                  payment_proof_notes,
+                  created_at,
+                  updated_at
+                FROM employee_payments WITH (UPDLOCK, HOLDLOCK, TABLOCK)
+                WHERE reference_utr = @utr
+                  AND reference_utr <> ''
+                  AND reference_utr IS NOT NULL
+              `);
+
+            if (utrRes.recordset && utrRes.recordset.length > 0) {
+              const existingRow = utrRes.recordset[0];
+              const check = verifyUtrIdempotency(existingRow, epay);
+
+              if (check.isIdentical) {
+                // IDENTICAL REPEATED REQUEST: Idempotent return with HTTP 200 without duplicate disbursement
+                await transaction.rollback();
+                const returnId = existingRow.emp_payment_id_code || existingRow.id;
+                return res.json({
+                  success: true,
+                  payment: {
+                    id: returnId,
+                    emp_payment_id_code: returnId,
+                    brand: existingRow.brand,
+                    assignmentId: existingRow.assignment_id,
+                    projectId: existingRow.project_id,
+                    employeeId: existingRow.employee_id,
+                    employeeName: existingRow.employee_name,
+                    paymentDate: existingRow.payment_date,
+                    amountPaid: Number(existingRow.amount_paid),
+                    paymentMode: existingRow.payment_mode,
+                    referenceUtr: existingRow.reference_utr,
+                    notes: existingRow.notes,
+                    paymentProof: parsePaymentProof(existingRow.payment_proof),
+                    paymentProofNotes: existingRow.payment_proof_notes,
+                    createdAt: existingRow.created_at,
+                    updatedAt: existingRow.updated_at,
+                  }
+                });
+              } else {
+                // DIFFERENT DETAILS: Reject with HTTP 409 Conflict
+                await transaction.rollback();
+                const dupId = existingRow.emp_payment_id_code || existingRow.id;
+                return res.status(409).json({
+                  success: false,
+                  error: `Reference / UTR "${finalUtr}" is already in use by Employee Payment ${dupId} with ${check.conflictReason}. Reference / UTR must be strictly unique.`
+                });
+              }
+            }
+          }
+
+          if (!epay.id) {
+            epay.id = await calculateNextEmployeePaymentIdSql(transaction, epay.brand);
+          } else {
+            // Check if ID collides with existing record in Azure SQL inside transaction
+            const checkGuid = toGuid(epay.id);
+            const checkRes = await transaction.request()
+              .input('id', checkGuid)
+              .input('rawId', epay.id)
+              .query(`
+                SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id, emp_payment_id_code, reference_utr
+                FROM employee_payments WITH (UPDLOCK, HOLDLOCK, TABLOCK)
+                WHERE CAST(id AS NVARCHAR(150)) = @id 
+                   OR CAST(id AS NVARCHAR(150)) = @rawId 
+                   OR emp_payment_id_code = @rawId
+              `);
+
+            if (checkRes.recordset && checkRes.recordset.length > 0) {
+              const existingRow = checkRes.recordset[0];
+              const existingUtr = (existingRow.reference_utr || '').trim().toLowerCase();
+              const incomingUtr = finalUtr.toLowerCase();
+              const isIdempotentRetry = Boolean(incomingUtr && existingUtr === incomingUtr);
+
+              if (isIdempotentRetry) {
+                await transaction.rollback();
+                return res.json({ success: true, payment: epay });
+              }
+
+              if (isNew) {
+                // Allocate next safe non-colliding ID inside transaction
+                epay.id = await calculateNextEmployeePaymentIdSql(transaction, epay.brand);
+              } else {
+                await transaction.rollback();
+                return res.status(409).json({
+                  success: false,
+                  error: `Employee payment with ID "${epay.id}" already exists. Cannot overwrite existing payment on POST.`
+                });
+              }
+            }
+          }
+
+          const guidId = toGuid(epay.id);
+          const asnGuid = toGuidOrNull(epay.assignmentId);
+          const projGuid = toGuidOrNull(epay.projectId);
+          const empGuid = toGuidOrNull(epay.employeeId);
+
+          await transaction.request()
+            .input('id', guidId)
+            .input('rawId', epay.id)
+            .input('brand', epay.brand || 'Device Doctor India')
+            .input('assignment_id', asnGuid)
+            .input('project_id', projGuid)
+            .input('employee_id', empGuid)
+            .input('employee_name', epay.employeeName || '')
+            .input('payment_date', epay.paymentDate || '')
+            .input('amount_paid', epay.amountPaid || 0)
+            .input('payment_mode', epay.paymentMode || 'GST Invoice')
+            .input('reference_utr', epay.referenceUtr || '')
+            .input('notes', epay.notes || '')
+            .input('payment_proof', serializedProof)
+            .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
+            .input('created_at', epay.createdAt)
+            .input('updated_at', epay.updatedAt)
+            .query(`
               INSERT INTO employee_payments (id, emp_payment_id_code, brand, assignment_id, project_id, employee_id, employee_name, payment_date, amount_paid, payment_mode, reference_utr, notes, payment_proof, payment_proof_notes, created_at, updated_at)
               VALUES (@id, @rawId, @brand, @assignment_id, @project_id, @employee_id, @employee_name, @payment_date, @amount_paid, @payment_mode, @reference_utr, @notes, @payment_proof, @payment_proof_notes, @created_at, @updated_at)
-          `),
-      { tableName: 'employee_payments', isFinancialMutation: true }
-    );
-    mockStore.saveEmployeePayment(epay);
-    return res.json({ success: true, payment: epay });
-  } catch (err) {
-    if (err instanceof TransactionCommitAmbiguousError) {
-      return res.status(500).json({
-        success: false,
-        error: 'TRANSACTION_COMMIT_AMBIGUOUS',
-        category: 'TRANSACTION_COMMIT_AMBIGUOUS',
-        message: 'The employee payout transaction state is ambiguous due to connection loss during commit. Manual verification required.',
-      });
+            `);
+
+          await transaction.commit();
+        } catch (txErr) {
+          try {
+            await transaction.rollback();
+          } catch (rbErr) {
+            console.warn('[handleSaveEmployeePaymentRoute] Rollback notice:', rbErr);
+          }
+          throw txErr;
+        }
+
+        mockStore.saveEmployeePayment({ ...epay, isNew: true, isUpdate: false });
+        return res.json({ success: true, payment: epay });
+      } else {
+        // Strict PUT update mode
+        if (!targetId) {
+          return res.status(400).json({ success: false, error: 'Employee payment ID is required for update.' });
+        }
+
+        const targetGuid = toGuid(targetId);
+        const checkRes = await pool.request()
+          .input('id', targetGuid)
+          .input('rawId', targetId)
+          .query(`
+            SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                         ISNULL(CAST(emp_payment_id_code AS NVARCHAR(150)), '') as emp_payment_id_code,
+                         ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+            FROM employee_payments
+            WHERE CAST(id AS NVARCHAR(150)) = @id 
+               OR CAST(id AS NVARCHAR(150)) = @rawId 
+               OR emp_payment_id_code = @rawId
+          `);
+
+        const existing = checkRes.recordset?.[0];
+        if (!existing) {
+          return res.status(404).json({ success: false, error: `Employee payment '${targetId}' not found for update.` });
+        }
+
+        // Check UTR duplicate on update
+        if (finalUtr) {
+          const utrRes = await pool.request()
+            .input('utr', finalUtr)
+            .input('id', targetGuid)
+            .input('rawId', targetId)
+            .query(`
+              SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id, emp_payment_id_code, reference_utr
+              FROM employee_payments
+              WHERE reference_utr = @utr
+                AND reference_utr <> ''
+                AND reference_utr IS NOT NULL
+                AND CAST(id AS NVARCHAR(150)) <> @rawId
+                AND CAST(id AS NVARCHAR(150)) <> @id
+                AND (emp_payment_id_code IS NULL OR emp_payment_id_code <> @rawId)
+            `);
+          if (utrRes.recordset && utrRes.recordset.length > 0) {
+            const dup = utrRes.recordset[0];
+            const dupId = dup.emp_payment_id_code || dup.id;
+            return res.status(409).json({
+              success: false,
+              error: `Reference / UTR "${finalUtr}" is already in use by Employee Payment ${dupId}. Reference / UTR must be strictly unique.`
+            });
+          }
+        }
+
+        const existingDbId = String(existing.id);
+        const asnGuid = toGuidOrNull(epay.assignmentId);
+        const projGuid = toGuidOrNull(epay.projectId);
+        const empGuid = toGuidOrNull(epay.employeeId);
+
+        await executeSqlWithAutoMigration(
+          pool,
+          (activePool = pool) =>
+            activePool.request()
+              .input('targetId', existingDbId)
+              .input('rawId', targetId)
+              .input('brand', epay.brand || existing.brand || 'Device Doctor India')
+              .input('assignment_id', asnGuid)
+              .input('project_id', projGuid)
+              .input('employee_id', empGuid)
+              .input('employee_name', epay.employeeName || '')
+              .input('payment_date', epay.paymentDate || '')
+              .input('amount_paid', epay.amountPaid || 0)
+              .input('payment_mode', epay.paymentMode || 'GST Invoice')
+              .input('reference_utr', epay.referenceUtr || '')
+              .input('notes', epay.notes || '')
+              .input('payment_proof', serializedProof)
+              .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
+              .input('updated_at', epay.updatedAt)
+              .query(`
+                UPDATE employee_payments
+                SET brand=@brand, assignment_id=@assignment_id, project_id=@project_id,
+                    employee_id=@employee_id, employee_name=@employee_name, payment_date=@payment_date,
+                    amount_paid=@amount_paid, payment_mode=@payment_mode, reference_utr=@reference_utr,
+                    notes=@notes, payment_proof=@payment_proof, payment_proof_notes=@payment_proof_notes,
+                    updated_at=@updated_at
+                WHERE CAST(id AS NVARCHAR(150)) = @targetId 
+                   OR emp_payment_id_code = @rawId
+              `),
+          { tableName: 'employee_payments', isFinancialMutation: true }
+        );
+
+        epay.id = targetId;
+        mockStore.saveEmployeePayment({ ...epay, id: targetId, isNew: false, isUpdate: true });
+        return res.json({ success: true, payment: epay });
+      }
+    } catch (err) {
+      if (err instanceof TransactionCommitAmbiguousError) {
+        return res.status(500).json({
+          success: false,
+          error: 'TRANSACTION_COMMIT_AMBIGUOUS',
+          category: 'TRANSACTION_COMMIT_AMBIGUOUS',
+          message: 'The employee payout transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+        });
+      }
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', errMsg);
+      if (!isMockFallbackAllowed()) {
+        return sendDatabaseError(res, err, 'save employee payment');
+      }
+      const saved = mockStore.saveEmployeePayment({ ...epay, isNew, isUpdate });
+      return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
     }
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn('[handleSaveEmployeePaymentRoute] Falling back to mock store:', errMsg);
-    if (!isMockFallbackAllowed()) {
-      return sendDatabaseError(res, err, 'save employee payment');
-    }
-    const saved = mockStore.saveEmployeePayment(epay);
-    return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
-  }
+  });
 }
 
 router.post('/employee-payments', authenticateToken, handleSaveEmployeePaymentRoute);

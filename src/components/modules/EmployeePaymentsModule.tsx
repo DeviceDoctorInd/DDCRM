@@ -170,7 +170,7 @@ export const EmployeePaymentsModule: React.FC = () => {
     // Pick first available assignment or first assignment
     const defaultAssignment = assignments.length > 0 ? assignments[0] : undefined;
     const today = new Date().toISOString().slice(0, 10);
-    const newId = storageService.generateId('EPAY', activeBrand);
+    const newId = storageService.generateId('EPAY', activeBrand, employeePayments);
 
     let defaultAmount = 0;
     if (defaultAssignment) {
@@ -392,8 +392,12 @@ export const EmployeePaymentsModule: React.FC = () => {
     }
 
     const payload: EmployeePayment = {
-      id: formData.id || storageService.generateId('EPAY', activeBrand),
+      id: isEditing
+        ? (formData.id || '')
+        : (formData.id || storageService.generateId('EPAY', activeBrand, employeePayments)),
       brand: formData.brand || activeBrand,
+      isNew: !isEditing,
+      isUpdate: isEditing,
       assignmentId: formData.assignmentId,
       projectId: assignment.projectId,
       employeeId: assignment.employeeId,
@@ -408,7 +412,7 @@ export const EmployeePaymentsModule: React.FC = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const res = await saveEmployeePayment(payload);
+    const res = await saveEmployeePayment(payload, isEditing);
     if (!res.success) {
       setFormError(res.error || 'Failed to record payment.');
       return;

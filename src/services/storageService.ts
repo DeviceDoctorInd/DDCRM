@@ -1024,9 +1024,16 @@ class StorageService {
     return this.apiCall<Assignment[]>('/api/assignments');
   }
 
-  public async saveAssignment(asn: Assignment): Promise<{ success: boolean; assignment?: Assignment; error?: string }> {
+  public async saveAssignment(asn: Assignment, isUpdate?: boolean): Promise<{ success: boolean; assignment?: Assignment; error?: string }> {
     try {
-      const res = await this.apiCall<{ success: boolean; assignment: Assignment }>('/api/assignments', 'POST', asn);
+      const endpoint = isUpdate && asn.id ? `/api/assignments/${encodeURIComponent(asn.id)}` : '/api/assignments';
+      const method = isUpdate ? 'PUT' : 'POST';
+      const payload: Assignment = {
+        ...asn,
+        isNew: !isUpdate,
+        isUpdate: !!isUpdate,
+      };
+      const res = await this.apiCall<{ success: boolean; assignment: Assignment }>(endpoint, method, payload);
       this.notifyListeners();
       return { success: true, assignment: res.assignment };
     } catch (err: unknown) {
@@ -1054,13 +1061,17 @@ class StorageService {
     }));
   }
 
-  public async saveEmployeePayment(epay: EmployeePayment): Promise<{ success: boolean; payment?: EmployeePayment; error?: string }> {
+  public async saveEmployeePayment(epay: EmployeePayment, isUpdate?: boolean): Promise<{ success: boolean; payment?: EmployeePayment; error?: string }> {
     try {
+      const endpoint = isUpdate && epay.id ? `/api/employee-payments/${encodeURIComponent(epay.id)}` : '/api/employee-payments';
+      const method = isUpdate ? 'PUT' : 'POST';
       const payload: EmployeePayment = {
         ...epay,
+        isNew: !isUpdate,
+        isUpdate: !!isUpdate,
         paymentProof: this.parseProofDocument(epay.paymentProof),
       };
-      const res = await this.apiCall<{ success: boolean; payment: EmployeePayment }>('/api/employee-payments', 'POST', payload);
+      const res = await this.apiCall<{ success: boolean; payment: EmployeePayment }>(endpoint, method, payload);
       this.notifyListeners();
       const saved = res.payment ? { ...res.payment, paymentProof: this.parseProofDocument(res.payment.paymentProof) } : undefined;
       return { success: true, payment: saved };

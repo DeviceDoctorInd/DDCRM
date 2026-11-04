@@ -322,7 +322,10 @@ export type AssignmentPaymentStatus = 'Pending' | 'Partially Paid' | 'Paid' | 'O
 
 export interface Assignment {
   id: string; // Auto-generated & read-only, e.g. DDI-ASN-001, CDS-ASN-001, FXL-ASN-001
+  assignment_id_code?: string; // Database column alias
   brand?: BrandName;
+  isNew?: boolean;
+  isUpdate?: boolean;
   projectId: string; // Project ID (smart ID)
   clientId: string; // Auto-filled from Project ID
   clientName: string; // Auto-filled from Project ID
@@ -348,7 +351,10 @@ export type EmployeePaymentMode =
 
 export interface EmployeePayment {
   id: string; // Auto-generated & read-only, e.g. DDI-EPAY-001, CDS-EPAY-001, FXL-EPAY-001
+  emp_payment_id_code?: string; // Database column alias
   brand?: BrandName;
+  isNew?: boolean;
+  isUpdate?: boolean;
   assignmentId: string; // Dropdown populated from Assignments
   projectId: string; // Auto-filled & read-only
   employeeId: string; // Auto-filled & read-only
