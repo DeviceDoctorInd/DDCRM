@@ -6356,6 +6356,14 @@ export function verifyUtrIdempotency(existing: any, incoming: EmployeePayment): 
   return { isIdentical: true };
 }
 
+export function normalizeReferenceUtr(val: unknown): string | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object') return null;
+  if (typeof val === 'boolean') return null;
+  const str = String(val).trim();
+  return str.length > 0 ? str : null;
+}
+
 async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   // --- Input Validation (POST & PUT /api/employee-payments) ---
   const isPost = req.method === 'POST';
@@ -6419,7 +6427,9 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
   const serializedProof = serializePaymentProof(epay.paymentProof);
 
   const targetId = (req.params.id || epay.id || '').trim();
-  const finalUtr = (epay.referenceUtr || '').trim();
+  const rawIncomingUtr = req.body.referenceUtr ?? req.body.reference_utr;
+  const normalizedIncomingUtr = normalizeReferenceUtr(rawIncomingUtr);
+  let finalUtr: string | null = normalizedIncomingUtr;
 
   return sequenceLock.acquire('EPAY_' + (epay.brand || 'ALL'), async () => {
     const pool = await getOrInitPool();
@@ -6432,8 +6442,9 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
 
       // UTR Duplicate & Idempotency Check in mockStore
       if (finalUtr) {
+        const targetUtr = finalUtr;
         const dup = mockStore.getEmployeePayments(null).find((p) => {
-          return (p.referenceUtr || '').trim().toLowerCase() === finalUtr.toLowerCase();
+          return (p.referenceUtr || '').trim().toLowerCase() === targetUtr.toLowerCase();
         });
 
         if (dup) {
@@ -6448,7 +6459,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
             // DIFFERENT DETAILS: Reject with HTTP 409 Conflict
             return res.status(409).json({
               success: false,
-              error: `Reference / UTR "${finalUtr}" is already in use by Employee Payment ${dup.id} with ${check.conflictReason}. Reference / UTR must be strictly unique.`
+              error: `Reference / UTR "${targetUtr}" is already in use by Employee Payment ${dup.id} with ${check.conflictReason}. Reference / UTR must be strictly unique.`
             });
           }
         }
@@ -6467,7 +6478,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
             const sameUtr = Boolean(
               existing.referenceUtr &&
               finalUtr &&
-              existing.referenceUtr.trim().toLowerCase() === finalUtr.toLowerCase()
+              existing.referenceUtr.trim().toLowerCase() === (finalUtr as string).toLowerCase()
             );
             if (sameUtr) {
               const check = verifyUtrIdempotency(existing, epay);
@@ -6495,6 +6506,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
             });
           }
         }
+        epay.referenceUtr = finalUtr;
         const saved = mockStore.saveEmployeePayment({ ...epay, isNew: true, isUpdate: false });
         return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
       } else {
@@ -6510,6 +6522,10 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
         if (!existing) {
           return res.status(404).json({ success: false, error: `Employee payment '${targetId}' not found for update.` });
         }
+        if (req.body.referenceUtr === undefined && req.body.reference_utr === undefined) {
+          finalUtr = normalizeReferenceUtr(existing.referenceUtr);
+        }
+        epay.referenceUtr = finalUtr;
         const saved = mockStore.saveEmployeePayment({ ...epay, id: targetId, isNew: false, isUpdate: true });
         return res.json({ success: true, payment: { ...saved, paymentProof: parsePaymentProof(saved.paymentProof) } });
       }
@@ -6539,7 +6555,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
           // 1. Atomic UTR Duplicate Check & Idempotency inside the transaction boundary
           if (finalUtr) {
             const utrRes = await transaction.request()
-              .input('utr', finalUtr)
+              .input('utr', sql.NVarChar(100), finalUtr)
               .query(`
                 SELECT TOP 1 
                   CAST(id AS NVARCHAR(150)) as id,
@@ -6585,7 +6601,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
                     paymentDate: existingRow.payment_date,
                     amountPaid: Number(existingRow.amount_paid),
                     paymentMode: existingRow.payment_mode,
-                    referenceUtr: existingRow.reference_utr,
+                    referenceUtr: existingRow.reference_utr ? String(existingRow.reference_utr).trim() : null,
                     notes: existingRow.notes,
                     paymentProof: parsePaymentProof(existingRow.payment_proof),
                     paymentProofNotes: existingRow.payment_proof_notes,
@@ -6624,12 +6640,12 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
             if (checkRes.recordset && checkRes.recordset.length > 0) {
               const existingRow = checkRes.recordset[0];
               const existingUtr = (existingRow.reference_utr || '').trim().toLowerCase();
-              const incomingUtr = finalUtr.toLowerCase();
+              const incomingUtr = (finalUtr || '').toLowerCase();
               const isIdempotentRetry = Boolean(incomingUtr && existingUtr === incomingUtr);
 
               if (isIdempotentRetry) {
                 await transaction.rollback();
-                return res.json({ success: true, payment: epay });
+                return res.json({ success: true, payment: { ...epay, referenceUtr: finalUtr } });
               }
 
               if (isNew) {
@@ -6661,7 +6677,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
             .input('payment_date', epay.paymentDate || '')
             .input('amount_paid', epay.amountPaid || 0)
             .input('payment_mode', epay.paymentMode || 'GST Invoice')
-            .input('reference_utr', epay.referenceUtr || '')
+            .input('reference_utr', sql.NVarChar(100), finalUtr)
             .input('notes', epay.notes || '')
             .input('payment_proof', serializedProof)
             .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
@@ -6682,6 +6698,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
           throw txErr;
         }
 
+        epay.referenceUtr = finalUtr;
         mockStore.saveEmployeePayment({ ...epay, isNew: true, isUpdate: false });
         return res.json({ success: true, payment: epay });
       } else {
@@ -6697,7 +6714,8 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
           .query(`
             SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
                          ISNULL(CAST(emp_payment_id_code AS NVARCHAR(150)), '') as emp_payment_id_code,
-                         ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+                         ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                         reference_utr
             FROM employee_payments
             WHERE CAST(id AS NVARCHAR(150)) = @id 
                OR CAST(id AS NVARCHAR(150)) = @rawId 
@@ -6709,10 +6727,14 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
           return res.status(404).json({ success: false, error: `Employee payment '${targetId}' not found for update.` });
         }
 
+        if (req.body.referenceUtr === undefined && req.body.reference_utr === undefined) {
+          finalUtr = normalizeReferenceUtr(existing.reference_utr);
+        }
+
         // Check UTR duplicate on update
         if (finalUtr) {
           const utrRes = await pool.request()
-            .input('utr', finalUtr)
+            .input('utr', sql.NVarChar(100), finalUtr)
             .input('id', targetGuid)
             .input('rawId', targetId)
             .query(`
@@ -6754,7 +6776,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
               .input('payment_date', epay.paymentDate || '')
               .input('amount_paid', epay.amountPaid || 0)
               .input('payment_mode', epay.paymentMode || 'GST Invoice')
-              .input('reference_utr', epay.referenceUtr || '')
+              .input('reference_utr', sql.NVarChar(100), finalUtr)
               .input('notes', epay.notes || '')
               .input('payment_proof', serializedProof)
               .input('payment_proof_notes', epay.paymentProofNotes || (epay.paymentProof?.notes || ''))
@@ -6773,6 +6795,7 @@ async function handleSaveEmployeePaymentRoute(req: Request, res: Response) {
         );
 
         epay.id = targetId;
+        epay.referenceUtr = finalUtr;
         mockStore.saveEmployeePayment({ ...epay, id: targetId, isNew: false, isUpdate: true });
         return res.json({ success: true, payment: epay });
       }

@@ -1232,7 +1232,7 @@ export const EmployeePaymentsModule: React.FC = () => {
           amountINR={Number(selectedPaymentForProof.amountPaid) || 0}
           paymentDate={selectedPaymentForProof.paymentDate}
           paymentMode={selectedPaymentForProof.paymentMode}
-          referenceUtr={selectedPaymentForProof.referenceUtr}
+          referenceUtr={selectedPaymentForProof.referenceUtr || undefined}
           proofDocument={selectedPaymentForProof.paymentProof}
           proofNotes={
             selectedPaymentForProof.paymentProofNotes ||

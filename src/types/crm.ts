@@ -362,7 +362,7 @@ export interface EmployeePayment {
   paymentDate: string; // YYYY-MM-DD, defaults to today
   amountPaid: number; // Numeric input in INR (cannot exceed remaining balance)
   paymentMode: EmployeePaymentMode; // Dropdown
-  referenceUtr?: string; // Text input - unique check across all employee payments if provided
+  referenceUtr?: string | null; // Text input - unique check across all employee payments if provided
   notes?: string; // Textarea
   paymentProof?: PaymentProofDocument; // Uploaded employee payment receipt screenshot
   paymentProofNotes?: string; // Dedicated receipt notes

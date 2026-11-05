@@ -2566,6 +2566,10 @@ class MockStore {
     const cleanId = (payment.id || '').trim();
     let finalId = cleanId;
 
+    const rawUtr = payment.referenceUtr !== undefined && payment.referenceUtr !== null ? String(payment.referenceUtr).trim() : null;
+    const cleanUtr = rawUtr && rawUtr.length > 0 ? rawUtr : null;
+    payment.referenceUtr = cleanUtr;
+
     let idx = cleanId
       ? this.employeePayments.findIndex((p) => {
           const pId = (p.id || '').trim().toLowerCase();

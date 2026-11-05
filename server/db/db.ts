@@ -348,7 +348,7 @@ export async function executeSql<T>(
           try {
             console.warn(`[Azure SQL Auto-Heal] Adding missing column [${colName}] to [${tableName}]...`);
             await pool.request().query(`
-              IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}') 
+              IF EXISTS (SELECT * FROM sys.tables WHERE name = '${tableName}')
               AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
               ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
             `);
@@ -778,6 +778,289 @@ export async function migrateAzureSqlSchema(p?: sql.ConnectionPool): Promise<voi
       // Ignore
     }
   }
+
+  // Employee payments filtered unique UTR index & legacy normalization migration (FIX 20)
+  try {
+    await migrateEmployeePaymentUtrIndex(activePool);
+  } catch (err) {
+    console.warn('[Azure SQL Migration] Notice during employee payment UTR migration:', err);
+  }
+}
+
+export const EXPECTED_FILTER_CANONICAL = "reference_utrisnotnullandreference_utr<>''";
+
+export function normalizeFilterDefinition(filter: string | null | undefined): string {
+  if (!filter) return '';
+  return filter
+    .replace(/[\[\]\s()]/g, '')
+    .replace(/"/g, "'")
+    .toLowerCase();
+}
+
+export function isExactUtrFilter(filter: string | null | undefined): boolean {
+  if (!filter) return false;
+  const canonical = normalizeFilterDefinition(filter).replace(/^where/, '');
+  return canonical === EXPECTED_FILTER_CANONICAL;
+}
+
+export interface UtrMigrationResult {
+  migrated: boolean;
+  legacyNormalizedCount: number;
+  totalPreservedCount: number;
+  filterVerified: boolean;
+  filterDefinition: string;
+}
+
+export async function migrateEmployeePaymentUtrIndex(activePool: sql.ConnectionPool): Promise<UtrMigrationResult> {
+  // Step 1: Inspect existing constraint/index
+  const tableCheck = await activePool.request().query(`
+    SELECT 1 FROM sys.tables WHERE name = 'employee_payments'
+  `);
+  if (!tableCheck.recordset || tableCheck.recordset.length === 0) {
+    return {
+      migrated: false,
+      legacyNormalizedCount: 0,
+      totalPreservedCount: 0,
+      filterVerified: false,
+      filterDefinition: '',
+    };
+  }
+
+  // Inspect existing indexes and constraints on employee_payments(reference_utr)
+  const inspectRes = await activePool.request().query(`
+    SELECT
+      i.name AS index_name,
+      i.is_unique,
+      i.has_filter,
+      i.filter_definition,
+      i.is_unique_constraint,
+      kc.name AS constraint_name
+    FROM sys.indexes i
+    JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+    JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+    LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = i.object_id AND kc.unique_index_id = i.index_id
+    WHERE i.object_id = OBJECT_ID('employee_payments')
+      AND c.name = 'reference_utr'
+      AND i.is_unique = 1
+  `);
+
+  const existingIndexes = inspectRes.recordset || [];
+
+  const targetIndex = existingIndexes.find((idx: any) => idx.index_name === 'UQ_employee_payments_reference_utr');
+  const targetAlreadyValid = Boolean(
+    targetIndex &&
+    !targetIndex.is_unique_constraint &&
+    !targetIndex.constraint_name &&
+    targetIndex.has_filter &&
+    isExactUtrFilter(targetIndex.filter_definition)
+  );
+
+  const legacyCheckRes = await activePool.request().query(`
+    SELECT COUNT(1) AS legacyCount
+    FROM employee_payments
+    WHERE reference_utr IS NOT NULL
+      AND LTRIM(RTRIM(reference_utr)) = ''
+  `);
+  const legacyCount = legacyCheckRes.recordset?.[0]?.legacyCount ?? 0;
+
+  const hasUnfilteredOrInvalid = existingIndexes.some((idx: any) => {
+    if (idx.index_name === 'UQ_employee_payments_reference_utr' && targetAlreadyValid) {
+      return false;
+    }
+    return true;
+  });
+
+  // Idempotent early return if already fully migrated
+  if (targetAlreadyValid && !hasUnfilteredOrInvalid && legacyCount === 0) {
+    const totalCountRes = await activePool.request().query(`SELECT COUNT(1) AS totalCount FROM employee_payments`);
+    const totalCount = totalCountRes.recordset?.[0]?.totalCount ?? 0;
+    return {
+      migrated: false,
+      legacyNormalizedCount: 0,
+      totalPreservedCount: totalCount,
+      filterVerified: true,
+      filterDefinition: targetIndex.filter_definition,
+    };
+  }
+
+  // Pre-check for duplicate UTR values that would collide after trimming whitespace
+  // Ensures migration detects conflicts before altering schema and does NOT delete or merge records
+  const dupCheckRes = await activePool.request().query(`
+    SELECT LTRIM(RTRIM(reference_utr)) AS conflicting_utr, COUNT(1) AS dup_count
+    FROM employee_payments
+    WHERE reference_utr IS NOT NULL AND LTRIM(RTRIM(reference_utr)) <> ''
+    GROUP BY LTRIM(RTRIM(reference_utr))
+    HAVING COUNT(1) > 1
+  `);
+  const conflictingDups = dupCheckRes.recordset || [];
+  if (conflictingDups.length > 0) {
+    const conflictSummary = conflictingDups
+      .map((d: any) => `"${d.conflicting_utr}" (${d.dup_count} occurrences)`)
+      .join(', ');
+    throw new Error(
+      `Duplicate reference_utr collision detected after trimming whitespace: ${conflictSummary}. ` +
+      `Migration aborted without modifying or merging payment records. Please resolve conflicting UTR values manually.`
+    );
+  }
+
+  // Steps 2-6: Execute inside an atomic transaction so failure rolls back schema and data
+  const tx = typeof (activePool as any).transaction === 'function'
+    ? (activePool as any).transaction()
+    : new sql.Transaction(activePool);
+
+  await tx.begin();
+
+  try {
+    const txReq = tx.request ? tx.request() : new sql.Request(tx);
+
+    // Step 2: Drop the old unfiltered unique constraint/index safely
+    for (const idx of existingIndexes) {
+      const cName = idx.constraint_name || (idx.is_unique_constraint ? idx.index_name : null);
+      if (cName) {
+        try {
+          await txReq.query(`
+            IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('employee_payments') AND name = '${cName}')
+            ALTER TABLE [employee_payments] DROP CONSTRAINT [${cName}];
+          `);
+        } catch (dropErr) {
+          console.warn(`[migrateEmployeePaymentUtrIndex] Notice dropping constraint ${cName}:`, dropErr);
+        }
+      }
+    }
+
+    // Ensure constraint is dropped if named UQ_employee_payments_reference_utr
+    await txReq.query(`
+      IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('employee_payments') AND name = 'UQ_employee_payments_reference_utr')
+      BEGIN
+        ALTER TABLE [employee_payments] DROP CONSTRAINT [UQ_employee_payments_reference_utr];
+      END
+    `);
+
+    // Drop any index that is unfiltered or has incorrect filter
+    for (const idx of existingIndexes) {
+      if (!idx.constraint_name && !idx.is_unique_constraint) {
+        const isTargetValid = idx.index_name === 'UQ_employee_payments_reference_utr' && targetAlreadyValid;
+        if (!isTargetValid) {
+          try {
+            await txReq.query(`
+              IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('employee_payments') AND name = '${idx.index_name}' AND is_unique_constraint = 0)
+              DROP INDEX [${idx.index_name}] ON [employee_payments];
+            `);
+          } catch (dropErr) {
+            console.warn(`[migrateEmployeePaymentUtrIndex] Notice dropping index ${idx.index_name}:`, dropErr);
+          }
+        }
+      }
+    }
+
+    if (!targetAlreadyValid) {
+      await txReq.query(`
+        IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('employee_payments') AND name = 'UQ_employee_payments_reference_utr' AND is_unique_constraint = 0)
+        BEGIN
+          DROP INDEX [UQ_employee_payments_reference_utr] ON [employee_payments];
+        END
+      `);
+    }
+
+    // Step 3: Normalize existing empty/whitespace UTR values to NULL
+    const countBeforeRes = await txReq.query(`SELECT COUNT(1) AS totalCount FROM employee_payments`);
+    const totalBefore = countBeforeRes.recordset?.[0]?.totalCount ?? 0;
+
+    await txReq.query(`
+      UPDATE [employee_payments]
+      SET [reference_utr] = NULL
+      WHERE [reference_utr] IS NOT NULL
+        AND LTRIM(RTRIM([reference_utr])) = '';
+    `);
+
+    await txReq.query(`
+      UPDATE [employee_payments]
+      SET [reference_utr] = LTRIM(RTRIM([reference_utr]))
+      WHERE [reference_utr] IS NOT NULL
+        AND LTRIM(RTRIM([reference_utr])) <> ''
+        AND [reference_utr] <> LTRIM(RTRIM([reference_utr]));
+    `);
+
+    // Step 4: Verify existing records are preserved
+    const countAfterRes = await txReq.query(`SELECT COUNT(1) AS totalCount FROM employee_payments`);
+    const totalAfter = countAfterRes.recordset?.[0]?.totalCount ?? 0;
+    if (totalBefore !== totalAfter) {
+      throw new Error(
+        `Record count mismatch during UTR migration: before=${totalBefore}, after=${totalAfter}. Migration aborted to prevent data loss.`
+      );
+    }
+
+    const verifyEmptyRes = await txReq.query(`
+      SELECT COUNT(1) AS invalidCount
+      FROM employee_payments
+      WHERE reference_utr IS NOT NULL
+        AND LTRIM(RTRIM(reference_utr)) = ''
+    `);
+    const remainingInvalid = verifyEmptyRes.recordset?.[0]?.invalidCount ?? 0;
+    if (remainingInvalid > 0) {
+      throw new Error(`Normalization verification failed: ${remainingInvalid} records still contain empty or whitespace UTR.`);
+    }
+
+    // Step 5: Create the filtered unique index
+    await txReq.query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.indexes
+        WHERE object_id = OBJECT_ID('employee_payments')
+          AND name = 'UQ_employee_payments_reference_utr'
+      )
+      BEGIN
+        CREATE UNIQUE NONCLUSTERED INDEX [UQ_employee_payments_reference_utr]
+        ON [employee_payments] ([reference_utr])
+        WHERE reference_utr IS NOT NULL AND reference_utr <> '';
+      END
+    `);
+
+    // Step 6: Verify the exact filter definition
+    const verifyRes = await txReq.query(`
+      SELECT
+        i.name AS index_name,
+        i.is_unique,
+        i.has_filter,
+        i.filter_definition
+      FROM sys.indexes i
+      WHERE i.object_id = OBJECT_ID('employee_payments')
+        AND i.name = 'UQ_employee_payments_reference_utr'
+    `);
+
+    const createdIdx = verifyRes.recordset?.[0];
+    if (!createdIdx) {
+      throw new Error("Verification failed: Index [UQ_employee_payments_reference_utr] does not exist after creation.");
+    }
+    if (!createdIdx.is_unique) {
+      throw new Error("Verification failed: Index [UQ_employee_payments_reference_utr] is not unique.");
+    }
+    if (!createdIdx.has_filter) {
+      throw new Error("Verification failed: Index [UQ_employee_payments_reference_utr] does not have a filter (has_filter = 0).");
+    }
+    if (!isExactUtrFilter(createdIdx.filter_definition)) {
+      throw new Error(
+        `Verification failed: Index [UQ_employee_payments_reference_utr] filter definition mismatch. ` +
+        `Expected canonical: "${EXPECTED_FILTER_CANONICAL}", actual: "${createdIdx.filter_definition}".`
+      );
+    }
+
+    await tx.commit();
+
+    return {
+      migrated: true,
+      legacyNormalizedCount: legacyCount,
+      totalPreservedCount: totalAfter,
+      filterVerified: true,
+      filterDefinition: createdIdx.filter_definition,
+    };
+  } catch (err) {
+    try {
+      await tx.rollback();
+    } catch (rbErr) {
+      console.warn('[migrateEmployeePaymentUtrIndex] Transaction rollback notice:', rbErr);
+    }
+    throw err;
+  }
 }
 
 const db = {
@@ -789,6 +1072,10 @@ const db = {
   getAzureDbStatus,
   refreshTableCounts,
   migrateAzureSqlSchema,
+  migrateEmployeePaymentUtrIndex,
+  isExactUtrFilter,
+  normalizeFilterDefinition,
+  EXPECTED_FILTER_CANONICAL,
   isDbConnected,
   isTransientError,
   getSqlConfig,

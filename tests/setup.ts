@@ -19,53 +19,61 @@ delete process.env.AZURE_SQL_PASSWORD;
 delete process.env.AZURE_SQL_SERVER;
 
 // Mock azureSql module to guarantee production database is NEVER touched
-vi.mock('../server/db/azureSql', () => ({
-  getAzureDbStatus: vi.fn(() => ({
-    connected: false,
-    server: 'test-mock-server',
-    database: 'test-mock-db',
-    authType: 'mock',
-    user: 'mock-user',
-    error: 'Test mode: Operating with high-availability in-memory store',
-    lastChecked: new Date().toISOString(),
-    tableCounts: {},
-  })),
-  getPool: vi.fn(() => null),
-  getOrInitPool: vi.fn(async () => null),
-  refreshTableCounts: vi.fn(async () => ({})),
-  initAzureSql: vi.fn(async () => false),
-  migrateAzureSqlSchema: vi.fn(async () => {}),
-  isTransientError: vi.fn(() => false),
-  isMockFallbackAllowed: vi.fn(() => true),
-  classifyDbError,
-  sanitizeErrorMessage,
-  TransactionCommitAmbiguousError,
-}));
+vi.mock('../server/db/azureSql', async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    getAzureDbStatus: vi.fn(() => ({
+      connected: false,
+      server: 'test-mock-server',
+      database: 'test-mock-db',
+      authType: 'mock',
+      user: 'mock-user',
+      error: 'Test mode: Operating with high-availability in-memory store',
+      lastChecked: new Date().toISOString(),
+      tableCounts: {},
+    })),
+    getPool: vi.fn(() => null),
+    getOrInitPool: vi.fn(async () => null),
+    refreshTableCounts: vi.fn(async () => ({})),
+    initAzureSql: vi.fn(async () => false),
+    migrateAzureSqlSchema: vi.fn(async () => {}),
+    isTransientError: vi.fn(() => false),
+    isMockFallbackAllowed: vi.fn(() => true),
+    classifyDbError,
+    sanitizeErrorMessage,
+    TransactionCommitAmbiguousError,
+  };
+});
 
 // Also mock server/db/db to be doubly sure
-vi.mock('../server/db/db', () => ({
-  getPool: vi.fn(() => null),
-  getOrInitPool: vi.fn(async () => null),
-  isDbConnected: vi.fn(() => false),
-  initAzureSql: vi.fn(async () => false),
-  getAzureDbStatus: vi.fn(() => ({
-    connected: false,
-    server: 'test-mock-server',
-    database: 'test-mock-db',
-    authType: 'mock',
-    user: 'mock-user',
-    error: 'Test mode',
-    lastChecked: new Date().toISOString(),
-    tableCounts: {},
-  })),
-  refreshTableCounts: vi.fn(async () => ({})),
-  migrateAzureSqlSchema: vi.fn(async () => {}),
-  isTransientError: vi.fn(() => false),
-  isMockFallbackAllowed: vi.fn(() => true),
-  classifyDbError,
-  sanitizeErrorMessage,
-  TransactionCommitAmbiguousError,
-}));
+vi.mock('../server/db/db', async (importOriginal) => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    getPool: vi.fn(() => null),
+    getOrInitPool: vi.fn(async () => null),
+    isDbConnected: vi.fn(() => false),
+    initAzureSql: vi.fn(async () => false),
+    getAzureDbStatus: vi.fn(() => ({
+      connected: false,
+      server: 'test-mock-server',
+      database: 'test-mock-db',
+      authType: 'mock',
+      user: 'mock-user',
+      error: 'Test mode',
+      lastChecked: new Date().toISOString(),
+      tableCounts: {},
+    })),
+    refreshTableCounts: vi.fn(async () => ({})),
+    migrateAzureSqlSchema: vi.fn(async () => {}),
+    isTransientError: vi.fn(() => false),
+    isMockFallbackAllowed: vi.fn(() => true),
+    classifyDbError,
+    sanitizeErrorMessage,
+    TransactionCommitAmbiguousError,
+  };
+});
 
 beforeAll(() => {
   // Initialize mock store for clean isolation per test suite
