@@ -1437,8 +1437,30 @@ class StorageService {
     return { allowed: true, linkedCount: 0 };
   }
 
-  public canDeleteAssignment(assignmentId: string, employeePayments: EmployeePayment[]): { allowed: boolean; reason?: string; linkedCount: number } {
-    const linkedPayments = employeePayments.filter((p) => p.assignmentId === assignmentId);
+  public canDeleteAssignment(
+    assignmentId: string,
+    employeePayments: EmployeePayment[],
+    assignments?: Assignment[]
+  ): { allowed: boolean; reason?: string; linkedCount: number } {
+    const cleanId = (assignmentId || '').trim().toLowerCase();
+    const targetAsn = assignments?.find(
+      (a) =>
+        (a.id || '').trim().toLowerCase() === cleanId ||
+        (((a as any).assignment_id_code || '') as string).trim().toLowerCase() === cleanId
+    );
+    const targetId = (targetAsn?.id || '').trim().toLowerCase();
+    const targetCode = (((targetAsn as any)?.assignment_id_code || '') as string).trim().toLowerCase();
+
+    const linkedPayments = employeePayments.filter((p) => {
+      const pAsnId = (p.assignmentId || '').trim().toLowerCase();
+      if (!pAsnId) return false;
+      return (
+        pAsnId === cleanId ||
+        (targetId && pAsnId === targetId) ||
+        (targetCode && pAsnId === targetCode)
+      );
+    });
+
     if (linkedPayments.length > 0) {
       return {
         allowed: false,

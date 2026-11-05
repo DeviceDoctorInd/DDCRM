@@ -2071,7 +2071,7 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deleteAssignmentAction = async (assignmentId: string) => {
     moduleDataVersionsRef.current.assignments++;
-    const check = storageService.canDeleteAssignment(assignmentId, rawEmployeePayments);
+    const check = storageService.canDeleteAssignment(assignmentId, rawEmployeePayments, rawAssignments);
 
     if (!check.allowed) {
       openReferentialBlock({
@@ -2087,7 +2087,14 @@ export const CrmProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const res = await storageService.deleteAssignment(assignmentId);
     if (res.success) {
-      setRawAssignments((prev) => prev.filter((a) => a.id !== assignmentId && (a as any).assignment_id_code !== assignmentId));
+      const cleanId = (assignmentId || '').trim().toLowerCase();
+      setRawAssignments((prev) =>
+        prev.filter((a) => {
+          const aId = (a.id || '').trim().toLowerCase();
+          const aCode = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+          return aId !== cleanId && aCode !== cleanId;
+        })
+      );
       showToast(`Assignment "${assignmentId}" deleted from Azure SQL.`, 'info');
       requestCentralizedRefresh();
     } else {
