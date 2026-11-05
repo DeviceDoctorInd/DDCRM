@@ -5872,87 +5872,175 @@ router.put('/assignments/:id', authenticateToken, (req: Request, res: Response) 
   return handleSaveAssignmentRoute(req, res);
 });
 
-router.delete('/assignments/:id', async (req: Request, res: Response) => {
+router.delete('/assignments/:id', authenticateToken, async (req: Request, res: Response) => {
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return res.status(400).json({ success: false, error: 'Assignment ID is required.' });
+  }
+
+  const cleanId = id.trim();
   const brand = getBrandContext(req);
   const brandFilter = (brand && brand !== 'All') ? brand : null;
   const pool = await getOrInitPool();
 
   if (!pool) {
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete assignment');
-  }
-  const deleted = mockStore.deleteAssignment(id, brandFilter);
-    if (!deleted) {
-      return res.status(403).json({
+      return sendDatabaseUnavailable(res, 'delete assignment');
+    }
+
+    const target = mockStore.getAssignments(null).find((a) => {
+      const aId = (a.id || '').trim().toLowerCase();
+      const aCode = (((a as any).assignment_id_code || '') as string).trim().toLowerCase();
+      return aId === cleanId.toLowerCase() || aCode === cleanId.toLowerCase();
+    });
+
+    if (!target) {
+      return res.status(404).json({
         success: false,
-        error: 'Deletion prevented: Assignment belongs to another workspace brand or does not exist.',
+        error: `Assignment "${cleanId}" not found or does not exist.`,
       });
     }
-    return res.json({ success: true, id });
+
+    if (brandFilter && target.brand && (target.brand as string) !== 'All' && target.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Assignment belongs to workspace "${target.brand}", but current workspace is "${brandFilter}".`,
+      });
+    }
+
+    const targetCode = (target as any).assignment_id_code || target.id;
+    const linkedPayouts = mockStore.getEmployeePayments(null).filter((p) => {
+      const pAsnId = (p.assignmentId || '').trim().toLowerCase();
+      return pAsnId === target.id.toLowerCase() || pAsnId === targetCode.toLowerCase() || pAsnId === cleanId.toLowerCase();
+    });
+
+    if (linkedPayouts.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete assignment "${cleanId}": ${linkedPayouts.length} employee payout record(s) are logged against it.`,
+      });
+    }
+
+    mockStore.deleteAssignment(cleanId, brandFilter);
+    return res.json({ success: true, id: cleanId });
   }
 
   try {
-    const guidId = toGuid(id);
-    const checkRes = await pool.request()
-      .input('id', guidId)
-      .input('rawId', id)
-      .query(`
-        SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
-                     ISNULL(CAST(assignment_id_code AS NVARCHAR(150)), '') as assignment_id_code,
-                     ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
-        FROM assignments
-        WHERE id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId
-      `);
-
-    const existing = checkRes.recordset?.[0];
-    if (existing && brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
-      return res.status(403).json({
-        success: false,
-        error: `Permission denied: Assignment belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`
-      });
-    }
-
-    if (existing) {
-      const depRes = await pool.request()
-        .input('id', guidId)
-        .input('rawId', id)
-        .query(`
-          SELECT COUNT(1) as payCount
-          FROM employee_payments
-          WHERE assignment_id = @id OR assignment_id = @rawId
-        `);
-      const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
-      if (payCount > 0) {
-        return res.status(409).json({
-          success: false,
-          error: `Cannot delete assignment "${id}": ${payCount} employee payout record(s) are logged against it.`
-        });
-      }
-    }
-
-    await executeSqlWithAutoMigration(
+    const guidId = toGuid(cleanId);
+    const checkRes = await executeSqlWithAutoMigration(
       pool,
       (activePool = pool) => activePool.request()
         .input('id', guidId)
-        .input('rawId', id)
-        .input('brandFilter', brandFilter)
+        .input('rawId', cleanId)
         .query(`
-          DELETE FROM assignments
-          WHERE (id = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR assignment_id_code = @rawId)
-            AND (@brandFilter IS NULL OR brand = @brandFilter)
+          SELECT TOP 1 CAST(id AS NVARCHAR(150)) as id,
+                       ISNULL(CAST(assignment_id_code AS NVARCHAR(150)), '') as assignment_id_code,
+                       ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand
+          FROM assignments
+          WHERE CAST(id AS NVARCHAR(150)) = @id
+             OR CAST(id AS NVARCHAR(150)) = @rawId
+             OR assignment_id_code = @rawId
         `),
       'assignments'
     );
-    mockStore.deleteAssignment(id, brandFilter);
-    return res.json({ success: true, id });
+
+    const existing = checkRes.recordset?.[0];
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: `Assignment "${cleanId}" not found or does not exist.`,
+      });
+    }
+
+    if (brandFilter && existing.brand && existing.brand !== 'All' && existing.brand !== brandFilter) {
+      return res.status(403).json({
+        success: false,
+        error: `Permission denied: Assignment belongs to workspace "${existing.brand}", but current workspace is "${brandFilter}".`,
+      });
+    }
+
+    const existingDbId = String(existing.id);
+    const existingCode = String(existing.assignment_id_code || '');
+
+    // Referential integrity check against employee_payments (disbursements/payouts)
+    // Uses safe CAST to prevent MSSQL 8169 "Conversion failed when converting from a character string to uniqueidentifier"
+    const depRes = await executeSqlWithAutoMigration(
+      pool,
+      (activePool = pool) => activePool.request()
+        .input('id', guidId)
+        .input('rawId', cleanId)
+        .input('existingDbId', existingDbId)
+        .input('existingCode', existingCode)
+        .query(`
+          SELECT COUNT(1) as payCount
+          FROM employee_payments
+          WHERE (
+            CAST(assignment_id AS NVARCHAR(150)) = @id
+            OR CAST(assignment_id AS NVARCHAR(150)) = @rawId
+            OR (@existingDbId IS NOT NULL AND @existingDbId <> '' AND CAST(assignment_id AS NVARCHAR(150)) = @existingDbId)
+            OR (@existingCode IS NOT NULL AND @existingCode <> '' AND CAST(assignment_id AS NVARCHAR(150)) = @existingCode)
+          )
+        `),
+      'employee_payments'
+    );
+
+    const payCount = Number(depRes.recordset?.[0]?.payCount || 0);
+    if (payCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete assignment "${cleanId}": ${payCount} employee payout record(s) are logged against it.`,
+      });
+    }
+
+    const delRes = await executeSqlWithAutoMigration(
+      pool,
+      (activePool = pool) => activePool.request()
+        .input('id', guidId)
+        .input('rawId', cleanId)
+        .input('existingDbId', existingDbId)
+        .input('existingCode', existingCode)
+        .input('brandFilter', brandFilter)
+        .query(`
+          DELETE FROM assignments
+          WHERE (
+            CAST(id AS NVARCHAR(150)) = @id
+            OR CAST(id AS NVARCHAR(150)) = @rawId
+            OR (@existingDbId IS NOT NULL AND @existingDbId <> '' AND CAST(id AS NVARCHAR(150)) = @existingDbId)
+            OR (@existingCode IS NOT NULL AND @existingCode <> '' AND assignment_id_code = @existingCode)
+          )
+          AND (@brandFilter IS NULL OR brand = @brandFilter)
+        `),
+      'assignments'
+    );
+
+    const affectedRows = Array.isArray(delRes?.rowsAffected)
+      ? delRes.rowsAffected.reduce((sum: number, count: number) => sum + count, 0)
+      : (typeof delRes?.rowsAffected === 'number' ? delRes.rowsAffected : 1);
+
+    if (affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Assignment "${cleanId}" not found or already deleted from Azure SQL.`,
+      });
+    }
+
+    // Best-effort in-memory cache sync; failure or absence in mockStore does NOT block successful SQL deletion
+    try {
+      mockStore.deleteAssignment(cleanId, brandFilter);
+      if (existingDbId && existingDbId !== cleanId) mockStore.deleteAssignment(existingDbId, brandFilter);
+      if (existingCode && existingCode !== cleanId) mockStore.deleteAssignment(existingCode, brandFilter);
+    } catch (cacheErr) {
+      console.warn(`[DELETE /assignments/${id}] Notice: Non-critical mockStore cache sync failed after SQL deletion:`, cacheErr);
+    }
+
+    return res.json({ success: true, id: cleanId });
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[DELETE /assignments/${id}] Falling back to mock store:`, errMsg);
+    console.warn(`[DELETE /assignments/${id}] Error during assignment deletion:`, errMsg);
     if (!isMockFallbackAllowed()) {
-    return sendDatabaseUnavailable(res, 'delete assignment', errMsg);
-  }
-  mockStore.deleteAssignment(id, brandFilter);
+      return sendDatabaseError(res, err, 'delete assignment');
+    }
+    mockStore.deleteAssignment(id, brandFilter);
     return res.json({ success: true, id });
   }
 });
