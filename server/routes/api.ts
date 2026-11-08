@@ -749,18 +749,29 @@ export async function calculateNextPaymentIdSql(
     const res = await pool.request()
       .input('pattern', pattern)
       .query(`
-        SELECT ISNULL(NULLIF(CAST(payment_id_code AS NVARCHAR(100)), ''), CAST(id AS NVARCHAR(100))) as id
+        SELECT
+          CAST(id AS NVARCHAR(150)) as id,
+          ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code
         FROM payments
         WHERE id LIKE @pattern OR payment_id_code LIKE @pattern
+           OR CAST(id AS NVARCHAR(150)) LIKE @pattern
+           OR CAST(payment_id_code AS NVARCHAR(150)) LIKE @pattern
       `);
 
     const rows = res.recordset || [];
     let maxSeq = 0;
     const regex = new RegExp(`^${prefix}-PAY-(\\d+)$`, 'i');
     for (const row of rows) {
-      const match = (row.id || '').match(regex);
-      if (match && match[1]) {
-        const seq = parseInt(match[1], 10);
+      const match1 = (row.id || '').match(regex);
+      if (match1 && match1[1]) {
+        const seq = parseInt(match1[1], 10);
+        if (!isNaN(seq) && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+      const match2 = (row.payment_id_code || '').match(regex);
+      if (match2 && match2[1]) {
+        const seq = parseInt(match2[1], 10);
         if (!isNaN(seq) && seq > maxSeq) {
           maxSeq = seq;
         }
@@ -3525,6 +3536,67 @@ router.get('/payments/next-semantic-id', authenticateToken, async (req: Request,
   }
 });
 
+router.get('/payments/missing-codes', authenticateToken, async (req: Request, res: Response) => {
+  const brand = getBrandContext(req);
+  const pool = await getOrInitPool();
+  if (!pool) {
+    if (!isMockFallbackAllowed()) {
+      return sendDatabaseUnavailable(res, 'check payments missing codes');
+    }
+    const all = mockStore.getPayments(brand);
+    const missing = all.filter(
+      (p) => !(p as any).payment_id_code || !String((p as any).payment_id_code).trim()
+    );
+    return res.json({
+      success: true,
+      count: missing.length,
+      missingPayments: missing.map((p) => ({
+        id: p.id,
+        brand: p.brand,
+        projectId: p.projectId,
+        clientName: p.clientName,
+        paymentDate: p.paymentDate,
+        amountINR: p.amountINR,
+        referenceUtr: p.referenceUtr,
+        paymentMode: p.paymentMode,
+      })),
+    });
+  }
+
+  try {
+    const q = await executeSqlWithAutoMigration(
+      pool,
+      (activePool = pool) =>
+        activePool.request()
+          .input('brandFilter', brand || null)
+          .query(`
+            SELECT 
+              CAST(id AS NVARCHAR(150)) as id,
+              ISNULL(CAST(payment_id_code AS NVARCHAR(150)), '') as payment_id_code,
+              brand,
+              CAST(project_id AS NVARCHAR(150)) as project_id,
+              client_name,
+              payment_date,
+              amount_inr,
+              reference_utr,
+              payment_mode
+            FROM payments
+            WHERE (@brandFilter IS NULL OR brand = @brandFilter)
+              AND (payment_id_code IS NULL OR LTRIM(RTRIM(CAST(payment_id_code AS NVARCHAR(150)))) = '')
+            ORDER BY created_at DESC;
+          `),
+      { tableName: 'payments', isFinancialMutation: false }
+    );
+    return res.json({
+      success: true,
+      count: q.recordset?.length || 0,
+      missingPayments: q.recordset || [],
+    });
+  } catch (err: unknown) {
+    return sendDatabaseError(res, err, 'check payments missing codes');
+  }
+});
+
 router.get('/payments', authenticateToken, async (req: Request, res: Response) => {
   const brand = getBrandContext(req);
   const pool = await getOrInitPool();
@@ -4360,6 +4432,17 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       }
     }
 
+    const brandPrefix = getBrandSemanticPrefix(finalBrand);
+    const payPattern = `${brandPrefix}-PAY-%`;
+    const gstPattern = `${brandPrefix}-GST-%`;
+    const cleanPaySuffix = (cleanId || payment.id || '').replace(/^([A-Z]+-)?(PAY-)?/i, '') || '001';
+    const payYear = new Date(finalPaymentDate || now).getFullYear() || new Date().getFullYear();
+    const defaultInvoiceNum = `INV-${payYear}-${cleanPaySuffix}`;
+    const autoGstNotes = finalNotes
+      ? `Auto-synced from Payment ${cleanId || payment.id} (GST Invoice Mode). ${finalNotes}`
+      : `Auto-synced from Payment ${cleanId || payment.id} (GST Invoice Mode)`;
+    const gstAmountInr = Math.round(finalAmountINR * 0.18);
+
     await executeSqlWithAutoMigration(
       pool,
       (activePool = pool) =>
@@ -4367,6 +4450,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .input('id', guidId)
           .input('rawId', cleanId)
           .input('brand', finalBrand)
+          .input('prefix', brandPrefix)
+          .input('pattern', payPattern)
+          .input('gstPattern', gstPattern)
+          .input('isNew', isNew ? 1 : 0)
           .input('project_id', targetProjectId || projGuid)
           .input('target_project_id', targetProjectId || '')
           .input('target_project_guid', projGuid)
@@ -4383,6 +4470,9 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
           .input('currency', finalCurrency)
           .input('exchange_rate', finalExchangeRate)
           .input('amount_inr', finalAmountINR)
+          .input('gst_amount_inr', gstAmountInr)
+          .input('invoice_number', defaultInvoiceNum)
+          .input('gst_notes', autoGstNotes)
           .input('reference_utr', finalReferenceUtr)
           .input('payment_status', finalPaymentStatus)
           .input('days_overdue', finalDaysOverdue)
@@ -4536,6 +4626,17 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         const finalProofNotes = payment.paymentProofNotes || (payment.paymentProof?.notes) || existingPayment?.payment_proof_notes || '';
         const finalCreatedAt = payment.createdAt || existingPayment?.created_at || now;
 
+        const retryBrandPrefix = getBrandSemanticPrefix(finalBrand);
+        const retryPayPattern = `${retryBrandPrefix}-PAY-%`;
+        const retryGstPattern = `${retryBrandPrefix}-GST-%`;
+        const retryPaySuffix = (cleanId || payment.id || '').replace(/^([A-Z]+-)?(PAY-)?/i, '') || '001';
+        const retryPayYear = new Date(finalPaymentDate || now).getFullYear() || new Date().getFullYear();
+        const retryDefaultInvoiceNum = `INV-${retryPayYear}-${retryPaySuffix}`;
+        const retryAutoGstNotes = finalNotes
+          ? `Auto-synced from Payment ${cleanId || payment.id} (GST Invoice Mode). ${finalNotes}`
+          : `Auto-synced from Payment ${cleanId || payment.id} (GST Invoice Mode)`;
+        const retryGstAmountInr = Math.round(finalAmountINR * 0.18);
+
         await executeSqlWithAutoMigration(
           pool,
           (activePool = pool) =>
@@ -4543,6 +4644,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
               .input('id', guidId)
               .input('rawId', cleanId)
               .input('brand', finalBrand)
+              .input('prefix', retryBrandPrefix)
+              .input('pattern', retryPayPattern)
+              .input('gstPattern', retryGstPattern)
+              .input('isNew', isNew ? 1 : 0)
               .input('project_id', projGuid)
               .input('target_project_id', targetProjectId || '')
               .input('target_project_guid', projGuid)
@@ -4559,6 +4664,9 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
               .input('currency', finalCurrency)
               .input('exchange_rate', finalExchangeRate)
               .input('amount_inr', finalAmountINR)
+              .input('gst_amount_inr', retryGstAmountInr)
+              .input('invoice_number', retryDefaultInvoiceNum)
+              .input('gst_notes', retryAutoGstNotes)
               .input('reference_utr', finalReferenceUtr)
               .input('payment_status', finalPaymentStatus)
               .input('days_overdue', finalDaysOverdue)
@@ -4688,40 +4796,163 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
         message: 'The payment transaction state is ambiguous due to connection loss during commit. Manual verification required.',
       });
     }
+    const isDev = process.env.NODE_ENV === 'development';
     return res.status(500).json({
       success: false,
-      error: 'An internal database error occurred while processing the payment voucher.',
-      message: 'Failed to record payment voucher and update project financials in Azure SQL.',
+      error: isDev ? errMsg : 'An internal database error occurred while processing the payment voucher.',
+      message: isDev ? errMsg : 'Failed to record payment voucher and update project financials in Azure SQL.',
+      ...(isDev ? { code: errCode, details: errMsg, stack: anyErr?.stack } : {}),
     });
   }
 }
 
 /**
- * Constructs the atomic SQL transaction query for persisting payment vouchers
- * and safely recalculating linked project financials in Azure SQL.
+ * Constructs the atomic SQL transaction query for persisting payment vouchers,
+ * recalculating project financials, and synchronizing GST invoices in Azure SQL.
  *
- * Uses explicit string CAST on all uniqueidentifier/nvarchar comparisons to prevent
- * SQL Server "Conversion failed when converting from a character string to uniqueidentifier" errors.
+ * Automatically inspects sys.columns to detect UNIQUEIDENTIFIER vs NVARCHAR representations,
+ * resolves parent table foreign keys dynamically, and generates/reserves non-colliding
+ * IDs inside the single atomic transaction under UPDLOCK/HOLDLOCK.
  */
 export function buildPaymentSaveQuery(): string {
   return `
     SET XACT_ABORT ON;
     BEGIN TRY
       BEGIN TRANSACTION;
-        -- 1. Insert or Update Payment Voucher
+
+        -- 1. Inspect sys.columns for payments table
+        DECLARE @isIdGuid BIT = 0;
+        DECLARE @isProjectIdGuid BIT = 0;
+        DECLARE @isClientIdGuid BIT = 0;
+        DECLARE @isBankAccountIdGuid BIT = 0;
+
+        SELECT @isIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('payments') AND c.name = 'id';
+
+        SELECT @isProjectIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('payments') AND c.name = 'project_id';
+
+        SELECT @isClientIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('payments') AND c.name = 'client_id';
+
+        SELECT @isBankAccountIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('payments') AND c.name = 'bank_account_id';
+
+        -- Inspect sys.columns for gst_invoices table
+        DECLARE @isGstIdGuid BIT = 0;
+        DECLARE @isGstPayIdGuid BIT = 0;
+        DECLARE @isGstProjIdGuid BIT = 0;
+        DECLARE @isGstClientIdGuid BIT = 0;
+
+        SELECT @isGstIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('gst_invoices') AND c.name = 'id';
+
+        SELECT @isGstPayIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('gst_invoices') AND c.name = 'payment_id';
+
+        SELECT @isGstProjIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('gst_invoices') AND c.name = 'project_id';
+
+        SELECT @isGstClientIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('gst_invoices') AND c.name = 'client_id';
+
+        -- 2. Resolve parent GUIDs safely to avoid foreign key violations
+        DECLARE @resolvedProjGuid UNIQUEIDENTIFIER = NULL;
+        IF @target_project_id IS NOT NULL AND @target_project_id <> ''
+        BEGIN
+          SELECT TOP 1 @resolvedProjGuid = TRY_CAST(p.id AS UNIQUEIDENTIFIER)
+          FROM projects p
+          WHERE CAST(p.id AS NVARCHAR(150)) = @target_project_id
+             OR CAST(p.project_id_code AS NVARCHAR(150)) = @target_project_id
+             OR (@target_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @target_project_guid);
+        END;
+        IF @resolvedProjGuid IS NULL AND @target_project_guid IS NOT NULL
+          SET @resolvedProjGuid = TRY_CAST(@target_project_guid AS UNIQUEIDENTIFIER);
+
+        DECLARE @resolvedClientGuid UNIQUEIDENTIFIER = NULL;
+        IF @client_id IS NOT NULL AND @client_id <> ''
+        BEGIN
+          SELECT TOP 1 @resolvedClientGuid = TRY_CAST(c.id AS UNIQUEIDENTIFIER)
+          FROM clients c
+          WHERE CAST(c.id AS NVARCHAR(150)) = @client_id
+             OR CAST(c.client_id_code AS NVARCHAR(150)) = @client_id;
+        END;
+        IF @resolvedClientGuid IS NULL AND @client_id IS NOT NULL
+          SET @resolvedClientGuid = TRY_CAST(@client_id AS UNIQUEIDENTIFIER);
+
+        DECLARE @resolvedBankGuid UNIQUEIDENTIFIER = NULL;
+        IF @bank_account_id IS NOT NULL AND @bank_account_id <> ''
+        BEGIN
+          SELECT TOP 1 @resolvedBankGuid = TRY_CAST(b.id AS UNIQUEIDENTIFIER)
+          FROM bank_accounts b
+          WHERE CAST(b.id AS NVARCHAR(150)) = @bank_account_id
+             OR CAST(b.bank_account_id_code AS NVARCHAR(150)) = @bank_account_id;
+        END;
+        IF @resolvedBankGuid IS NULL AND @bank_account_id IS NOT NULL
+          SET @resolvedBankGuid = TRY_CAST(@bank_account_id AS UNIQUEIDENTIFIER);
+
+        DECLARE @finalPayProjectId NVARCHAR(150) = CASE WHEN @isProjectIdGuid = 1 THEN CAST(@resolvedProjGuid AS NVARCHAR(150)) ELSE @target_project_id END;
+        DECLARE @finalPayClientId NVARCHAR(150) = CASE WHEN @isClientIdGuid = 1 THEN CAST(@resolvedClientGuid AS NVARCHAR(150)) ELSE @client_id END;
+        DECLARE @finalPayBankId NVARCHAR(150) = CASE WHEN @isBankAccountIdGuid = 1 THEN CAST(@resolvedBankGuid AS NVARCHAR(150)) ELSE @bank_account_id END;
+
+        -- 3. In-Transaction ID calculation & reservation (Requirement 2)
+        DECLARE @effectiveRawId NVARCHAR(150) = @rawId;
+        DECLARE @effectiveGuidId UNIQUEIDENTIFIER = TRY_CAST(@id AS UNIQUEIDENTIFIER);
+        IF @effectiveGuidId IS NULL SET @effectiveGuidId = NEWID();
+
+        IF @isNew = 1
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM payments WITH (UPDLOCK, HOLDLOCK)
+            WHERE CAST(id AS NVARCHAR(150)) = @effectiveRawId
+               OR CAST(payment_id_code AS NVARCHAR(150)) = @effectiveRawId
+               OR CAST(id AS NVARCHAR(150)) = CAST(@effectiveGuidId AS NVARCHAR(150))
+          ) OR @effectiveRawId IS NULL OR LTRIM(RTRIM(@effectiveRawId)) = ''
+          BEGIN
+            DECLARE @maxSeq INT = 0;
+            SELECT @maxSeq = ISNULL(MAX(
+              TRY_CAST(SUBSTRING(
+                CASE 
+                  WHEN CAST(payment_id_code AS NVARCHAR(150)) LIKE @pattern 
+                  THEN CAST(payment_id_code AS NVARCHAR(150))
+                  ELSE CAST(id AS NVARCHAR(150))
+                END,
+                LEN(@prefix) + 6,
+                20
+              ) AS INT)
+            ), 0)
+            FROM payments WITH (UPDLOCK, HOLDLOCK)
+            WHERE CAST(id AS NVARCHAR(150)) LIKE @pattern
+               OR CAST(payment_id_code AS NVARCHAR(150)) LIKE @pattern;
+
+            SET @effectiveRawId = @prefix + '-PAY-' + RIGHT('000' + CAST((@maxSeq + 1) AS NVARCHAR(10)), 3);
+          END;
+        END;
+
+        -- 4. Insert or Update Payment Voucher
         IF EXISTS (
-          SELECT 1 FROM payments
+          SELECT 1 FROM payments WITH (UPDLOCK, HOLDLOCK)
           WHERE CAST(id AS NVARCHAR(150)) = @id
              OR CAST(id AS NVARCHAR(150)) = @rawId
+             OR CAST(id AS NVARCHAR(150)) = @effectiveRawId
              OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+             OR (payment_id_code = @effectiveRawId AND @effectiveRawId <> '' AND @effectiveRawId IS NOT NULL)
         )
           UPDATE payments SET
             brand = @brand,
-            project_id = @project_id,
-            client_id = @client_id,
+            project_id = @finalPayProjectId,
+            client_id = @finalPayClientId,
             client_name = @client_name,
             payment_mode = @payment_mode,
-            bank_account_id = @bank_account_id,
+            bank_account_id = @finalPayBankId,
             bank_account_name = @bank_account_name,
             payment_date = @payment_date,
             due_date = @due_date,
@@ -4736,10 +4967,12 @@ export function buildPaymentSaveQuery(): string {
             payment_proof = @payment_proof,
             payment_proof_notes = @payment_proof_notes,
             updated_at = @updated_at,
-            payment_id_code = @rawId
+            payment_id_code = @effectiveRawId
           WHERE CAST(id AS NVARCHAR(150)) = @id
              OR CAST(id AS NVARCHAR(150)) = @rawId
-             OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL);
+             OR CAST(id AS NVARCHAR(150)) = @effectiveRawId
+             OR (payment_id_code = @rawId AND @rawId <> '' AND @rawId IS NOT NULL)
+             OR (payment_id_code = @effectiveRawId AND @effectiveRawId <> '' AND @effectiveRawId IS NOT NULL);
         ELSE
           INSERT INTO payments (
             id, payment_id_code, brand, project_id, client_id, client_name,
@@ -4748,14 +4981,15 @@ export function buildPaymentSaveQuery(): string {
             payment_status, days_overdue, notes, payment_proof, payment_proof_notes,
             created_at, updated_at
           ) VALUES (
-            @id, @rawId, @brand, @project_id, @client_id, @client_name,
-            @payment_mode, @bank_account_id, @bank_account_name, @payment_date, @due_date,
+            CASE WHEN @isIdGuid = 1 THEN CAST(@effectiveGuidId AS NVARCHAR(150)) ELSE @effectiveRawId END,
+            @effectiveRawId, @brand, @finalPayProjectId, @finalPayClientId, @client_name,
+            @payment_mode, @finalPayBankId, @bank_account_name, @payment_date, @due_date,
             @amount_received, @currency, @exchange_rate, @amount_inr, @reference_utr,
             @payment_status, @days_overdue, @notes, @payment_proof, @payment_proof_notes,
             @created_at, @updated_at
           );
 
-        -- 2. Recalculate target project totals (only payment_status = 'Received' or NULL/empty)
+        -- 5. Recalculate target project totals
         IF @target_project_id IS NOT NULL AND @target_project_id <> ''
         BEGIN
           UPDATE p
@@ -4768,6 +5002,7 @@ export function buildPaymentSaveQuery(): string {
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = @target_project_id
                 OR (@target_project_guid IS NOT NULL AND CAST(project_id AS NVARCHAR(150)) = @target_project_guid)
+                OR (@resolvedProjGuid IS NOT NULL AND CAST(project_id AS NVARCHAR(150)) = CAST(@resolvedProjGuid AS NVARCHAR(150)))
               )
                 AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
             ), 0),
@@ -4779,6 +5014,7 @@ export function buildPaymentSaveQuery(): string {
                 OR CAST(project_id AS NVARCHAR(150)) = CAST(p.project_id_code AS NVARCHAR(150))
                 OR CAST(project_id AS NVARCHAR(150)) = @target_project_id
                 OR (@target_project_guid IS NOT NULL AND CAST(project_id AS NVARCHAR(150)) = @target_project_guid)
+                OR (@resolvedProjGuid IS NOT NULL AND CAST(project_id AS NVARCHAR(150)) = CAST(@resolvedProjGuid AS NVARCHAR(150)))
               )
                 AND (payment_status = 'Received' OR payment_status IS NULL OR payment_status = '')
             ), 0),
@@ -4786,10 +5022,11 @@ export function buildPaymentSaveQuery(): string {
           FROM projects p
           WHERE CAST(p.id AS NVARCHAR(150)) = @target_project_id
              OR CAST(p.project_id_code AS NVARCHAR(150)) = @target_project_id
-             OR (@target_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @target_project_guid);
+             OR (@target_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @target_project_guid)
+             OR (@resolvedProjGuid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = CAST(@resolvedProjGuid AS NVARCHAR(150)));
         END;
 
-        -- 3. If project changed from an old project, recalculate old project too
+        -- 6. Recalculate old project if project changed
         IF @old_project_id IS NOT NULL AND @old_project_id <> '' AND @old_project_id <> @target_project_id
         BEGIN
           UPDATE p
@@ -4822,6 +5059,97 @@ export function buildPaymentSaveQuery(): string {
              OR CAST(p.project_id_code AS NVARCHAR(150)) = @old_project_id
              OR (@old_project_guid IS NOT NULL AND CAST(p.id AS NVARCHAR(150)) = @old_project_guid);
         END;
+
+        -- 7. Atomic GST Voucher Synchronization (Inside SAME Transaction)
+        IF LTRIM(RTRIM(LOWER(@payment_mode))) = 'gst invoice'
+        BEGIN
+          DECLARE @finalGstPayId NVARCHAR(150) = CASE WHEN @isGstPayIdGuid = 1 THEN CAST(@effectiveGuidId AS NVARCHAR(150)) ELSE @effectiveRawId END;
+          DECLARE @finalGstProjId NVARCHAR(150) = CASE WHEN @isGstProjIdGuid = 1 THEN CAST(@resolvedProjGuid AS NVARCHAR(150)) ELSE @target_project_id END;
+          DECLARE @finalGstClientId NVARCHAR(150) = CASE WHEN @isGstClientIdGuid = 1 THEN CAST(@resolvedClientGuid AS NVARCHAR(150)) ELSE @client_id END;
+
+          IF EXISTS (
+            SELECT 1 FROM gst_invoices WITH (UPDLOCK, HOLDLOCK)
+            WHERE CAST(payment_id AS NVARCHAR(150)) = @effectiveRawId
+               OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+               OR CAST(payment_id AS NVARCHAR(150)) = CAST(@effectiveGuidId AS NVARCHAR(150))
+          )
+          BEGIN
+            UPDATE gst_invoices SET
+              brand = @brand,
+              payment_id = @finalGstPayId,
+              project_id = @finalGstProjId,
+              client_id = @finalGstClientId,
+              client_name = @client_name,
+              payment_date = @payment_date,
+              amount_received = @amount_received,
+              currency = @currency,
+              amount_inr = @amount_inr,
+              gst_amount_inr = @gst_amount_inr,
+              invoice_number = ISNULL(NULLIF(invoice_number, ''), @invoice_number),
+              updated_at = @updated_at
+            WHERE CAST(payment_id AS NVARCHAR(150)) = @effectiveRawId
+               OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+               OR CAST(payment_id AS NVARCHAR(150)) = CAST(@effectiveGuidId AS NVARCHAR(150));
+          END
+          ELSE
+          BEGIN
+            DECLARE @maxGstSeq INT = 0;
+            SELECT @maxGstSeq = ISNULL(MAX(
+              TRY_CAST(SUBSTRING(
+                CASE 
+                  WHEN CAST(invoice_id_code AS NVARCHAR(150)) LIKE @gstPattern 
+                  THEN CAST(invoice_id_code AS NVARCHAR(150))
+                  ELSE CAST(id AS NVARCHAR(150))
+                END,
+                LEN(@prefix) + 6,
+                20
+              ) AS INT)
+            ), 0)
+            FROM gst_invoices WITH (UPDLOCK, HOLDLOCK)
+            WHERE CAST(id AS NVARCHAR(150)) LIKE @gstPattern
+               OR CAST(invoice_id_code AS NVARCHAR(150)) LIKE @gstPattern;
+
+            DECLARE @assignedGstCode NVARCHAR(150) = @prefix + '-GST-' + RIGHT('000' + CAST((@maxGstSeq + 1) AS NVARCHAR(10)), 3);
+            DECLARE @assignedGstGuid UNIQUEIDENTIFIER = NEWID();
+
+            INSERT INTO gst_invoices (
+              id, invoice_id_code, brand, payment_id, project_id, client_id, client_name,
+              payment_date, amount_received, currency, amount_inr, gst_amount_inr,
+              invoice_number, uploaded_to_gst_portal, gst_portal_upload_date, notes,
+              created_at, updated_at
+            ) VALUES (
+              CASE WHEN @isGstIdGuid = 1 THEN CAST(@assignedGstGuid AS NVARCHAR(150)) ELSE @assignedGstCode END,
+              @assignedGstCode,
+              @brand,
+              @finalGstPayId,
+              @finalGstProjId,
+              @finalGstClientId,
+              @client_name,
+              @payment_date,
+              @amount_received,
+              @currency,
+              @amount_inr,
+              @gst_amount_inr,
+              @invoice_number,
+              'No',
+              '',
+              @gst_notes,
+              @created_at,
+              @updated_at
+            );
+          END;
+        END
+        ELSE
+        BEGIN
+          DELETE FROM gst_invoices
+          WHERE (
+            CAST(payment_id AS NVARCHAR(150)) = @effectiveRawId
+            OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+            OR CAST(payment_id AS NVARCHAR(150)) = CAST(@effectiveGuidId AS NVARCHAR(150))
+          )
+            AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
+        END;
+
       COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
@@ -4883,6 +5211,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
 
     const linkedProjectId = existing?.project_id || null;
     const linkedProjectGuid = toGuidOrNull(linkedProjectId);
+    const existingCode = existing?.payment_id_code || '';
     const now = new Date().toISOString();
 
     await executeSqlWithAutoMigration(
@@ -4890,6 +5219,7 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
       (activePool = pool) => activePool.request()
         .input('id', guidId)
         .input('rawId', id)
+        .input('codeId', existingCode)
         .input('brandFilter', brandFilter)
         .input('linkedProjectId', linkedProjectId || '')
         .input('linkedProjectGuid', linkedProjectGuid)
@@ -4903,10 +5233,14 @@ router.delete('/payments/:id', authenticateToken, async (req: Request, res: Resp
               WHERE (CAST(id AS NVARCHAR(150)) = @id OR CAST(id AS NVARCHAR(150)) = @rawId OR payment_id_code = @rawId)
                 AND (@brandFilter IS NULL OR brand = @brandFilter);
 
-              -- 2. Delete unfiled linked GST invoices
+              -- 2. Delete unfiled linked GST invoices (filed GST invoices with uploaded_to_gst_portal = 'Yes' are NEVER deleted)
               DELETE FROM gst_invoices
-              WHERE (CAST(payment_id AS NVARCHAR(150)) = @id OR CAST(payment_id AS NVARCHAR(150)) = @rawId)
-                AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL);
+              WHERE (
+                CAST(payment_id AS NVARCHAR(150)) = @id
+                OR CAST(payment_id AS NVARCHAR(150)) = @rawId
+                OR (@codeId <> '' AND CAST(payment_id AS NVARCHAR(150)) = @codeId)
+              )
+                AND (uploaded_to_gst_portal = 'No' OR uploaded_to_gst_portal IS NULL OR uploaded_to_gst_portal = '');
 
               -- 3. Recalculate linked project financials if project_id exists
               IF @linkedProjectId IS NOT NULL AND @linkedProjectId <> ''

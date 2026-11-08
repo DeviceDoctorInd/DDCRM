@@ -98,6 +98,8 @@ export const PaymentsModule: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const formSessionRef = useRef<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showAdvanceWarning, setShowAdvanceWarning] = useState(false);
+  const [pendingSavePayload, setPendingSavePayload] = useState<{ payload: Payment; isEditing: boolean } | null>(null);
 
   // Fetch / refresh latest projects whenever modal opens to guarantee data availability
   useEffect(() => {
@@ -574,16 +576,6 @@ export const PaymentsModule: React.FC = () => {
     const exchangeRate = Number(formData.exchangeRate) || 1;
     const amountINR = Math.round(amountReceived * exchangeRate);
 
-    // Validate project balance for 'Received' payments
-    if (formData.paymentStatus === 'Received' && selectedProject) {
-      if (amountINR > selectedProjectRemainingBalance) {
-        setFormError(
-          `Payment amount of ₹${amountINR.toLocaleString('en-IN')} exceeds the project's remaining balance of ₹${selectedProjectRemainingBalance.toLocaleString('en-IN')} (Contract Value: ₹${(selectedProject.contractValue || 0).toLocaleString('en-IN')}, Previously Received: ₹${otherReceivedOnSelectedProject.toLocaleString('en-IN')}).`
-        );
-        return;
-      }
-    }
-
     const overdueDays = calculateDaysOverdue(formData.dueDate || '', formData.paymentStatus || 'Pending');
 
     const poolPayments = allPayments && allPayments.length > 0 ? allPayments : payments;
@@ -622,6 +614,13 @@ export const PaymentsModule: React.FC = () => {
       ...(!isEditing ? { isNew: true } : { isUpdate: true }),
     };
 
+    // Validate project balance for 'Received' payments
+    if (formData.paymentStatus === 'Received' && selectedProject && amountINR > selectedProjectRemainingBalance) {
+      setPendingSavePayload({ payload, isEditing });
+      setShowAdvanceWarning(true);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await savePayment(payload, isEditing);
@@ -638,6 +637,39 @@ export const PaymentsModule: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleConfirmAdvancePayment = async () => {
+    if (!pendingSavePayload) return;
+    const { payload, isEditing } = pendingSavePayload;
+    const taggedNotes = payload.notes?.includes('[Advance/Extra Payment]')
+      ? payload.notes
+      : (payload.notes ? `${payload.notes} [Advance/Extra Payment]` : '[Advance/Extra Payment]');
+    const updatedPayload = { ...payload, notes: taggedNotes };
+
+    setIsSubmitting(true);
+    setShowAdvanceWarning(false);
+    try {
+      const res = await savePayment(updatedPayload, isEditing);
+      if (res.success) {
+        if (updatedPayload.paymentMode === 'GST Invoice') {
+          refreshGstInvoices().catch((err) => console.warn('[Auto-sync GST Invoices re-fetch]', err));
+        }
+        setIsModalOpen(false);
+        setFormData({});
+        setFormError(null);
+        setPendingSavePayload(null);
+      } else {
+        setFormError(res.error || 'Failed to save payment record.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelAdvancePayment = () => {
+    setShowAdvanceWarning(false);
+    setPendingSavePayload(null);
   };
 
   return (
@@ -1504,6 +1536,73 @@ export const PaymentsModule: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Advance / Extra Payment Confirmation Warning Dialog */}
+      {showAdvanceWarning && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="advance-modal-title"
+        >
+          <div className="relative w-full max-w-md bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg shadow-2xl p-6 space-y-4 font-sans">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 id="advance-modal-title" className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                  Amount Exceeds Remaining Balance
+                </h4>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Excess Payment Reconciliation
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
+              Amount exceeds remaining balance, record as advance/extra payment?
+            </p>
+            <div className="p-3 rounded bg-neutral-100 dark:bg-neutral-800 text-xs text-neutral-600 dark:text-neutral-400 space-y-1.5">
+              <div className="flex justify-between">
+                <span>Project Remaining Balance:</span>
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                  ₹{selectedProjectRemainingBalance.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Payment Amount:</span>
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                  ₹{(pendingSavePayload?.payload.amountINR || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between text-amber-600 dark:text-amber-400 font-medium pt-1 border-t border-neutral-200 dark:border-neutral-700">
+                <span>Advance / Extra Amount:</span>
+                <span>
+                  ₹{Math.max(0, (pendingSavePayload?.payload.amountINR || 0) - selectedProjectRemainingBalance).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleCancelAdvancePayment}
+                disabled={isSubmitting}
+                className="px-3 py-2 text-xs font-medium rounded border border-slate-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+              >
+                Cancel & Edit
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAdvancePayment}
+                disabled={isSubmitting}
+                className="px-3.5 py-2 text-xs font-semibold rounded bg-black text-white dark:bg-white dark:text-black hover:opacity-90 disabled:opacity-50 transition-all"
+              >
+                {isSubmitting ? 'Recording...' : 'Record as Advance/Extra'}
+              </button>
+            </div>
           </div>
         </div>
       )}

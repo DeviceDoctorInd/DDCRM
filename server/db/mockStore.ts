@@ -1226,6 +1226,63 @@ class MockStore {
         createdAt: now,
         updatedAt: now,
       },
+      {
+        id: 'DDI-GST-002',
+        brand: 'Device Doctor India',
+        paymentId: 'DDI-PAY-002',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentDate: '2026-08-15',
+        amountReceived: 150000,
+        currency: 'INR',
+        amountINR: 150000,
+        gstAmountINR: 27000,
+        invoiceNumber: 'DDI/26-27/002',
+        uploadedToGstPortal: 'No',
+        gstPortalUploadDate: '',
+        notes: 'Auto-synced from Payment DDI-PAY-002 (GST Invoice Mode)',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'DDI-GST-003',
+        brand: 'Device Doctor India',
+        paymentId: 'DDI-PAY-003',
+        projectId: 'DDI-TECHCORP-INFOTECH-PVT-LTD-ENTERPRISE-SERVER-MAINTENANCE-AMC-1',
+        clientId: 'DDI-TECHCORP-INFOTECH-PVT-LTD',
+        clientName: 'TechCorp Infotech Pvt Ltd',
+        paymentDate: '2026-08-14',
+        amountReceived: 450000,
+        currency: 'INR',
+        amountINR: 450000,
+        gstAmountINR: 81000,
+        invoiceNumber: 'DDI/26-27/003',
+        uploadedToGstPortal: 'No',
+        gstPortalUploadDate: '',
+        notes: 'Auto-synced from Payment DDI-PAY-003 (GST Invoice Mode)',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'CDS-GST-001',
+        brand: 'Codestro',
+        paymentId: 'CDS-PAY-002',
+        projectId: 'CDS-FINSCALE-TECHNOLOGIES-INC-MULTI-TENANT-SAAS-WEB-APPLICATION-1',
+        clientId: 'CDS-FINSCALE-TECHNOLOGIES-INC',
+        clientName: 'FinScale Technologies Inc',
+        paymentDate: '2026-08-10',
+        amountReceived: 80000,
+        currency: 'INR',
+        amountINR: 80000,
+        gstAmountINR: 14400,
+        invoiceNumber: 'CDS/26-27/001',
+        uploadedToGstPortal: 'No',
+        gstPortalUploadDate: '',
+        notes: 'Auto-synced from Payment CDS-PAY-002 (GST Invoice Mode)',
+        createdAt: now,
+        updatedAt: now,
+      },
     ];
 
     // Employee Roles
@@ -2193,7 +2250,14 @@ class MockStore {
     this.gstInvoices = this.gstInvoices.filter(
       (inv) => {
         const invPayId = (inv.paymentId || '').trim().toLowerCase();
-        if (invPayId === cleanId || inv.paymentId === id) {
+        const codeClean = ((targetPayment as any)?.payment_id_code || '').trim().toLowerCase();
+        const targetClean = (targetPayment?.id || '').trim().toLowerCase();
+        const matchesPayment =
+          invPayId === cleanId ||
+          inv.paymentId === id ||
+          (codeClean !== '' && invPayId === codeClean) ||
+          (targetClean !== '' && invPayId === targetClean);
+        if (matchesPayment) {
           return inv.uploadedToGstPortal === 'Yes';
         }
         return true;
