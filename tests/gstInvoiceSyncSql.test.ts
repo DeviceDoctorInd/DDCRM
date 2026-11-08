@@ -166,18 +166,11 @@ describe('GST Invoice Synchronization & Mock Fallback Regression Tests (Step 4)'
         .set('Authorization', authHeader)
         .send(payload);
 
-      // Must NOT fail with 500 saying payment failed
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.payment).toBeDefined();
-      expect(res.body.payment.id).toBe(testPaymentId);
-      expect(res.body.payment.amountReceived).toBe(75000);
-
-      // GST invoice synchronization was NOT successful
-      expect(res.body.gstInvoiceSynced).toBe(false);
-      expect(res.body.gstInvoice).toBeNull();
-      expect(res.body.warning).toBe('Payment was saved, but automatic GST invoice synchronization failed.');
-      expect(res.body.gstSyncError).toContain('Azure SQL GST invoice insert failed');
+      // Must fail with 500 rolling back the payment transaction
+      expect(res.status).toBe(500);
+      expect(res.body.success).toBe(false);
+      const lingeringPayment = mockStore.getPayments().find((p) => p.id === testPaymentId);
+      expect(lingeringPayment).toBeUndefined();
 
       // Crucial: No ghost GST invoice lingering in mockStore for this payment
       const lingeringInMock = mockStore.getGstInvoices().find((inv) => inv.paymentId === testPaymentId);
@@ -220,11 +213,8 @@ describe('GST Invoice Synchronization & Mock Fallback Regression Tests (Step 4)'
         .set('Authorization', authHeader)
         .send(payload);
 
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.gstInvoiceSynced).toBe(false);
-      expect(res.body.gstInvoice).toBeNull();
-      expect(res.body.gstSyncError).toBeDefined();
+      expect(res.status).toBe(500);
+      expect(res.body.success).toBe(false);
 
       // No mock GST invoice must exist in mockStore
       const lingeringInMock = mockStore.getGstInvoices().find((inv) => inv.paymentId === testPaymentId);
