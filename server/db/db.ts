@@ -334,6 +334,7 @@ export async function executeSql<T>(
   }
 
   let attempt = 0;
+  let healedColumns = 0;
   while (true) {
     try {
       return await queryFn(pool);
@@ -341,7 +342,7 @@ export async function executeSql<T>(
       const msg = String(err?.message || err);
 
       // 1. Check for missing column error and heal on-demand instantly
-      if (msg.includes('Invalid column name') && tableName) {
+      if (msg.includes('Invalid column name') && tableName && healedColumns < 10) {
         const colMatch = msg.match(/Invalid column name '([^']+)'/i);
         if (colMatch && colMatch[1]) {
           const colName = colMatch[1];
@@ -352,7 +353,8 @@ export async function executeSql<T>(
               AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
               ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
             `);
-            return await queryFn(pool);
+            healedColumns++;
+            continue;
           } catch {
             // If auto-heal fails, continue to retry/throw
           }

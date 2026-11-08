@@ -722,7 +722,7 @@ export const ProjectModal: React.FC = () => {
       exchangeRate: Number(formData.exchangeRate) || 1,
       contractValue:
         Math.round((Number(formData.contract) || 0) * (Number(formData.exchangeRate) || 1)),
-      projectManager: formData.projectManager.trim(),
+      projectManager: (formData.projectManager || '').trim(),
       notes: formData.notes || '',
       proposalDocument: formData.proposalDocument,
       proposalDocumentNotes: formData.proposalDocumentNotes || formData.proposalDocument?.notes || '',
