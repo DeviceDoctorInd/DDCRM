@@ -165,6 +165,7 @@ export type DbErrorCategory =
   | 'AUTH_FAILURE'
   | 'SYNTAX_ERROR'
   | 'CONSTRAINT_VIOLATION'
+  | 'DATATYPE_CONVERSION_ERROR'
   | 'VALIDATION_ERROR'
   | 'TRANSACTION_COMMIT_AMBIGUOUS'
   | 'UNKNOWN_DATABASE_ERROR';
@@ -213,17 +214,28 @@ export function isTransientError(err: any): boolean {
     return false;
   }
 
-  // 2. Constraint violations are never transient
+  // 2. Constraint violations and datatype conversion errors are never transient
   if (
     number === 2627 ||
     number === 2601 ||
     number === 547 ||
     number === 515 ||
+    number === 245 ||
+    number === 8169 ||
+    number === 8114 ||
+    number === 8115 ||
     msg.includes('PRIMARY KEY constraint') ||
     msg.includes('UNIQUE KEY constraint') ||
     msg.includes('FOREIGN KEY constraint') ||
     msg.includes('CHECK constraint') ||
-    msg.includes('duplicate key')
+    msg.includes('duplicate key') ||
+    msg.includes('Conversion failed') ||
+    msg.includes('converting from a character string to uniqueidentifier') ||
+    msg.includes('Error converting data type') ||
+    msg.includes('Arithmetic overflow error') ||
+    msg.includes('Validation error') ||
+    msg.includes('Project record not found') ||
+    msg.includes('no rows updated')
   ) {
     return false;
   }
@@ -271,6 +283,8 @@ export function isTransientError(err: any): boolean {
     msg.includes('Connection is closed') ||
     msg.includes('Failed to connect to') ||
     msg.includes('socket hang up') ||
+    msg.includes('is offline') ||
+    msg.includes('database is offline') ||
     msg.includes('timeout')
   ) {
     return true;
@@ -375,7 +389,60 @@ export function classifyDbError(err: unknown): ClassifiedDbError {
     };
   }
 
-  // 5. Query Timeout
+  // 5. Datatype Conversion / Data Format Error
+  if (
+    number === 245 ||
+    number === 8169 ||
+    number === 8114 ||
+    number === 8115 ||
+    msg.includes('Conversion failed') ||
+    msg.includes('converting from a character string to uniqueidentifier') ||
+    msg.includes('Error converting data type') ||
+    msg.includes('Arithmetic overflow error')
+  ) {
+    return {
+      category: 'DATATYPE_CONVERSION_ERROR',
+      isTransient: false,
+      isRetryable: false,
+      httpStatus: 400,
+      userMessage: 'A database datatype conversion or identifier format mismatch occurred.',
+      code: 'DATATYPE_CONVERSION_ERROR',
+      originalMessage: sanitizeErrorMessage(msg),
+    };
+  }
+
+  // 5b. Validation / Entity Not Found Error (from business constraint or T-SQL RAISERROR)
+  if (
+    msg.includes('Project record not found') ||
+    msg.includes('no rows updated in database')
+  ) {
+    return {
+      category: 'VALIDATION_ERROR',
+      isTransient: false,
+      isRetryable: false,
+      httpStatus: 404,
+      userMessage: 'Project record not found or no rows updated in database.',
+      code: 'PROJECT_NOT_FOUND',
+      originalMessage: sanitizeErrorMessage(msg),
+    };
+  }
+
+  if (
+    msg.toLowerCase().includes('validation error') ||
+    msg.includes('Validation error:')
+  ) {
+    return {
+      category: 'VALIDATION_ERROR',
+      isTransient: false,
+      isRetryable: false,
+      httpStatus: 400,
+      userMessage: sanitizeErrorMessage(msg),
+      code: 'VALIDATION_ERROR',
+      originalMessage: sanitizeErrorMessage(msg),
+    };
+  }
+
+  // 6. Query Timeout
   if (
     code === 'ETIMEOUT' ||
     code === 'ESOCKETTIMEDOUT' ||
@@ -394,7 +461,7 @@ export function classifyDbError(err: unknown): ClassifiedDbError {
     };
   }
 
-  // 6. SQL Syntax / Query Error
+  // 7. SQL Syntax / Query Error
   if (
     number === 102 ||
     number === 156 ||
@@ -413,7 +480,7 @@ export function classifyDbError(err: unknown): ClassifiedDbError {
     };
   }
 
-  // 7. Transient Connection Failure
+  // 8. Transient Connection Failure
   if (isTransientError(err)) {
     return {
       category: 'TRANSIENT_CONNECTION',

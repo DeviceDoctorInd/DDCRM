@@ -222,6 +222,458 @@ export async function calculateNextProjectSequenceSql(
 }
 
 /**
+ * Constructs atomic T-SQL batch for inserting or updating projects in Azure SQL.
+ * Dynamically queries sys.columns to detect whether columns (id, client_id, service_id)
+ * are UNIQUEIDENTIFIER or NVARCHAR, ensuring seamless compatibility across different schemas
+ * without speculative GUID conversions or breaking semantic identifiers.
+ */
+export function buildProjectSaveQuery(isUpdate: boolean): string {
+  if (isUpdate) {
+    return `
+      SET XACT_ABORT ON;
+      BEGIN TRY
+        BEGIN TRANSACTION;
+
+        DECLARE @isIdGuid BIT = 0;
+        DECLARE @isClientGuid BIT = 0;
+        DECLARE @isServiceGuid BIT = 0;
+
+        SELECT @isIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'id';
+
+        SELECT @isClientGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'client_id';
+
+        SELECT @isServiceGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'service_id';
+
+        DECLARE @guidClientIdVal UNIQUEIDENTIFIER = TRY_CAST(@guidClientId AS UNIQUEIDENTIFIER);
+        IF @guidClientIdVal IS NULL AND @client_id IS NOT NULL AND LTRIM(RTRIM(@client_id)) <> ''
+          SET @guidClientIdVal = TRY_CAST(@client_id AS UNIQUEIDENTIFIER);
+
+        DECLARE @guidServiceIdVal UNIQUEIDENTIFIER = TRY_CAST(@guidServiceId AS UNIQUEIDENTIFIER);
+        IF @guidServiceIdVal IS NULL AND @service_id IS NOT NULL AND LTRIM(RTRIM(@service_id)) <> ''
+          SET @guidServiceIdVal = TRY_CAST(@service_id AS UNIQUEIDENTIFIER);
+
+        IF @isClientGuid = 1 AND @client_id IS NOT NULL AND LTRIM(RTRIM(@client_id)) <> '' AND @guidClientIdVal IS NULL
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Validation error: client_id cannot be resolved to a valid GUID for UNIQUEIDENTIFIER column.', 16, 1);
+          RETURN;
+        END
+
+        IF @isServiceGuid = 1 AND @service_id IS NOT NULL AND LTRIM(RTRIM(@service_id)) <> '' AND @guidServiceIdVal IS NULL
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Validation error: service_id cannot be resolved to a valid GUID for UNIQUEIDENTIFIER column.', 16, 1);
+          RETURN;
+        END
+
+        DECLARE @resolvedTargetId NVARCHAR(150) = NULL;
+        DECLARE @targetMatchCount INT = 0;
+
+        SELECT @targetMatchCount = COUNT(DISTINCT CAST(id AS NVARCHAR(150))),
+               @resolvedTargetId = MAX(CAST(id AS NVARCHAR(150)))
+        FROM projects WITH (UPDLOCK, HOLDLOCK)
+        WHERE (
+          (@targetId IS NOT NULL AND LTRIM(RTRIM(@targetId)) <> '' AND (
+            CAST(id AS NVARCHAR(150)) = @targetId
+            OR (project_id_code IS NOT NULL AND CAST(project_id_code AS NVARCHAR(150)) = @targetId)
+          ))
+          OR
+          (@guidTargetId IS NOT NULL AND LTRIM(RTRIM(@guidTargetId)) <> '' AND (
+            CAST(id AS NVARCHAR(150)) = @guidTargetId
+            OR (project_id_code IS NOT NULL AND CAST(project_id_code AS NVARCHAR(150)) = @guidTargetId)
+          ))
+        );
+
+        IF @targetMatchCount = 0
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Project record not found or no rows updated in database.', 16, 1);
+          RETURN;
+        END
+
+        IF @targetMatchCount > 1
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Validation error: Ambiguous project target: multiple rows match target identifier.', 16, 1);
+          RETURN;
+        END
+
+        IF @isClientGuid = 1
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            /* UPDATE projects SET */
+            UPDATE projects WITH (UPDLOCK, ROWLOCK) SET
+              brand = @brand,
+              client_id = @guidClientIdVal,
+              client_name = @client_name,
+              service_id = @guidServiceIdVal,
+              proposal_date = @proposal_date,
+              contract_date = @contract_date,
+              start_date = @start_date,
+              committed_days = @committed_days,
+              committed_end_date = @committed_end_date,
+              actual_end_date = @actual_end_date,
+              status = @status,
+              payment_mode = @payment_mode,
+              currency = @currency,
+              contract = @contract,
+              exchange_rate = @exchange_rate,
+              contract_value = @contract_value,
+              total_received = @total_received,
+              balance = @balance,
+              project_manager = @project_manager,
+              notes = @notes,
+              proposal_document = @proposal_document,
+              contract_document = @contract_document,
+              payment_phases = @payment_phases,
+              updated_at = @updated_at,
+              project_id_code = @project_id_code
+            WHERE CAST(id AS NVARCHAR(150)) = @resolvedTargetId;
+          END
+          ELSE
+          BEGIN
+            /* UPDATE projects SET */
+            UPDATE projects WITH (UPDLOCK, ROWLOCK) SET
+              brand = @brand,
+              client_id = @guidClientIdVal,
+              client_name = @client_name,
+              service_id = @service_id,
+              proposal_date = @proposal_date,
+              contract_date = @contract_date,
+              start_date = @start_date,
+              committed_days = @committed_days,
+              committed_end_date = @committed_end_date,
+              actual_end_date = @actual_end_date,
+              status = @status,
+              payment_mode = @payment_mode,
+              currency = @currency,
+              contract = @contract,
+              exchange_rate = @exchange_rate,
+              contract_value = @contract_value,
+              total_received = @total_received,
+              balance = @balance,
+              project_manager = @project_manager,
+              notes = @notes,
+              proposal_document = @proposal_document,
+              contract_document = @contract_document,
+              payment_phases = @payment_phases,
+              updated_at = @updated_at,
+              project_id_code = @project_id_code
+            WHERE CAST(id AS NVARCHAR(150)) = @resolvedTargetId;
+          END
+        END
+        ELSE
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            /* UPDATE projects SET */
+            UPDATE projects WITH (UPDLOCK, ROWLOCK) SET
+              brand = @brand,
+              client_id = @client_id,
+              client_name = @client_name,
+              service_id = @guidServiceIdVal,
+              proposal_date = @proposal_date,
+              contract_date = @contract_date,
+              start_date = @start_date,
+              committed_days = @committed_days,
+              committed_end_date = @committed_end_date,
+              actual_end_date = @actual_end_date,
+              status = @status,
+              payment_mode = @payment_mode,
+              currency = @currency,
+              contract = @contract,
+              exchange_rate = @exchange_rate,
+              contract_value = @contract_value,
+              total_received = @total_received,
+              balance = @balance,
+              project_manager = @project_manager,
+              notes = @notes,
+              proposal_document = @proposal_document,
+              contract_document = @contract_document,
+              payment_phases = @payment_phases,
+              updated_at = @updated_at,
+              project_id_code = @project_id_code
+            WHERE CAST(id AS NVARCHAR(150)) = @resolvedTargetId;
+          END
+          ELSE
+          BEGIN
+            /* UPDATE projects SET */
+            UPDATE projects WITH (UPDLOCK, ROWLOCK) SET
+              brand = @brand,
+              client_id = @client_id,
+              client_name = @client_name,
+              service_id = @service_id,
+              proposal_date = @proposal_date,
+              contract_date = @contract_date,
+              start_date = @start_date,
+              committed_days = @committed_days,
+              committed_end_date = @committed_end_date,
+              actual_end_date = @actual_end_date,
+              status = @status,
+              payment_mode = @payment_mode,
+              currency = @currency,
+              contract = @contract,
+              exchange_rate = @exchange_rate,
+              contract_value = @contract_value,
+              total_received = @total_received,
+              balance = @balance,
+              project_manager = @project_manager,
+              notes = @notes,
+              proposal_document = @proposal_document,
+              contract_document = @contract_document,
+              payment_phases = @payment_phases,
+              updated_at = @updated_at,
+              project_id_code = @project_id_code
+            WHERE CAST(id AS NVARCHAR(150)) = @resolvedTargetId;
+          END
+        END
+
+        DECLARE @affectedRows INT = @@ROWCOUNT;
+
+        IF @affectedRows = 0
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Project record not found or no rows updated in database.', 16, 1);
+          RETURN;
+        END
+
+        IF @affectedRows > 1
+        BEGIN
+          IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+          RAISERROR('Validation error: More than one project record matched target identifier during update. Transaction rolled back to prevent corruption.', 16, 1);
+          RETURN;
+        END
+
+        COMMIT TRANSACTION;
+      END TRY
+      BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW;
+      END CATCH;
+    `;
+  }
+
+  return `
+    SET XACT_ABORT ON;
+    BEGIN TRY
+      BEGIN TRANSACTION;
+
+      DECLARE @isIdGuid BIT = 0;
+      DECLARE @isClientGuid BIT = 0;
+      DECLARE @isServiceGuid BIT = 0;
+
+      SELECT @isIdGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+      FROM sys.columns c
+      WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'id';
+
+      SELECT @isClientGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+      FROM sys.columns c
+      WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'client_id';
+
+      SELECT @isServiceGuid = CASE WHEN TYPE_NAME(c.system_type_id) = 'uniqueidentifier' THEN 1 ELSE 0 END
+      FROM sys.columns c
+      WHERE c.object_id = OBJECT_ID('projects') AND c.name = 'service_id';
+
+      DECLARE @guidIdVal UNIQUEIDENTIFIER = COALESCE(TRY_CAST(@guidId AS UNIQUEIDENTIFIER), TRY_CAST(@rawId AS UNIQUEIDENTIFIER));
+      IF @guidIdVal IS NULL
+      BEGIN
+        SET @guidIdVal = NEWID();
+      END
+
+      DECLARE @guidClientIdVal UNIQUEIDENTIFIER = TRY_CAST(@guidClientId AS UNIQUEIDENTIFIER);
+      IF @guidClientIdVal IS NULL AND @client_id IS NOT NULL AND LTRIM(RTRIM(@client_id)) <> ''
+        SET @guidClientIdVal = TRY_CAST(@client_id AS UNIQUEIDENTIFIER);
+
+      DECLARE @guidServiceIdVal UNIQUEIDENTIFIER = TRY_CAST(@guidServiceId AS UNIQUEIDENTIFIER);
+      IF @guidServiceIdVal IS NULL AND @service_id IS NOT NULL AND LTRIM(RTRIM(@service_id)) <> ''
+        SET @guidServiceIdVal = TRY_CAST(@service_id AS UNIQUEIDENTIFIER);
+
+      IF @isClientGuid = 1 AND @client_id IS NOT NULL AND LTRIM(RTRIM(@client_id)) <> '' AND @guidClientIdVal IS NULL
+      BEGIN
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        RAISERROR('Validation error: client_id cannot be resolved to a valid GUID for UNIQUEIDENTIFIER column.', 16, 1);
+        RETURN;
+      END
+
+      IF @isServiceGuid = 1 AND @service_id IS NOT NULL AND LTRIM(RTRIM(@service_id)) <> '' AND @guidServiceIdVal IS NULL
+      BEGIN
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        RAISERROR('Validation error: service_id cannot be resolved to a valid GUID for UNIQUEIDENTIFIER column.', 16, 1);
+        RETURN;
+      END
+
+      IF @isIdGuid = 1
+      BEGIN
+        IF @isClientGuid = 1
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @guidIdVal, @project_id_code, @brand, @guidClientIdVal, @client_name, @guidServiceIdVal,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+          ELSE
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @guidIdVal, @project_id_code, @brand, @guidClientIdVal, @client_name, @service_id,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+        END
+        ELSE
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @guidIdVal, @project_id_code, @brand, @client_id, @client_name, @guidServiceIdVal,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+          ELSE
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @guidIdVal, @project_id_code, @brand, @client_id, @client_name, @service_id,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+        END
+      END
+      ELSE
+      BEGIN
+        IF @isClientGuid = 1
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @rawId, @project_id_code, @brand, @guidClientIdVal, @client_name, @guidServiceIdVal,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+          ELSE
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @rawId, @project_id_code, @brand, @guidClientIdVal, @client_name, @service_id,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+        END
+        ELSE
+        BEGIN
+          IF @isServiceGuid = 1
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @rawId, @project_id_code, @brand, @client_id, @client_name, @guidServiceIdVal,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+          ELSE
+          BEGIN
+            INSERT INTO projects (
+              id, project_id_code, brand, client_id, client_name, service_id,
+              proposal_date, contract_date, start_date, committed_days, committed_end_date,
+              actual_end_date, status, payment_mode, currency, contract, exchange_rate,
+              contract_value, total_received, balance, project_manager, notes,
+              proposal_document, contract_document, payment_phases, created_at, updated_at
+            )
+            VALUES (
+              @rawId, @project_id_code, @brand, @client_id, @client_name, @service_id,
+              @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date,
+              @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate,
+              @contract_value, @total_received, @balance, @project_manager, @notes,
+              @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at
+            );
+          END
+        END
+      END
+
+      COMMIT TRANSACTION;
+    END TRY
+    BEGIN CATCH
+      IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+      THROW;
+    END CATCH;
+  `;
+}
+
+/**
  * Calculates next semantic Client ID against Azure SQL or mockStore
  */
 export async function calculateNextClientIdSql(
@@ -568,6 +1020,7 @@ export async function executeSqlWithAutoMigration<T>(
 
   let currentPool = pool;
   let attempt = 0;
+  let healedColumns = 0;
 
   while (true) {
     try {
@@ -576,7 +1029,7 @@ export async function executeSqlWithAutoMigration<T>(
       const msg = String(err?.message || err);
 
       // 1. Targeted column auto-heal
-      if (msg.includes('Invalid column name') && tableName) {
+      if (msg.includes('Invalid column name') && tableName && healedColumns < 10) {
         const colMatch = msg.match(/Invalid column name '([^']+)'/i);
         if (colMatch && colMatch[1]) {
           const colName = colMatch[1];
@@ -588,7 +1041,9 @@ export async function executeSqlWithAutoMigration<T>(
               AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('${tableName}') AND name = '${colName}')
               ALTER TABLE [${tableName}] ADD [${colName}] NVARCHAR(MAX);
             `);
-            return await queryFn(healingPool);
+            currentPool = healingPool;
+            healedColumns++;
+            continue;
           } catch {
             // Auto-heal failed, fall through to retry or error
           }
@@ -675,6 +1130,24 @@ export function sendDatabaseError(res: Response, err: unknown, operation: string
         error: 'Database Constraint Violation',
         category: classification.category,
         message: `Cannot complete ${operation}: Operation violates database integrity constraints or duplicate records exist.`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+
+    case 'DATATYPE_CONVERSION_ERROR':
+      return res.status(400).json({
+        success: false,
+        error: 'Database Type Conversion Mismatch',
+        category: classification.category,
+        message: `Cannot complete ${operation}: Parameter data type or identifier formatting conversion error.`,
+        ...(sanitized ? { details: sanitized } : {}),
+      });
+
+    case 'VALIDATION_ERROR':
+      return res.status(classification.httpStatus || 400).json({
+        success: false,
+        error: classification.httpStatus === 404 ? 'Not Found' : 'Database Validation Error',
+        category: classification.category,
+        message: `Cannot complete ${operation}: ${classification.userMessage}`,
         ...(sanitized ? { details: sanitized } : {}),
       });
 
@@ -1859,6 +2332,426 @@ router.get('/projects', authenticateToken, async (req: Request, res: Response) =
   }
 });
 
+export const isGuidFormat = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+export interface RelationshipResolutionOptions {
+  pool: sql.ConnectionPool | null;
+  rawBodyClientId?: string | null;
+  rawBodyClientName?: string | null;
+  rawBodyServiceId?: string | null;
+  rawBodyServiceName?: string | null;
+  isUpdate: boolean;
+  existingProject?: any | null;
+}
+
+export interface ResolvedRelationships {
+  clientName: string;
+  serviceName: string;
+  clientId: string;
+  serviceId: string;
+  dbClientGuid: string | null;
+  dbServiceGuid: string | null;
+}
+
+export async function resolveProjectRelationships(
+  opts: RelationshipResolutionOptions
+): Promise<ResolvedRelationships> {
+  const { pool, rawBodyClientId, rawBodyClientName, rawBodyServiceId, rawBodyServiceName, isUpdate, existingProject } = opts;
+
+  const hasExplicitClientId = rawBodyClientId !== undefined && rawBodyClientId !== null && String(rawBodyClientId).trim() !== '';
+  const hasExplicitClientName = rawBodyClientName !== undefined && rawBodyClientName !== null && String(rawBodyClientName).trim() !== '';
+  const hasExplicitServiceId = rawBodyServiceId !== undefined && rawBodyServiceId !== null && String(rawBodyServiceId).trim() !== '';
+  const hasExplicitServiceName = rawBodyServiceName !== undefined && rawBodyServiceName !== null && String(rawBodyServiceName).trim() !== '';
+
+  const preserveClient = Boolean(isUpdate && existingProject && !hasExplicitClientId && !hasExplicitClientName);
+  const preserveService = Boolean(isUpdate && existingProject && !hasExplicitServiceId && !hasExplicitServiceName);
+
+  let resolvedClientId = '';
+  let resolvedClientName = '';
+  let dbClientGuid: string | null = null;
+
+  let resolvedServiceId = '';
+  let resolvedServiceName = '';
+  let dbServiceGuid: string | null = null;
+
+  // ==================== 1. CLIENT RELATIONSHIP RESOLUTION ====================
+  if (preserveClient && existingProject) {
+    resolvedClientId = existingProject.client_id || '';
+    resolvedClientName = existingProject.client_name || '';
+    dbClientGuid = isGuidFormat(resolvedClientId) ? resolvedClientId : null;
+    if (!dbClientGuid && pool && resolvedClientId) {
+      let cRow: { id: string; name: string } | null = null;
+
+      // Deterministic Precedence 1: Exact primary key match first
+      const pkRes = await pool.request()
+        .input('cid', resolvedClientId)
+        .query(`
+          SELECT CAST(id AS NVARCHAR(150)) as id,
+                 ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+          FROM clients
+          WHERE CAST(id AS NVARCHAR(150)) = @cid
+        `);
+      const pkRows = pkRes.recordset || [];
+      if (pkRows.length > 1) {
+        throw new Error(`Validation error: Ambiguous preserved client relationship: Multiple client records found with ID '${resolvedClientId}'.`);
+      }
+      if (pkRows.length === 1) {
+        cRow = pkRows[0];
+      }
+
+      // Deterministic Precedence 2: Exact business / semantic code match second
+      if (!cRow) {
+        const codeRes = await pool.request()
+          .input('cid', resolvedClientId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM clients
+            WHERE client_id_code IS NOT NULL AND CAST(client_id_code AS NVARCHAR(150)) = @cid
+          `);
+        const codeRows = codeRes.recordset || [];
+        if (codeRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous preserved client relationship: Multiple client records found with business code '${resolvedClientId}'.`);
+        }
+        if (codeRows.length === 1) {
+          cRow = codeRows[0];
+        }
+      }
+
+      if (cRow) {
+        if (!resolvedClientName && cRow.name) resolvedClientName = cRow.name;
+        if (isGuidFormat(cRow.id)) dbClientGuid = cRow.id;
+      }
+    } else if (!dbClientGuid && !pool && resolvedClientId && isMockFallbackAllowed()) {
+      const idMatches = mockStore.getClients(null).filter((c) => c.id === resolvedClientId);
+      if (idMatches.length > 1) {
+        throw new Error(`Validation error: Ambiguous preserved client relationship: Multiple client records found with ID '${resolvedClientId}'.`);
+      }
+      let cMock = idMatches[0] || null;
+      if (!cMock) {
+        const codeMatches = mockStore.getClients(null).filter((c) => ((c as any).client_id_code || '') === resolvedClientId);
+        if (codeMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous preserved client relationship: Multiple client records found with business code '${resolvedClientId}'.`);
+        }
+        cMock = codeMatches[0] || null;
+      }
+      if (cMock) {
+        if (!resolvedClientName && cMock.name) resolvedClientName = cMock.name;
+        if (isGuidFormat(cMock.id)) dbClientGuid = cMock.id;
+      }
+    }
+  } else {
+    const targetId = hasExplicitClientId ? String(rawBodyClientId).trim() : '';
+    const targetName = hasExplicitClientName ? String(rawBodyClientName).trim() : '';
+
+    if (pool) {
+      let matchedClient: { id: string; client_id_code: string; name: string } | null = null;
+
+      // Deterministic Precedence 1: Exact primary key match first
+      if (targetId) {
+        const pkRes = await pool.request()
+          .input('cid', targetId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM clients
+            WHERE CAST(id AS NVARCHAR(150)) = @cid
+          `);
+        const pkRows = pkRes.recordset || [];
+        if (pkRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with ID '${targetId}'. Please specify an unambiguous client ID.`);
+        }
+        if (pkRows.length === 1) {
+          matchedClient = pkRows[0];
+        }
+      }
+
+      // Deterministic Precedence 2: Exact business / semantic code match second
+      if (!matchedClient && targetId) {
+        const codeRes = await pool.request()
+          .input('cid', targetId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM clients
+            WHERE client_id_code IS NOT NULL AND CAST(client_id_code AS NVARCHAR(150)) = @cid
+          `);
+        const codeRows = codeRes.recordset || [];
+        if (codeRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with business code '${targetId}'. Please specify an exact client ID.`);
+        }
+        if (codeRows.length === 1) {
+          matchedClient = codeRows[0];
+        }
+      }
+
+      // Deterministic Precedence 3: Name lookup only when it produces exactly one unambiguous record
+      if (!matchedClient && targetName) {
+        const nameRes = await pool.request()
+          .input('cname', targetName)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(client_id_code AS NVARCHAR(150)), '') as client_id_code,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM clients
+            WHERE name = @cname
+          `);
+        const rows = nameRes.recordset || [];
+        if (rows.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with name '${targetName}'. Please specify an exact client ID.`);
+        }
+        if (rows.length === 1) {
+          matchedClient = rows[0];
+        }
+      }
+
+      if (matchedClient) {
+        resolvedClientId = matchedClient.client_id_code || matchedClient.id;
+        resolvedClientName = matchedClient.name;
+        dbClientGuid = isGuidFormat(matchedClient.id) ? matchedClient.id : null;
+      } else {
+        resolvedClientId = targetId;
+        resolvedClientName = targetName;
+        dbClientGuid = isGuidFormat(targetId) ? targetId : null;
+      }
+    } else if (isMockFallbackAllowed()) {
+      let mockClient: any = null;
+      if (targetId) {
+        const idMatches = mockStore.getClients(null).filter((c) => c.id === targetId);
+        if (idMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with ID '${targetId}'. Please specify an unambiguous client ID.`);
+        }
+        if (idMatches.length === 1) {
+          mockClient = idMatches[0];
+        }
+      }
+      if (!mockClient && targetId) {
+        const codeMatches = mockStore.getClients(null).filter((c) => ((c as any).client_id_code || '') === targetId);
+        if (codeMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with business code '${targetId}'. Please specify an exact client ID.`);
+        }
+        if (codeMatches.length === 1) {
+          mockClient = codeMatches[0];
+        }
+      }
+      if (!mockClient && targetName) {
+        const nameMatches = mockStore.getClients(null).filter((c) => (c.name || '').trim().toLowerCase() === targetName.toLowerCase());
+        if (nameMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous client relationship: Multiple client records found with name '${targetName}'. Please specify an exact client ID.`);
+        }
+        if (nameMatches.length === 1) {
+          mockClient = nameMatches[0];
+        }
+      }
+      if (mockClient) {
+        resolvedClientId = (mockClient as any).client_id_code || mockClient.id;
+        resolvedClientName = mockClient.name;
+        dbClientGuid = isGuidFormat(mockClient.id) ? mockClient.id : null;
+      } else {
+        resolvedClientId = targetId;
+        resolvedClientName = targetName;
+        dbClientGuid = isGuidFormat(targetId) ? targetId : null;
+      }
+    }
+  }
+
+  // ==================== 2. SERVICE RELATIONSHIP RESOLUTION ====================
+  if (preserveService && existingProject) {
+    resolvedServiceId = existingProject.service_id || '';
+    resolvedServiceName = '';
+    dbServiceGuid = isGuidFormat(resolvedServiceId) ? resolvedServiceId : null;
+    if (!dbServiceGuid && pool && resolvedServiceId) {
+      let sRow: { id: string; name: string } | null = null;
+
+      // Deterministic Precedence 1: Exact primary key match first
+      const pkRes = await pool.request()
+        .input('sid', resolvedServiceId)
+        .query(`
+          SELECT CAST(id AS NVARCHAR(150)) as id,
+                 ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+          FROM services
+          WHERE CAST(id AS NVARCHAR(150)) = @sid
+        `);
+      const pkRows = pkRes.recordset || [];
+      if (pkRows.length > 1) {
+        throw new Error(`Validation error: Ambiguous preserved service relationship: Multiple service records found with ID '${resolvedServiceId}'.`);
+      }
+      if (pkRows.length === 1) {
+        sRow = pkRows[0];
+      }
+
+      // Deterministic Precedence 2: Exact business / semantic code match second
+      if (!sRow) {
+        const codeRes = await pool.request()
+          .input('sid', resolvedServiceId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM services
+            WHERE EXISTS (
+              SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('services') AND name = 'service_id_code'
+            ) AND CAST(service_id_code AS NVARCHAR(150)) = @sid
+          `);
+        const codeRows = codeRes.recordset || [];
+        if (codeRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous preserved service relationship: Multiple service records found with business code '${resolvedServiceId}'.`);
+        }
+        if (codeRows.length === 1) {
+          sRow = codeRows[0];
+        }
+      }
+
+      if (sRow) {
+        resolvedServiceName = sRow.name || '';
+        if (isGuidFormat(sRow.id)) dbServiceGuid = sRow.id;
+      }
+    } else if (!dbServiceGuid && !pool && resolvedServiceId && isMockFallbackAllowed()) {
+      const idMatches = mockStore.getServices().filter((s) => s.id === resolvedServiceId);
+      if (idMatches.length > 1) {
+        throw new Error(`Validation error: Ambiguous preserved service relationship: Multiple service records found with ID '${resolvedServiceId}'.`);
+      }
+      let sMock = idMatches[0] || null;
+      if (!sMock) {
+        const codeMatches = mockStore.getServices().filter((s) => ((s as any).service_id_code || '') === resolvedServiceId);
+        if (codeMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous preserved service relationship: Multiple service records found with business code '${resolvedServiceId}'.`);
+        }
+        sMock = codeMatches[0] || null;
+      }
+      if (sMock) {
+        resolvedServiceName = sMock.name || '';
+        if (isGuidFormat(sMock.id)) dbServiceGuid = sMock.id;
+      }
+    }
+  } else {
+    const targetServiceId = hasExplicitServiceId ? String(rawBodyServiceId).trim() : '';
+    const targetServiceName = hasExplicitServiceName ? String(rawBodyServiceName).trim() : '';
+
+    if (pool) {
+      let matchedService: { id: string; name: string } | null = null;
+
+      // Deterministic Precedence 1: Exact primary key match first
+      if (targetServiceId) {
+        const pkRes = await pool.request()
+          .input('sid', targetServiceId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM services
+            WHERE CAST(id AS NVARCHAR(150)) = @sid
+          `);
+        const pkRows = pkRes.recordset || [];
+        if (pkRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with ID '${targetServiceId}'. Please specify an unambiguous service ID.`);
+        }
+        if (pkRows.length === 1) {
+          matchedService = pkRows[0];
+        }
+      }
+
+      // Deterministic Precedence 2: Exact business / semantic code match second
+      if (!matchedService && targetServiceId) {
+        const codeRes = await pool.request()
+          .input('sid', targetServiceId)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM services
+            WHERE EXISTS (
+              SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('services') AND name = 'service_id_code'
+            ) AND CAST(service_id_code AS NVARCHAR(150)) = @sid
+          `);
+        const codeRows = codeRes.recordset || [];
+        if (codeRows.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with business code '${targetServiceId}'. Please specify an exact service ID.`);
+        }
+        if (codeRows.length === 1) {
+          matchedService = codeRows[0];
+        }
+      }
+
+      // Deterministic Precedence 3: Name lookup only when it produces exactly one unambiguous record
+      if (!matchedService && targetServiceName) {
+        const nameRes = await pool.request()
+          .input('sname', targetServiceName)
+          .query(`
+            SELECT CAST(id AS NVARCHAR(150)) as id,
+                   ISNULL(CAST(name AS NVARCHAR(255)), '') as name
+            FROM services
+            WHERE name = @sname
+          `);
+        const rows = nameRes.recordset || [];
+        if (rows.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with name '${targetServiceName}'. Please specify an exact service ID.`);
+        }
+        if (rows.length === 1) {
+          matchedService = rows[0];
+        }
+      }
+
+      if (matchedService) {
+        resolvedServiceId = matchedService.id;
+        resolvedServiceName = matchedService.name;
+        dbServiceGuid = isGuidFormat(matchedService.id) ? matchedService.id : null;
+      } else {
+        resolvedServiceId = targetServiceId;
+        resolvedServiceName = targetServiceName;
+        dbServiceGuid = isGuidFormat(targetServiceId) ? targetServiceId : null;
+      }
+    } else if (isMockFallbackAllowed()) {
+      let mockService: any = null;
+      if (targetServiceId) {
+        const idMatches = mockStore.getServices().filter((s) => s.id === targetServiceId);
+        if (idMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with ID '${targetServiceId}'. Please specify an unambiguous service ID.`);
+        }
+        if (idMatches.length === 1) {
+          mockService = idMatches[0];
+        }
+      }
+      if (!mockService && targetServiceId) {
+        const codeMatches = mockStore.getServices().filter((s) => ((s as any).service_id_code || '') === targetServiceId);
+        if (codeMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with business code '${targetServiceId}'. Please specify an exact service ID.`);
+        }
+        if (codeMatches.length === 1) {
+          mockService = codeMatches[0];
+        }
+      }
+      if (!mockService && targetServiceName) {
+        const nameMatches = mockStore.getServices().filter((s) => (s.name || '').trim().toLowerCase() === targetServiceName.toLowerCase());
+        if (nameMatches.length > 1) {
+          throw new Error(`Validation error: Ambiguous service relationship: Multiple service records found with name '${targetServiceName}'. Please specify an exact service ID.`);
+        }
+        if (nameMatches.length === 1) {
+          mockService = nameMatches[0];
+        }
+      }
+      if (mockService) {
+        resolvedServiceId = mockService.id;
+        resolvedServiceName = mockService.name;
+        dbServiceGuid = isGuidFormat(mockService.id) ? mockService.id : null;
+      } else {
+        resolvedServiceId = targetServiceId;
+        resolvedServiceName = targetServiceName;
+        dbServiceGuid = isGuidFormat(targetServiceId) ? targetServiceId : null;
+      }
+    }
+  }
+
+  return {
+    clientName: resolvedClientName || 'CLIENT',
+    serviceName: resolvedServiceName || 'SERVICE',
+    clientId: resolvedClientId,
+    serviceId: resolvedServiceId,
+    dbClientGuid,
+    dbServiceGuid,
+  };
+}
+
 async function handleSaveProjectRoute(req: Request, res: Response) {
   // --- Input Validation (POST & PUT /api/projects) ---
   const isPost = req.method === 'POST';
@@ -1908,80 +2801,23 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
   proj.createdAt = proj.createdAt || now;
   proj.id = (proj.id || '').trim();
 
-  const pool = await getOrInitPool();
-
-  const resolveNames = async () => {
-    let clientName = proj.clientName || '';
-    let serviceName = (proj as any).serviceName || (proj as any).serviceType || '';
-
-    if (!clientName && proj.clientId) {
-      if (pool) {
-        try {
-          const cRow = (await pool.request().input('cid', proj.clientId).query(`SELECT name, client_name FROM clients WHERE id = @cid OR client_id_code = @cid`)).recordset[0];
-          clientName = cRow?.name || cRow?.client_name || '';
-        } catch {}
-      }
-      if (!clientName && isMockFallbackAllowed()) {
-        clientName = mockStore.getClientById(proj.clientId)?.name || '';
-      }
-    }
-
-    if (proj.serviceId && !serviceName) {
-      if (pool) {
-        try {
-          const sRow = (await pool.request().input('sid', proj.serviceId).query(`SELECT name, service_name FROM services WHERE id = @sid`)).recordset[0];
-          serviceName = sRow?.name || sRow?.service_name || '';
-        } catch {}
-      }
-      if (!serviceName && isMockFallbackAllowed()) {
-        serviceName = mockStore.getServices().find((s) => s.id === proj.serviceId)?.name || '';
-      }
-    }
-
-    return {
-      clientName: clientName || 'CLIENT',
-      serviceName: serviceName || 'SERVICE',
-    };
-  };
-
-  // If creating new project and ID is missing, calculate strict semantic ID with sequence counter
-  if (!proj.id) {
-    const { clientName, serviceName } = await resolveNames();
-    try {
-      const calculated = await calculateNextProjectSequenceSql(
-        pool,
-        proj.brand || 'Device Doctor India',
-        clientName,
-        serviceName,
-        proj.clientId,
-        proj.serviceId
-      );
-      proj.id = calculated.projectId;
-    } catch (err) {
-      if (!isMockFallbackAllowed()) {
-        return sendDatabaseUnavailable(res, 'calculate project ID');
-      }
-      throw err;
-    }
-  }
-
   const paramId = (req.params.id || '').trim();
   const bodyId = (proj.id || '').trim();
   const bodyGuid = ((proj as any).guid || '').trim();
   const bodyCode = (((proj as any).projectCode || (proj as any).project_id_code) || '').trim();
 
-  const isGuidFormat = (val: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-
   const guidCandidate = [paramId, bodyGuid, bodyId].find((v) => v && isGuidFormat(v)) || null;
   const cleanId = paramId || bodyId || bodyGuid || '';
+
+  const pool = await getOrInitPool();
 
   if (!pool) {
     if (!isMockFallbackAllowed()) {
       return sendDatabaseUnavailable(res, 'save project');
     }
-    if (isUpdate) {
-      const existing = mockStore.getProjects(null).find((p) => {
+    let existing: any = null;
+    if (isUpdate || cleanId) {
+      const matched = mockStore.getProjects(null).filter((p) => {
         const pId = (p.id || '').trim().toLowerCase();
         const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
         const pGuid = (((p as any).guid || '') as string).trim().toLowerCase();
@@ -1992,97 +2828,138 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
           (codeTarget && (pId === codeTarget || pCode === codeTarget || pGuid === codeTarget))
         );
       });
-      if (!existing) {
+      const distinctMatchedIds = Array.from(new Set(matched.map((p) => p.id)));
+      if (distinctMatchedIds.length > 1) {
+        return res.status(400).json({
+          success: false,
+          error: `Ambiguous project identifiers: The supplied identifiers match multiple distinct projects (${distinctMatchedIds.join(', ')}). Update aborted to prevent corruption.`,
+        });
+      }
+      existing = matched[0] || null;
+      if (isUpdate && !existing) {
         return res.status(404).json({ success: false, error: `Project '${cleanId}' not found for update.` });
       }
     }
-    if (isNew) {
-      const existing = mockStore.getProjects(null).find((p) => {
-        const pId = (p.id || '').trim().toLowerCase();
-        const pCode = ((((p as any).project_id_code || (p as any).projectCode) || '') as string).trim().toLowerCase();
-        const target = (proj.id || '').trim().toLowerCase();
-        return pId === target || pCode === target;
+
+    try {
+      const rels = await resolveProjectRelationships({
+        pool: null,
+        rawBodyClientId: req.body.clientId ?? req.body.client_id,
+        rawBodyClientName: req.body.clientName ?? req.body.client_name,
+        rawBodyServiceId: req.body.serviceId ?? req.body.service_id,
+        rawBodyServiceName: req.body.serviceName ?? req.body.serviceType,
+        isUpdate,
+        existingProject: existing,
       });
-      if (existing) {
-        const { clientName, serviceName } = await resolveNames();
+
+      proj.clientName = rels.clientName;
+      proj.clientId = rels.clientId;
+      proj.serviceId = rels.serviceId;
+
+      if (!proj.id || (isNew && existing)) {
         const brandName = proj.brand || 'Device Doctor India';
-        const seq = mockStore.getNextProjectSequence(brandName, clientName, serviceName, proj.clientId, proj.serviceId);
-        proj.id = generateSemanticProjectId(brandName, clientName, serviceName, seq);
+        const seq = mockStore.getNextProjectSequence(brandName, rels.clientName, rels.serviceName, proj.clientId, proj.serviceId);
+        proj.id = generateSemanticProjectId(brandName, rels.clientName, rels.serviceName, seq);
       }
+
+      const saved = mockStore.saveProject({ ...proj, isNew, isUpdate });
+      mockStore.addAuditLog({
+        brand: proj.brand || 'All',
+        module: 'Projects',
+        action: isUpdate ? 'UPDATE' : 'SAVE',
+        entityId: proj.id,
+        details: `${isUpdate ? 'Updated' : 'Saved'} project ${proj.id} for client ${proj.clientName}`,
+        performedBy: 'User',
+      });
+      return res.json({ success: true, project: saved });
+    } catch (err: any) {
+      return sendDatabaseError(res, err, 'save project');
     }
-    const saved = mockStore.saveProject({ ...proj, isNew, isUpdate });
-    mockStore.addAuditLog({
-      brand: proj.brand || 'All',
-      module: 'Projects',
-      action: isUpdate ? 'UPDATE' : 'SAVE',
-      entityId: proj.id,
-      details: `${isUpdate ? 'Updated' : 'Saved'} project ${proj.id} for client ${proj.clientName}`,
-      performedBy: 'User',
-    });
-    return res.json({ success: true, project: saved });
   }
 
   try {
     let existingProject: any = null;
 
     if (cleanId || bodyCode || guidCandidate) {
-      try {
-        const checkRes = await pool.request()
-          .input('rawId', cleanId)
-          .input('cleanId', cleanId)
-          .input('bodyCode', bodyCode || cleanId)
-          .input('guidCandidate', guidCandidate)
-          .query(`
-            SELECT TOP 1
-                   CAST(id AS NVARCHAR(150)) as id,
-                   ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
-                   ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
-                   ISNULL(CAST(client_id AS NVARCHAR(150)), '') as client_id,
-                   ISNULL(CAST(client_name AS NVARCHAR(255)), '') as client_name,
-                   ISNULL(CAST(service_id AS NVARCHAR(150)), '') as service_id,
-                   ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposal_date,
-                   ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contract_date,
-                   ISNULL(CAST(start_date AS NVARCHAR(50)), '') as start_date,
-                   ISNULL(committed_days, 30) as committed_days,
-                   ISNULL(CAST(committed_end_date AS NVARCHAR(50)), '') as committed_end_date,
-                   ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actual_end_date,
-                   ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status,
-                   ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as payment_mode,
-                   ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
-                   ISNULL(contract, 0) as contract,
-                   ISNULL(exchange_rate, 1) as exchange_rate,
-                   ISNULL(contract_value, 0) as contract_value,
-                   ISNULL(total_received, 0) as total_received,
-                   ISNULL(balance, 0) as balance,
-                   ISNULL(CAST(project_manager AS NVARCHAR(255)), '') as project_manager,
-                   ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
-                   ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposal_document,
-                   ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contract_document,
-                   ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as payment_phases,
-                   ISNULL(CAST(created_at AS NVARCHAR(50)), '') as created_at,
-                   ISNULL(CAST(updated_at AS NVARCHAR(50)), '') as updated_at
-            FROM projects
-            WHERE (
-              (@guidCandidate IS NOT NULL AND CAST(id AS NVARCHAR(150)) = @guidCandidate)
-              OR (@rawId <> '' AND (CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId))
-              OR (@bodyCode <> '' AND CAST(project_id_code AS NVARCHAR(150)) = @bodyCode)
-            )
-          `);
-        existingProject = checkRes.recordset?.[0] || null;
-      } catch (checkErr) {
-        console.warn('[handleSaveProjectRoute] Checking existing project error:', checkErr);
+      const checkRes = await pool.request()
+        .input('rawId', cleanId)
+        .input('cleanId', cleanId)
+        .input('bodyCode', bodyCode || cleanId)
+        .input('guidCandidate', guidCandidate)
+        .query(`
+          SELECT TOP 2 /* SELECT TOP 1 */
+                 CAST(id AS NVARCHAR(150)) as id,
+                 ISNULL(CAST(project_id_code AS NVARCHAR(150)), '') as project_id_code,
+                 ISNULL(CAST(brand AS NVARCHAR(100)), 'Device Doctor India') as brand,
+                 ISNULL(CAST(client_id AS NVARCHAR(150)), '') as client_id,
+                 ISNULL(CAST(client_name AS NVARCHAR(255)), '') as client_name,
+                 ISNULL(CAST(service_id AS NVARCHAR(150)), '') as service_id,
+                 ISNULL(CAST(proposal_date AS NVARCHAR(50)), '') as proposal_date,
+                 ISNULL(CAST(contract_date AS NVARCHAR(50)), '') as contract_date,
+                 ISNULL(CAST(start_date AS NVARCHAR(50)), '') as start_date,
+                 ISNULL(committed_days, 30) as committed_days,
+                 ISNULL(CAST(committed_end_date AS NVARCHAR(50)), '') as committed_end_date,
+                 ISNULL(CAST(actual_end_date AS NVARCHAR(50)), '') as actual_end_date,
+                 ISNULL(CAST(status AS NVARCHAR(50)), 'In Progress') as status,
+                 ISNULL(CAST(payment_mode AS NVARCHAR(50)), 'GST Invoice') as payment_mode,
+                 ISNULL(CAST(currency AS NVARCHAR(20)), 'INR') as currency,
+                 ISNULL(contract, 0) as contract,
+                 ISNULL(exchange_rate, 1) as exchange_rate,
+                 ISNULL(contract_value, 0) as contract_value,
+                 ISNULL(total_received, 0) as total_received,
+                 ISNULL(balance, 0) as balance,
+                 ISNULL(CAST(project_manager AS NVARCHAR(255)), '') as project_manager,
+                 ISNULL(CAST(notes AS NVARCHAR(MAX)), '') as notes,
+                 ISNULL(CAST(proposal_document AS NVARCHAR(MAX)), '') as proposal_document,
+                 ISNULL(CAST(contract_document AS NVARCHAR(MAX)), '') as contract_document,
+                 ISNULL(CAST(payment_phases AS NVARCHAR(MAX)), '[]') as payment_phases,
+                 ISNULL(CAST(created_at AS NVARCHAR(50)), '') as created_at,
+                 ISNULL(CAST(updated_at AS NVARCHAR(50)), '') as updated_at
+          FROM projects
+          WHERE (
+            (@guidCandidate IS NOT NULL AND CAST(id AS NVARCHAR(150)) = @guidCandidate)
+            OR (@rawId <> '' AND (CAST(id AS NVARCHAR(150)) = @rawId OR (project_id_code IS NOT NULL AND CAST(project_id_code AS NVARCHAR(150)) = @rawId)))
+            OR (@bodyCode <> '' AND project_id_code IS NOT NULL AND CAST(project_id_code AS NVARCHAR(150)) = @bodyCode)
+          )
+        `);
+      const matchedProjects = checkRes.recordset || [];
+      const distinctDbIds = Array.from(new Set(matchedProjects.map((p: any) => String(p.id))));
+      if (distinctDbIds.length > 1) {
+        return res.status(400).json({
+          success: false,
+          error: `Ambiguous project identifiers: The supplied identifiers match multiple distinct projects (${distinctDbIds.join(', ')}). Update aborted to prevent corruption.`,
+        });
       }
+      existingProject = matchedProjects[0] || null;
     }
+
+    if (isUpdate && !existingProject) {
+      return res.status(404).json({ success: false, error: `Project '${cleanId}' not found for update.` });
+    }
+
+    // Resolve relationships with strict deterministic precedence
+    const rels = await resolveProjectRelationships({
+      pool,
+      rawBodyClientId: req.body.clientId ?? req.body.client_id,
+      rawBodyClientName: req.body.clientName ?? req.body.client_name,
+      rawBodyServiceId: req.body.serviceId ?? req.body.service_id,
+      rawBodyServiceName: req.body.serviceName ?? req.body.serviceType,
+      isUpdate,
+      existingProject,
+    });
+
+    proj.clientName = rels.clientName;
+    proj.clientId = rels.clientId;
+    proj.serviceId = rels.serviceId;
 
     // Protection: If client signaled this is a genuinely new project (isNew=true),
     // ensure it NEVER overwrites an existing project record in Azure SQL database!
     if (isNew && existingProject) {
-      const { clientName, serviceName } = await resolveNames();
       const calculated = await calculateNextProjectSequenceSql(
         pool,
         proj.brand || 'Device Doctor India',
-        clientName,
-        serviceName,
+        rels.clientName,
+        rels.serviceName,
         proj.clientId,
         proj.serviceId
       );
@@ -2090,12 +2967,20 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
       existingProject = null;
     }
 
-    if (isUpdate && !existingProject) {
-      return res.status(404).json({ success: false, error: `Project '${cleanId}' not found for update.` });
+    if (!proj.id) {
+      const calculated = await calculateNextProjectSequenceSql(
+        pool,
+        proj.brand || 'Device Doctor India',
+        rels.clientName,
+        rels.serviceName,
+        proj.clientId,
+        proj.serviceId
+      );
+      proj.id = calculated.projectId;
     }
 
-    const clientGuid = toGuidOrNull(proj.clientId);
-    const serviceGuid = toGuidOrNull(proj.serviceId);
+    const clientGuid = rels.dbClientGuid || toGuidOrNull(proj.clientId);
+    const serviceGuid = rels.dbServiceGuid || toGuidOrNull(proj.serviceId);
 
     if (isUpdate && existingProject) {
       const existingDbId = String(existingProject.id);
@@ -2143,54 +3028,47 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
         }
       }
 
-      const resolvedClientGuid = clientGuid || toGuidOrNull(existingProject.client_id);
-      const resolvedServiceGuid = serviceGuid || toGuidOrNull(existingProject.service_id);
+      const resolvedClientGuid = rels.dbClientGuid || clientGuid || toGuidOrNull(existingProject.client_id);
+      const resolvedServiceGuid = rels.dbServiceGuid || serviceGuid || toGuidOrNull(existingProject.service_id);
 
+      const updateSql = buildProjectSaveQuery(true);
       await executeSqlWithAutoMigration(
         pool,
         (activePool = pool) =>
           activePool.request()
             .input('targetId', existingDbId)
-            .input('guidTargetId', isExistingDbIdGuid ? existingDbId : null)
+            .input('guidTargetId', isExistingDbIdGuid ? existingDbId : (guidCandidate || null))
             .input('project_id_code', finalProjectCode)
+            .input('rawId', finalProjectCode || existingDbId)
+            .input('guidId', isExistingDbIdGuid ? existingDbId : toGuid(existingDbId))
             .input('brand', proj.brand || existingProject.brand || 'Device Doctor India')
-            .input('client_id', proj.clientId || existingProject.client_id || resolvedClientGuid)
+            .input('client_id', proj.clientId || existingProject.client_id || '')
+            .input('guidClientId', resolvedClientGuid)
             .input('client_name', proj.clientName || existingProject.client_name || '')
-            .input('service_id', proj.serviceId || existingProject.service_id || resolvedServiceGuid)
+            .input('service_id', proj.serviceId || existingProject.service_id || '')
+            .input('guidServiceId', resolvedServiceGuid)
             .input('proposal_date', proj.proposalDate !== undefined ? proj.proposalDate : (existingProject.proposal_date || ''))
             .input('contract_date', proj.contractDate !== undefined ? proj.contractDate : (existingProject.contract_date || ''))
             .input('start_date', proj.startDate !== undefined ? proj.startDate : (existingProject.start_date || ''))
-            .input('committed_days', proj.committedDays !== undefined ? proj.committedDays : (existingProject.committed_days || 30))
+            .input('committed_days', proj.committedDays !== undefined ? Number(proj.committedDays) : (existingProject.committed_days || 30))
             .input('committed_end_date', proj.committedEndDate !== undefined ? proj.committedEndDate : (existingProject.committed_end_date || ''))
             .input('actual_end_date', proj.actualEndDate !== undefined ? proj.actualEndDate : (existingProject.actual_end_date || ''))
             .input('status', proj.status !== undefined ? proj.status : (existingProject.status || 'In Progress'))
             .input('payment_mode', proj.paymentMode !== undefined ? proj.paymentMode : (existingProject.payment_mode || 'GST Invoice'))
             .input('currency', proj.currency !== undefined ? proj.currency : (existingProject.currency || 'INR'))
-            .input('contract', proj.contract !== undefined ? proj.contract : (existingProject.contract || 0))
-            .input('exchange_rate', proj.exchangeRate !== undefined ? proj.exchangeRate : (existingProject.exchange_rate || 1))
-            .input('contract_value', proj.contractValue !== undefined ? proj.contractValue : (existingProject.contract_value || 0))
-            .input('total_received', proj.totalReceived !== undefined ? proj.totalReceived : (existingProject.total_received || 0))
-            .input('balance', proj.balance !== undefined ? proj.balance : (existingProject.balance || 0))
+            .input('contract', proj.contract !== undefined ? Number(proj.contract) : (existingProject.contract || 0))
+            .input('exchange_rate', proj.exchangeRate !== undefined ? Number(proj.exchangeRate) : (existingProject.exchange_rate || 1))
+            .input('contract_value', proj.contractValue !== undefined ? Number(proj.contractValue) : (existingProject.contract_value || 0))
+            .input('total_received', proj.totalReceived !== undefined ? Number(proj.totalReceived) : (existingProject.total_received || 0))
+            .input('balance', proj.balance !== undefined ? Number(proj.balance) : (existingProject.balance || 0))
             .input('project_manager', proj.projectManager !== undefined ? proj.projectManager : (existingProject.project_manager || ''))
             .input('notes', proj.notes !== undefined ? proj.notes : (existingProject.notes || ''))
             .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : (existingProject.proposal_document || ''))
             .input('contract_document', proj.contractDocument ? (typeof proj.contractDocument === 'string' ? proj.contractDocument : JSON.stringify(proj.contractDocument)) : (existingProject.contract_document || ''))
             .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : (existingProject.payment_phases || '[]'))
             .input('updated_at', proj.updatedAt)
-            .query(`
-              UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
-                                 proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
-                                 committed_days=@committed_days, committed_end_date=@committed_end_date,
-                                 actual_end_date=@actual_end_date, status=@status, payment_mode=@payment_mode,
-                                 currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
-                                 contract_value=@contract_value, total_received=@total_received, balance=@balance,
-                                 project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
-                                 contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
-                                 project_id_code=@project_id_code
-              WHERE CAST(id AS NVARCHAR(150)) = @targetId
-                 OR (@guidTargetId IS NOT NULL AND id = @guidTargetId)
-            `),
-        'projects'
+            .query(updateSql),
+        { tableName: 'projects', isReadOnly: false, isFinancialMutation: false, isIdempotentWrite: false }
       );
 
       const mergedProject: Project = {
@@ -2236,6 +3114,10 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
       const insertGuid = isGuidFormat(insertId) ? insertId : crypto.randomUUID();
       const insertCode = !isGuidFormat(insertId) ? insertId : (bodyCode || insertId);
 
+      const insertClientGuid = rels.dbClientGuid || clientGuid;
+      const insertServiceGuid = rels.dbServiceGuid || serviceGuid;
+
+      const insertSql = buildProjectSaveQuery(false);
       await executeSqlWithAutoMigration(
         pool,
         (activePool = pool) =>
@@ -2245,23 +3127,25 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
             .input('rawId', insertId)
             .input('project_id_code', insertCode)
             .input('brand', proj.brand || 'Device Doctor India')
-            .input('client_id', proj.clientId || clientGuid)
+            .input('client_id', proj.clientId || '')
+            .input('guidClientId', insertClientGuid)
             .input('client_name', proj.clientName || '')
-            .input('service_id', proj.serviceId || serviceGuid)
+            .input('service_id', proj.serviceId || '')
+            .input('guidServiceId', insertServiceGuid)
             .input('proposal_date', proj.proposalDate || '')
             .input('contract_date', proj.contractDate || '')
             .input('start_date', proj.startDate || '')
-            .input('committed_days', proj.committedDays || 30)
+            .input('committed_days', Number(proj.committedDays) || 30)
             .input('committed_end_date', proj.committedEndDate || '')
             .input('actual_end_date', proj.actualEndDate || '')
             .input('status', proj.status || 'In Progress')
             .input('payment_mode', proj.paymentMode || 'GST Invoice')
             .input('currency', proj.currency || 'INR')
-            .input('contract', proj.contract || 0)
-            .input('exchange_rate', proj.exchangeRate || 1)
-            .input('contract_value', proj.contractValue || 0)
-            .input('total_received', proj.totalReceived || 0)
-            .input('balance', proj.balance || 0)
+            .input('contract', Number(proj.contract) || 0)
+            .input('exchange_rate', Number(proj.exchangeRate) || 1)
+            .input('contract_value', Number(proj.contractValue) || 0)
+            .input('total_received', Number(proj.totalReceived) || 0)
+            .input('balance', Number(proj.balance) || 0)
             .input('project_manager', proj.projectManager || '')
             .input('notes', proj.notes || '')
             .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : '')
@@ -2269,118 +3153,17 @@ async function handleSaveProjectRoute(req: Request, res: Response) {
             .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : '[]')
             .input('created_at', proj.createdAt)
             .input('updated_at', proj.updatedAt)
-            .query(`
-              INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
-              VALUES (@id, @project_id_code, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
-            `),
-        'projects'
+            .query(insertSql),
+        { tableName: 'projects', isReadOnly: false, isFinancialMutation: false, isIdempotentWrite: false }
       );
       mockStore.saveProject({ ...proj, id: insertId, guid: insertGuid, projectCode: insertCode, project_id_code: insertCode, isNew: true });
       return res.json({ success: true, project: { ...proj, id: insertId, guid: insertGuid, projectCode: insertCode, project_id_code: insertCode } });
     }
   } catch (err: any) {
-    const errMsg = String(err?.message || err);
-    if (errMsg.includes('uniqueidentifier') || errMsg.includes('Conversion failed')) {
-      try {
-        const cleanId = (proj.id || '').trim();
-        const guidId = toGuid(cleanId);
-        const clientGuid = toGuidOrNull(proj.clientId);
-        const serviceGuid = toGuidOrNull(proj.serviceId);
-        const fallbackCode = (!isGuidFormat(cleanId) && cleanId) ? cleanId : (((proj as any).projectCode || (proj as any).project_id_code) || cleanId);
-        if (isUpdate) {
-          await executeSqlWithAutoMigration(
-            pool,
-            (activePool = pool) =>
-              activePool.request()
-                .input('id', guidId)
-                .input('rawId', cleanId)
-                .input('projectCode', fallbackCode)
-                .input('brand', proj.brand || 'Device Doctor India')
-                .input('client_id', clientGuid)
-                .input('client_name', proj.clientName || '')
-                .input('service_id', serviceGuid)
-                .input('proposal_date', proj.proposalDate || '')
-                .input('contract_date', proj.contractDate || '')
-                .input('start_date', proj.startDate || '')
-                .input('committed_days', proj.committedDays || 30)
-                .input('committed_end_date', proj.committedEndDate || '')
-                .input('actual_end_date', proj.actualEndDate || '')
-                .input('status', proj.status || 'In Progress')
-                .input('payment_mode', proj.paymentMode || 'GST Invoice')
-                .input('currency', proj.currency || 'INR')
-                .input('contract', proj.contract || 0)
-                .input('exchange_rate', proj.exchangeRate || 1)
-                .input('contract_value', proj.contractValue || 0)
-                .input('total_received', proj.totalReceived || 0)
-                .input('balance', proj.balance || 0)
-                .input('project_manager', proj.projectManager || '')
-                .input('notes', proj.notes || '')
-                .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : '')
-                .input('contract_document', proj.contractDocument ? (typeof proj.contractDocument === 'string' ? proj.contractDocument : JSON.stringify(proj.contractDocument)) : '')
-                .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : '[]')
-                .input('updated_at', proj.updatedAt)
-                .query(`
-                  UPDATE projects SET brand=@brand, client_id=@client_id, client_name=@client_name, service_id=@service_id,
-                                     proposal_date=@proposal_date, contract_date=@contract_date, start_date=@start_date,
-                                     committed_days=@committed_days, committed_end_date=@committed_end_date,
-                                     actual_end_date=@actual_end_date, status=@status, payment_mode=@payment_mode,
-                                     currency=@currency, contract=@contract, exchange_rate=@exchange_rate,
-                                     contract_value=@contract_value, total_received=@total_received, balance=@balance,
-                                     project_manager=@project_manager, notes=@notes, proposal_document=@proposal_document,
-                                     contract_document=@contract_document, payment_phases=@payment_phases, updated_at=@updated_at,
-                                     project_id_code=@projectCode
-                  WHERE CAST(id AS NVARCHAR(150)) = @rawId OR CAST(project_id_code AS NVARCHAR(150)) = @rawId
-                `),
-            'projects'
-          );
-        } else {
-          await executeSqlWithAutoMigration(
-            pool,
-            (activePool = pool) =>
-              activePool.request()
-                .input('id', guidId)
-                .input('rawId', cleanId)
-                .input('brand', proj.brand || 'Device Doctor India')
-                .input('client_id', clientGuid)
-                .input('client_name', proj.clientName || '')
-                .input('service_id', serviceGuid)
-                .input('proposal_date', proj.proposalDate || '')
-                .input('contract_date', proj.contractDate || '')
-                .input('start_date', proj.startDate || '')
-                .input('committed_days', proj.committedDays || 30)
-                .input('committed_end_date', proj.committedEndDate || '')
-                .input('actual_end_date', proj.actualEndDate || '')
-                .input('status', proj.status || 'In Progress')
-                .input('payment_mode', proj.paymentMode || 'GST Invoice')
-                .input('currency', proj.currency || 'INR')
-                .input('contract', proj.contract || 0)
-                .input('exchange_rate', proj.exchangeRate || 1)
-                .input('contract_value', proj.contractValue || 0)
-                .input('total_received', proj.totalReceived || 0)
-                .input('balance', proj.balance || 0)
-                .input('project_manager', proj.projectManager || '')
-                .input('notes', proj.notes || '')
-                .input('proposal_document', proj.proposalDocument ? (typeof proj.proposalDocument === 'string' ? proj.proposalDocument : JSON.stringify(proj.proposalDocument)) : '')
-                .input('contract_document', proj.contractDocument ? (typeof proj.contractDocument === 'string' ? proj.contractDocument : JSON.stringify(proj.contractDocument)) : '')
-                .input('payment_phases', proj.paymentPhases ? (typeof proj.paymentPhases === 'string' ? proj.paymentPhases : JSON.stringify(proj.paymentPhases)) : '[]')
-                .input('created_at', proj.createdAt)
-                .input('updated_at', proj.updatedAt)
-                .query(`
-                  INSERT INTO projects (id, project_id_code, brand, client_id, client_name, service_id, proposal_date, contract_date, start_date, committed_days, committed_end_date, actual_end_date, status, payment_mode, currency, contract, exchange_rate, contract_value, total_received, balance, project_manager, notes, proposal_document, contract_document, payment_phases, created_at, updated_at)
-                  VALUES (@id, @rawId, @brand, @client_id, @client_name, @service_id, @proposal_date, @contract_date, @start_date, @committed_days, @committed_end_date, @actual_end_date, @status, @payment_mode, @currency, @contract, @exchange_rate, @contract_value, @total_received, @balance, @project_manager, @notes, @proposal_document, @contract_document, @payment_phases, @created_at, @updated_at)
-                `),
-            'projects'
-          );
-        }
-        mockStore.saveProject({ ...proj, isNew, isUpdate });
-        return res.json({ success: true, project: proj });
-      } catch (innerErr) {
-        console.warn('[handleSaveProjectRoute] Fallback retry failed:', innerErr);
-      }
-    }
-    console.warn('[handleSaveProjectRoute] Falling back to mock store:', errMsg);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn('[handleSaveProjectRoute] Database save project error:', errMsg);
     if (!isMockFallbackAllowed()) {
-      return sendDatabaseUnavailable(res, 'save project', errMsg);
+      return sendDatabaseError(res, err, 'save project');
     }
     const saved = mockStore.saveProject({ ...proj, isNew, isUpdate });
     return res.json({ success: true, project: saved });
