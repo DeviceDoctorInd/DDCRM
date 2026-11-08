@@ -4787,13 +4787,26 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       }
     }
 
+    const errorRef = crypto.randomUUID();
+    const sqlErrorNumber = typeof anyErr?.number === 'number' ? anyErr.number : (anyErr?.number !== undefined ? Number(anyErr.number) : null);
+
     console.error(`[handleSavePaymentRoute] SQL Transaction Error: name=${errName}, code=${errCode}, message=${errMsg}, paymentId=${cleanId || payment.id}, projectId=${targetProjectId || ''}`);
+    console.error('[handleSavePaymentRoute] Full SQL error:', {
+      errorRef,
+      number: anyErr?.number,
+      message: anyErr?.message || errMsg,
+      lineNumber: anyErr?.lineNumber,
+      procName: anyErr?.procName,
+    });
     if (errCode === 'TRANSACTION_COMMIT_AMBIGUOUS' || errMsg.includes('TRANSACTION_COMMIT_AMBIGUOUS')) {
       return res.status(500).json({
         success: false,
         error: 'TRANSACTION_COMMIT_AMBIGUOUS',
         category: 'TRANSACTION_COMMIT_AMBIGUOUS',
         message: 'The payment transaction state is ambiguous due to connection loss during commit. Manual verification required.',
+        errorRef,
+        errorNumber: sqlErrorNumber,
+        sqlErrorNumber,
       });
     }
     const isDev = process.env.NODE_ENV === 'development';
@@ -4801,7 +4814,10 @@ async function handleSavePaymentRoute(req: Request, res: Response) {
       success: false,
       error: isDev ? errMsg : 'An internal database error occurred while processing the payment voucher.',
       message: isDev ? errMsg : 'Failed to record payment voucher and update project financials in Azure SQL.',
-      ...(isDev ? { code: errCode, details: errMsg, stack: anyErr?.stack } : {}),
+      errorRef,
+      errorNumber: sqlErrorNumber,
+      sqlErrorNumber,
+      ...(isDev ? { code: errCode, details: errMsg } : {}),
     });
   }
 }
